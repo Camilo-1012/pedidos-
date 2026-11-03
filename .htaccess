@@ -1,0 +1,21 @@
+# Tipos MIME para la PWA
+AddType application/manifest+json .webmanifest
+AddType application/javascript .js
+AddType font/woff2 .woff2
+
+# Forzar HTTPS (requerido para instalar la app y usarla sin internet)
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteCond %{HTTPS} !=on
+  RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+</IfModule>
+
+<IfModule mod_headers.c>
+  # El service worker y la página siempre se revisan contra el servidor (así llegan las actualizaciones)
+  <FilesMatch "^(sw\.js|index\.html|manifest\.webmanifest)$">
+    Header set Cache-Control "no-cache"
+  </FilesMatch>
+  Header always set X-Content-Type-Options "nosniff"
+  Header always set Referrer-Policy "no-referrer"
+  Header always set Permissions-Policy "camera=(self), geolocation=(), microphone=()"
+</IfModule>
