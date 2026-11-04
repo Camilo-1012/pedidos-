@@ -190,6 +190,7 @@ details summary{cursor:pointer;font-weight:600}
       <input type="checkbox" id="autoWaze" style="width:auto" checked> Al marcar Entregado, abrir Waze con la siguiente parada
     </label>
     <p class="hint" id="routeInfo" aria-live="polite"></p>
+    <p class="hint" id="zoneInfo" hidden style="color:var(--warn);font-weight:600"></p>
     <div id="cmpBox" class="preview" hidden>
       <p id="cmpInfo" style="margin:0;color:var(--ink)"></p>
       <button type="button" class="small" id="btnRestore" hidden style="margin-top:8px">Volver al orden sugerido</button>
@@ -227,6 +228,20 @@ details summary{cursor:pointer;font-weight:600}
           <label class="btn" for="restoreFile" style="flex-direction:row;color:var(--ink);font-size:15px">Restaurar respaldo</label>
           <input id="restoreFile" type="file" accept="application/json,.json" hidden>
         </div>
+        <fieldset style="border:1px solid var(--line);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:8px">
+          <legend style="font-weight:600;padding:0 4px">Zona de trabajo</legend>
+          <label style="flex-direction:row;align-items:center;gap:8px;color:var(--ink);font-size:15px">
+            <input type="checkbox" id="zOn" style="width:auto"> Avisar si una dirección queda fuera de la zona
+          </label>
+          <p class="hint" id="zName" style="margin:0"></p>
+          <div class="grid2">
+            <label for="zMinCra">Desde Carrera<input id="zMinCra" type="number" inputmode="numeric"></label>
+            <label for="zMaxCra">Hasta Carrera<input id="zMaxCra" type="number" inputmode="numeric"></label>
+            <label for="zMinCl">Desde Calle<input id="zMinCl" type="number" inputmode="numeric"></label>
+            <label for="zMaxCl">Hasta Calle<input id="zMaxCl" type="number" inputmode="numeric"></label>
+          </div>
+          <p class="hint" style="margin:0">Por defecto: Suba de la Av. Ciudad de Cali (Av. Carrera 104) hacia el río Bogotá, entre el río Juan Amarillo (≈ Calle 125) y la Calle 175. Puedes ajustar los números.</p>
+        </fieldset>
         <label for="orsKey">Clave de openrouteservice (opcional, gratis): respaldo si fallan los servidores de rutas gratuitos
           <input id="orsKey" autocomplete="off" spellcheck="false" placeholder="Pega aquí la clave">
         </label>
@@ -269,7 +284,7 @@ details summary{cursor:pointer;font-weight:600}
     </div>
     <label for="fName">Destinatario<input id="fName" autocomplete="off"></label>
     <div class="grid2">
-      <label for="fBarrio">Barrio / localidad<input id="fBarrio" autocomplete="off"></label>
+      <label for="fBarrio">Barrio / localidad<input id="fBarrio" autocomplete="off" list="barriosZona"></label>
       <label for="fGuia">Guía (TN)<input id="fGuia" inputmode="numeric" autocomplete="off"></label>
     </div>
     <fieldset style="border:0;padding:0;margin:0;display:flex;flex-direction:column;gap:6px">
@@ -290,6 +305,8 @@ details summary{cursor:pointer;font-weight:600}
     </div>
   </form>
 </dialog>
+
+<datalist id="barriosZona"></datalist>
 
 <dialog id="dlgScan" class="scan" aria-labelledby="scanTitle">
   <form id="frmScan" style="padding:12px;display:flex;flex-direction:column;gap:10px">
@@ -999,6 +1016,38 @@ async function realOrder(silent){
   }catch(e){ console.warn("trazado", e); }
 }
 
+/* ============ Zona de trabajo ============ */
+// Zona por defecto: Suba al occidente de la Av. Ciudad de Cali (que en Suba es la Av. Carrera 104, según el IDU),
+// hasta el río Bogotá; al sur el río Juan Amarillo y al norte la Calle 175 aprox. Los límites se pueden ajustar.
+const ZONE_DEFAULT = {on:true, minCra:104, maxCra:170, minCl:125, maxCl:175, name:"Suba occidental: de la Av. Ciudad de Cali hacia el río Bogotá"};
+// Barrios de la zona (UPZ 71 Tibabuyes, Decreto 430 de 2004, y barrios vecinos al occidente de la Av. Cali). Sirven para sugerir y unificar nombres.
+const ZONE_BARRIOS = ["Tibabuyes","Tibabuyes Universal","Sabana de Tibabuyes","San Pedro de Tibabuyes","San Carlos de Tibabuyes","San Carlos de Suba",
+  "Lisboa","Berlín","Bilbao","Santa Cecilia","Santa Rita","Villa Cindy","La Isabela","Verona","San Juan Bautista","Villa Nelly","Marichuela",
+  "La Aurora","La Fortaleza","Toscana","La Gaitana","Nueva Gaitana","Fontanar del Río","Rincón de Santa Inés","Ciudadela Cafam II",
+  "Nuevo Corinto","Las Flores","Villa María","Suba Compartir","Compartir","Rincón de Suba","La Frontera","Atenas","Puerta del Sol","Villa de las Flores"];
+function zone(){ return Object.assign({}, ZONE_DEFAULT, state.zone||{}); }
+// Devuelve el motivo si la parada queda fuera de la zona, o null.
+function zoneIssue(s){
+  const z = zone(); if(!z.on || s.x==null || s.y==null) return null;
+  if(s.y < 0) return "es dirección Sur";
+  if(s.x < 0) return "es dirección Este";
+  if(s.x < z.minCra) return `queda al oriente (Carrera ${Math.floor(s.x)}, antes de la ${z.minCra})`;
+  if(s.x > z.maxCra + 1) return `queda más al occidente (Carrera ${Math.floor(s.x)})`;
+  if(s.y < z.minCl) return `queda al sur (Calle ${Math.floor(s.y)})`;
+  if(s.y > z.maxCl + 1) return `queda al norte (Calle ${Math.floor(s.y)})`;
+  return null;
+}
+function canonBarrio(name){
+  const k = norm(name||"").replace(/[.,]/g,"").trim();
+  return ZONE_BARRIOS.find(b=>norm(b)===k) || (name||"").trim();
+}
+function renderZoneSettings(){
+  const z = zone();
+  $("zOn").checked = z.on; $("zName").textContent = z.name;
+  for(const [id,k] of [["zMinCra","minCra"],["zMaxCra","maxCra"],["zMinCl","minCl"],["zMaxCl","maxCl"]]) if(document.activeElement!==$(id)) $(id).value = z[k];
+  const dl = $("barriosZona"); if(!dl.childElementCount) dl.innerHTML = ZONE_BARRIOS.map(b=>`<option value="${esc(b)}"></option>`).join("");
+}
+
 /* ============ Comparación de órdenes ============ */
 // Se guarda la última matriz de tiempos reales para medir cualquier orden de las mismas paradas:
 // el sugerido, el orden en que se cargaron y el que deje el repartidor si mueve paradas a mano.
@@ -1235,6 +1284,10 @@ function render(){
   $("roundTrip").checked = !!state.roundTrip;
   drawMap();
   updateComparison();
+  renderZoneSettings();
+  const outZ = state.stops.filter(s=>s.status!=="done" && zoneIssue(s)).length;
+  $("zoneInfo").hidden = !outZ;
+  $("zoneInfo").textContent = outZ ? `${outZ} parada(s) fuera de tu zona de trabajo (${zone().name}). Revisa si la dirección está bien escrita.` : "";
   $("start").value = state.start;
   $("byZone").checked = !!state.byZone;
   $("startInfo").textContent = state.start ? (sp ? "Ubicado: " + sp.label : "No reconozco esa dirección; se ordenará sin punto de partida.") : "Opcional. Sin punto de partida, la app elige el recorrido más corto.";
@@ -1258,6 +1311,7 @@ function render(){
           ${s.barrio?`<span class="chip">${esc(s.barrio)}</span>`:""}
           ${unk?'<span class="chip warn">Revisar dirección</span>':""}
           ${s.geo==="barrio"?`<span class="chip warn">Ubicada por barrio (aprox.)</span>`:""}
+          ${!isDone && zoneIssue(s)?`<span class="chip warn">Fuera de tu zona: ${esc(zoneIssue(s))}</span>`:""}
           ${s.zoneCheck && s.zoneCheck.bad?`<span class="chip warn">No coincide con ${esc(s.barrio)}: queda a ${s.zoneCheck.km.toFixed(1).replace(".",",")} km</span>`:""}
           ${isFail?'<span class="chip warn">Intento fallido</span>':""}
           ${s.example?'<span class="chip ex">Ejemplo</span>':""}
@@ -1325,7 +1379,8 @@ function openEdit(s, isNew){
 }
 function updParsed(){
   const p = parseAddress($("fAddr").value);
-  $("fParsed").innerHTML = p ? `<span class="chip ok">Reconocida</span> ${esc(p.label)}` :
+  const zi = p ? zoneIssue(p) : null;
+  $("fParsed").innerHTML = p ? `<span class="chip ok">Reconocida</span> ${esc(p.label)}` + (zi ? ` <span class="chip warn">Fuera de tu zona: ${esc(zi)}</span>` : "") :
     `<span class="chip warn">No reconocida</span> Escríbela así: Calle 143 # 151B-23 (o Cra, Dg, Tv; agrega Sur o Este si aplica).`;
 }
 $("fAddr").addEventListener("input", updParsed);
@@ -1369,7 +1424,7 @@ $("dlgCancel").onclick = ()=>{ fromScan = false; $("dlgEdit").close(); };
 $("frmEdit").addEventListener("submit", e=>{
   e.preventDefault();
   const d = {addr:$("fAddr").value.trim(), zone:$("fZone").value.trim(), phone:$("fPhone").value.replace(/\D/g,"").slice(-10),
-    name:$("fName").value.trim(), barrio:$("fBarrio").value.trim(), guia:$("fGuia").value.trim(), notes:$("fNotes").value.trim(), raw:editing.s.raw,
+    name:$("fName").value.trim(), barrio:canonBarrio($("fBarrio").value), guia:$("fGuia").value.trim(), notes:$("fNotes").value.trim(), raw:editing.s.raw,
     qty:Math.max(1,Math.min(99,parseInt($("fQty").value,10)||1)),
     type:(document.querySelector('input[name="fType"]:checked')||{}).value||"casa", unit:$("fUnit").value.trim()};
   if(!d.addr) return;
@@ -1814,6 +1869,10 @@ $("btnNext").onclick = ()=>{
   const li = document.querySelector(`li[data-id="${s.id}"]`); if(li) li.scrollIntoView({behavior:"smooth",block:"center"});
   openExternal(wazeUrl(s));
 };
+$("zOn").addEventListener("change", e=>{ state.zone = {...zone(), on:e.target.checked}; save(); render(); });
+for(const [id,k] of [["zMinCra","minCra"],["zMaxCra","maxCra"],["zMinCl","minCl"],["zMaxCl","maxCl"]]){
+  $(id).addEventListener("change", e=>{ const v = parseInt(e.target.value,10); if(!isNaN(v)){ state.zone = {...zone(), [k]:v, name:"Zona personalizada"}; save(); render(); } });
+}
 $("btnRestore").onclick = ()=>{ if(state.suggestedIds){ applyOrder(state.suggestedIds); save(); render(); toast("Se restauró el orden sugerido."); } };
 $("btnReport").onclick = ()=>{ $("repText").textContent = dayReport(); $("dlgReport").showModal(); };
 $("frmReport").addEventListener("submit", e=>{ e.preventDefault(); $("dlgReport").close(); });
@@ -1867,7 +1926,7 @@ $("restoreFile").addEventListener("change", async e=>{
 });
 
 /* ============ App instalable y sin conexión ============ */
-const APP_VERSION = "1.9.0";
+const APP_VERSION = "1.10.0";
 $("ver").textContent = "Versión " + APP_VERSION + ". Funciona sin internet una vez abierta la primera vez.";
 function netState(){ if(SERVED) $("net").hidden = navigator.onLine; }
 addEventListener("online", ()=>{ netState(); if(state.stops.some(s=>s.status!=="done")) optimize(true); }); addEventListener("offline", netState); netState();
