@@ -55,18 +55,19 @@ html,body{margin:0}
 body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:16px;line-height:1.4;-webkit-text-size-adjust:100%}
 main{max-width:640px;margin:0 auto;padding:16px 16px 96px;display:flex;flex-direction:column;gap:16px}
 h1,h2{font-family:var(--display);margin:0;text-wrap:balance;letter-spacing:.01em}
-h1{font-size:28px;line-height:1.05}
+h1{font-size:clamp(22px,7vw,28px);line-height:1.05}
 h2{font-size:20px;text-transform:uppercase}
 header.top{position:sticky;top:0;z-index:5;background:var(--ink);color:var(--bg);padding:calc(12px + env(safe-area-inset-top)) 16px 12px;border-bottom:4px solid var(--accent)}
 header.top .wrap{max-width:640px;margin:0 auto;display:flex;flex-direction:column;gap:8px}
-.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.stat span{display:block;overflow-wrap:anywhere}
 .stat{background:rgba(255,255,255,.08);border-radius:8px;padding:6px 8px}
 .stat b{display:block;font-family:var(--display);font-size:24px;line-height:1;font-variant-numeric:tabular-nums}
 .stat span{font-size:12px;opacity:.8}
 section.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:12px}
 .row{display:flex;gap:8px;flex-wrap:wrap}
-.row > *{flex:1 1 auto}
-button,.btn{font:600 15px/1 var(--body);border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:10px;padding:12px 14px;min-height:44px;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;gap:6px;text-align:center}
+.row > *{flex:1 1 auto;min-width:0}
+button,.btn{min-width:0;overflow-wrap:anywhere;font:600 15px/1.15 var(--body);border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:10px;padding:12px 14px;min-height:44px;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;gap:6px;text-align:center}
 button:focus-visible,.btn:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
 .primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
 .dark{background:var(--ink);color:var(--bg);border-color:var(--ink)}
@@ -75,9 +76,9 @@ button:focus-visible,.btn:focus-visible,input:focus-visible,textarea:focus-visib
 label{font-size:13px;font-weight:600;color:var(--muted);display:flex;flex-direction:column;gap:4px}
 input,textarea,select{font:16px var(--body);color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px;width:100%}
 textarea{min-height:110px;resize:vertical}
-.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
 .hint{font-size:13px;color:var(--muted);margin:0}
-.chip{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:600;border-radius:999px;padding:3px 9px;border:1px solid var(--line);color:var(--muted);white-space:nowrap}
+.chip{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:600;border-radius:12px;padding:3px 9px;border:1px solid var(--line);color:var(--muted);white-space:normal;max-width:100%;overflow-wrap:anywhere;line-height:1.3}
 .chip.ok{color:var(--ok);border-color:currentColor}
 .chip.warn{color:var(--warn);border-color:currentColor}
 .chip.zone{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
@@ -85,17 +86,18 @@ textarea{min-height:110px;resize:vertical}
 .progress{height:6px;background:var(--line);border-radius:3px;overflow:hidden}
 .progress i{display:block;height:100%;width:0;background:var(--accent);transition:width .2s}
 ol.route{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px}
-.stop{background:var(--surface);border:1px solid var(--line);border-left:6px solid var(--accent);border-radius:12px;padding:12px;display:grid;grid-template-columns:44px 1fr;gap:10px}
+.stop{background:var(--surface);border:1px solid var(--line);border-left:6px solid var(--accent);border-radius:12px;padding:12px;display:grid;grid-template-columns:40px minmax(0,1fr);gap:10px}
+.stop > *{min-width:0}
 .stop.done{border-left-color:var(--ok);opacity:.6}
 .stop.fail{border-left-color:var(--bad)}
 .stop.unk{border-left-color:var(--warn)}
 .num{font-family:var(--display);font-size:30px;line-height:1;font-variant-numeric:tabular-nums;text-align:center;padding-top:2px}
-.addr{font-weight:600;font-size:17px;word-break:break-word}
+.addr{font-weight:600;font-size:17px;overflow-wrap:anywhere}
 .meta{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:4px}
 .who{font-size:14px;color:var(--muted)}
-.actions{grid-column:1 / -1;display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.actions{grid-column:1 / -1;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
 .actions2{grid-column:1 / -1;display:flex;gap:6px;flex-wrap:wrap}
-.actions2 > *{flex:1 1 auto}
+.actions2 > *{flex:1 1 auto;min-width:0}
 .empty{text-align:center;color:var(--muted);padding:24px 8px}
 .toolbar{position:fixed;left:0;right:0;bottom:0;background:var(--surface);border-top:1px solid var(--line);padding:10px 16px calc(10px + env(safe-area-inset-bottom));z-index:6}
 .toolbar .wrap{max-width:640px;margin:0 auto;display:grid;grid-template-columns:1fr 1fr;gap:8px}
@@ -120,7 +122,7 @@ dialog.scan{width:min(640px,calc(100% - 16px))}
 .mic.on{background:var(--bad);color:#fff;border-color:var(--bad);animation:pulse 1.2s infinite}
 @keyframes pulse{50%{opacity:.6}}
 @media (prefers-reduced-motion: reduce){.mic.on{animation:none}}
-.seg{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.seg{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
 .seg input{position:absolute;opacity:0;pointer-events:none}
 .seg label{display:flex;align-items:center;justify-content:center;min-height:44px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--ink);font:600 14px var(--body);cursor:pointer}
 .seg input:checked + label{background:var(--ink);color:var(--bg);border-color:var(--ink)}
@@ -130,14 +132,25 @@ dialog.scan{width:min(640px,calc(100% - 16px))}
 .toast.show{display:block}
 details summary{cursor:pointer;font-weight:600}
 .preview{font-size:13px;background:var(--bg);border:1px dashed var(--line);border-radius:8px;padding:8px;color:var(--muted)}
-@media (max-width:380px){.actions{grid-template-columns:repeat(2,1fr)}.grid2{grid-template-columns:1fr}}
+@media (max-width:400px){
+  .actions{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .grid2{grid-template-columns:1fr}
+  .seg label{font-size:13px}
+  main{padding-left:12px;padding-right:12px}
+  section.card{padding:12px}
+}
+@media (max-width:340px){
+  .stats .stat b{font-size:20px}
+  .stat span{font-size:11px}
+  .seg{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
 @media (prefers-reduced-motion: reduce){*{transition:none!important}}
 </style>
 </head>
 <body>
 <header class="top">
   <div class="wrap">
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
       <h1>Ruta de entregas</h1>
       <div style="display:flex;gap:6px">
         <button type="button" class="small" id="btnInstall" hidden>Instalar</button>
@@ -467,6 +480,8 @@ function extractLabel(text){
   // Tipo de inmueble (casa, apto, local, conjunto) si la etiqueta lo menciona.
   const u = detectUnit(lines.filter((l,i)=>i>=Math.max(0,addrLineIdx)).join(" ") || all);
   if(u){ out.type = u.type; out.unit = u.detail; }
+  // Si lo que quedó como barrio es en realidad el apto/local/conjunto, no se repite como barrio.
+  if(out.barrio && detectUnit(out.barrio)) out.barrio = "";
   return out;
 }
 // Reconoce "Conjunto Los Pinos torre 2 apto 301", "Apto 502 Int 3", "Local 12", "Casa 14"...
@@ -487,6 +502,12 @@ function detectUnit(text){
   return null;
 }
 const UNIT_NAME = {casa:"Casa", apto:"Apto", local:"Local", conjunto:"Conjunto"};
+// Texto del tipo + detalle sin repetir la palabra ("Local 5" y no "Local · Local 5").
+function unitText(s, sep){
+  const t = UNIT_NAME[s.type||"casa"], u = (s.unit||"").trim();
+  if(!u) return t;
+  return norm(u).startsWith(norm(t)) ? u : t + (sep||" · ") + u;
+}
 const UNIT_HINT = {casa:"Ej: Casa 14, puerta verde", apto:"Ej: Torre 2, apto 301", local:"Ej: Local 5, Droguería La 80", conjunto:"Ej: Conjunto Los Pinos, torre 3, apto 502", "":"Torre, apto, local o casa"};
 function titleCase(s){ return s.toLowerCase().replace(/\b\p{L}/gu,c=>c.toUpperCase()); }
 
@@ -1130,7 +1151,7 @@ function dayReport(){
   const pend = state.stops.filter(s=>s.status==="pend");
   const paq = arr => { const n = arr.reduce((a,s)=>a+(s.qty||1),0); return n + (n===1 ? " paquete" : " paquetes"); };
   const par = n => n + (n===1 ? " parada" : " paradas");
-  const name = s => (s.label||s.addr) + " ["+[UNIT_NAME[s.type||"casa"],s.unit].filter(Boolean).join(" ")+"]";
+  const name = s => (s.label||s.addr) + " ["+unitText(s," ")+"]";
   const L = [];
   L.push("Reporte del día · " + new Date().toLocaleDateString("es-CO",{weekday:"long",day:"numeric",month:"long"}));
   L.push("");
@@ -1307,7 +1328,7 @@ function render(){
         <div class="addr">${esc(s.label || s.addr)}</div>
         <div class="meta">
           ${s.zone?`<span class="chip zone">ST ${esc(s.zone)}</span>`:""}
-          <span class="chip unit">${esc([UNIT_NAME[s.type||"casa"], s.unit].filter(Boolean).join(" · "))}</span>
+          <span class="chip unit">${esc(unitText(s))}</span>
           ${s.barrio?`<span class="chip">${esc(s.barrio)}</span>`:""}
           ${unk?'<span class="chip warn">Revisar dirección</span>':""}
           ${s.geo==="barrio"?`<span class="chip warn">Ubicada por barrio (aprox.)</span>`:""}
@@ -1891,7 +1912,7 @@ $("btnMaps").onclick = ()=>{
 };
 $("btnCopy").onclick = async ()=>{
   let n=0;
-  const txt = state.stops.filter(s=>s.status!=="done").map(s=>`${++n}. ${s.label||s.addr}${(s.qty||1)>1?" x"+s.qty:""}${" ["+[UNIT_NAME[s.type||"casa"],s.unit].filter(Boolean).join(" ")+"]"}${s.zone?" (ST "+s.zone+")":""}${s.name?" - "+s.name:""}${s.phone?" - "+s.phone:""}`).join("\n");
+  const txt = state.stops.filter(s=>s.status!=="done").map(s=>`${++n}. ${s.label||s.addr}${(s.qty||1)>1?" x"+s.qty:""}${" ["+unitText(s," ")+"]"}${s.zone?" (ST "+s.zone+")":""}${s.name?" - "+s.name:""}${s.phone?" - "+s.phone:""}`).join("\n");
   try{ await navigator.clipboard.writeText(txt); toast("Lista copiada."); }
   catch(e){ openText("bulk"); $("txtTitle").textContent="Copia esta lista"; $("txtHint").textContent="Mantén presionado para seleccionar y copiar."; $("txtArea").value=txt; }
 };
@@ -1926,7 +1947,7 @@ $("restoreFile").addEventListener("change", async e=>{
 });
 
 /* ============ App instalable y sin conexión ============ */
-const APP_VERSION = "1.10.0";
+const APP_VERSION = "1.10.1";
 $("ver").textContent = "Versión " + APP_VERSION + ". Funciona sin internet una vez abierta la primera vez.";
 function netState(){ if(SERVED) $("net").hidden = navigator.onLine; }
 addEventListener("online", ()=>{ netState(); if(state.stops.some(s=>s.status!=="done")) optimize(true); }); addEventListener("offline", netState); netState();
