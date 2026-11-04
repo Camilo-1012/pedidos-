@@ -311,6 +311,8 @@ details summary{cursor:pointer;font-weight:600}
   <form id="frmText">
     <h2 id="txtTitle">Pegar texto</h2>
     <p class="hint" id="txtHint">Pega el texto copiado de la etiqueta.</p>
+    <button type="button" class="mic" id="micBulk" hidden>Dictar direcciones</button>
+    <p class="hint" id="micBulkMsg" hidden aria-live="polite"></p>
     <textarea id="txtArea"></textarea>
     <div class="row">
       <button type="button" id="txtCancel">Cancelar</button>
@@ -1315,7 +1317,8 @@ function openText(mode){
   $("txtTitle").textContent = mode==="one" ? "Pegar texto de la etiqueta" : "Pegar varias direcciones";
   $("txtHint").textContent = mode==="one" ? "En la galería o Google Lens toca «Copiar texto» sobre la etiqueta y pégalo aquí." :
     "Una dirección por línea. Puedes agregar al final el teléfono, la zona y la cantidad, por ejemplo: Calle 143 # 151B-23 3001234567 ST 49 x3. Si una dirección se repite, se suma a la misma parada.";
-  $("dlgText").showModal(); setTimeout(()=>$("txtArea").focus(),50);
+  $("micBulk").hidden = mode!=="bulk"; $("micBulkMsg").hidden = true;
+  $("dlgText").showModal(); if(mode!=="bulk") setTimeout(()=>$("txtArea").focus(),50);
 }
 $("txtCancel").onclick = ()=>$("dlgText").close();
 $("frmText").addEventListener("submit", e=>{
@@ -1328,9 +1331,9 @@ $("frmText").addEventListener("submit", e=>{
     let ok=0, bad=0, merged=0;
     t.split(/\r?\n/).map(l=>l.trim()).filter(Boolean).forEach(line=>{
       const d = extractLabel(line); if(!d.addr) d.addr = line;
-      const q = line.match(/(?:^|\s)[x×]\s*(\d{1,2})\b|\b(\d{1,2})\s*(?:paq|paquetes|unid|und)\b/i);
-      if(q) d.qty = +(q[1]||q[2]);
-      if(d.barrio) d.barrio = d.barrio.replace(/(?:^|\s)[x×]\s*\d{1,2}\b|\b\d{1,2}\s*(?:paq\w*|unid\w*|und)\b|\b(?:\+?57)?3\d{9}\b|\bST\s*\d+\b/gi,"").trim();
+      const q = line.match(/(?:^|\s)[x×]\s*(\d{1,2})\b|\b(\d{1,2})\s*(?:paq|paquetes|unid|und)\b|\b(?:por|cantidad)\s+(\d{1,2})\b/i);
+      if(q) d.qty = +(q[1]||q[2]||q[3]);
+      if(d.barrio) d.barrio = d.barrio.replace(/\b(?:por|cantidad)\s+\d{1,2}\b|(?:^|\s)[x×]\s*\d{1,2}\b|\b\d{1,2}\s*(?:paq\w*|unid\w*|und)\b|\b(?:\+?57)?3\d{9}\b|\bST\s*\d+\b/gi,"").trim();
       const r = addOrMerge(d);
       if(r.merged) merged++; else if(r.stop.x===null) bad++; else ok++;
     });
@@ -1656,6 +1659,59 @@ function rest(conv){
   return tail ? " " + tail : "";
 }
 $("micAddr").onclick = startDictation;
+
+// Dictado de varias direcciones seguidas: cada frase (o cada «siguiente») queda en una línea.
+let recBulk = null, bulkOn = false, bulkOk = 0, bulkBad = 0;
+function bulkUI(on, msg){
+  bulkOn = on;
+  $("micBulk").classList.toggle("on", on);
+  $("micBulk").textContent = on ? "Parar dictado" : "Dictar direcciones";
+  $("micBulkMsg").hidden = !msg; $("micBulkMsg").textContent = msg || "";
+}
+function addDictatedLines(text){
+  const parts = text.split(/\b(?:siguiente|otra direcci[oó]n|nueva l[ií]nea|punto y aparte)\b/i).map(x=>x.trim()).filter(Boolean);
+  for(const part of parts){
+    const conv = spokenToAddress(part);
+    const pa = parseAddress(conv);
+    const line = pa ? (pa.label + rest(conv)) : "REVISAR: " + part;   // lo no entendido queda tal cual se dijo, para corregirlo
+    if(pa) bulkOk++; else bulkBad++;
+    const ta = $("txtArea");
+    ta.value = (ta.value.trim() ? ta.value.replace(/\s+$/,"") + "\n" : "") + line;
+    ta.scrollTop = ta.scrollHeight;
+  }
+  bulkUI(true, `Escuchando… ${bulkOk} dirección(es) entendida(s)${bulkBad?`, ${bulkBad} por revisar`:""}. Di la siguiente o toca «Parar dictado».`);
+}
+function startBulkDictation(){
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if(!SR){ bulkUI(false, "Este navegador no permite dictar aquí. Usa el micrófono del teclado (una dirección por línea)."); $("txtArea").focus(); return; }
+  if(!navigator.onLine){ bulkUI(false, "El dictado necesita internet."); return; }
+  if(bulkOn){ bulkOn = false; try{ recBulk.stop(); }catch(e){} return; }
+  bulkOk = 0; bulkBad = 0;
+  recBulk = new SR();
+  recBulk.lang = "es-CO"; recBulk.interimResults = false; recBulk.continuous = true; recBulk.maxAlternatives = 3;
+  recBulk.onresult = ev=>{
+    for(let i=ev.resultIndex;i<ev.results.length;i++){
+      const r = ev.results[i]; if(!r.isFinal) continue;
+      let best = r[0].transcript;
+      for(let k=0;k<r.length;k++){ if(parseAddress(spokenToAddress(r[k].transcript))){ best = r[k].transcript; break; } }
+      addDictatedLines(best);
+    }
+  };
+  recBulk.onerror = ev=>{
+    if(ev.error==="no-speech" || ev.error==="aborted") return;   // pausas largas: se sigue escuchando
+    const m = {"not-allowed":"No hay permiso de micrófono. Actívalo en los ajustes del celular.","network":"El dictado necesita internet.","audio-capture":"No se encontró micrófono."}[ev.error] || ("No se pudo dictar ("+ev.error+").");
+    bulkOn = false; bulkUI(false, m);
+  };
+  // Chrome corta el dictado tras un silencio: si no se ha pedido parar, se reinicia solo.
+  recBulk.onend = ()=>{
+    if(bulkOn && $("dlgText").open){ try{ recBulk.start(); return; }catch(e){} }
+    bulkUI(false, bulkOk||bulkBad ? `Listo: ${bulkOk} dirección(es) entendida(s)${bulkBad?`, ${bulkBad} por revisar (corrígelas en el texto)`:""}. Revisa y toca «Continuar».` : "");
+  };
+  bulkUI(true, "Escuchando… di una dirección, haz una pausa o di «siguiente», y di la otra. Al final de cada una puedes decir la cantidad: «por tres» o «tres paquetes».");
+  try{ recBulk.start(); }catch(e){ bulkUI(false, "No se pudo iniciar el dictado."); }
+}
+$("micBulk").onclick = startBulkDictation;
+$("dlgText").addEventListener("close", ()=>{ if(bulkOn){ bulkOn = false; try{ recBulk.abort(); }catch(e){} } bulkUI(false, ""); });
 $("dlgEdit").addEventListener("close", ()=>{ if(recOn){ try{ rec.abort(); }catch(e){} micUI(false,""); } });
 
 /* ============ Botones generales ============ */
@@ -1729,7 +1785,7 @@ $("restoreFile").addEventListener("change", async e=>{
 });
 
 /* ============ App instalable y sin conexión ============ */
-const APP_VERSION = "1.7.0";
+const APP_VERSION = "1.8.0";
 $("ver").textContent = "Versión " + APP_VERSION + ". Funciona sin internet una vez abierta la primera vez.";
 function netState(){ if(SERVED) $("net").hidden = navigator.onLine; }
 addEventListener("online", ()=>{ netState(); if(state.stops.some(s=>s.status!=="done")) optimize(true); }); addEventListener("offline", netState); netState();
