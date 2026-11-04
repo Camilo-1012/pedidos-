@@ -1,6 +1,6 @@
 /* Service worker: guarda la app en el celular para que abra sin internet.
    Al publicar cambios, sube el número de CACHE para que los celulares descarguen la versión nueva. */
-const CACHE = "ruta-v1.23";
+const CACHE = "ruta-v2.0";
 const CORE = [
   "./", "index.html", "manifest.webmanifest",
   "icons/icon-192.png", "icons/icon-512.png", "icons/maskable-512.png", "icons/apple-touch-icon.png",
@@ -8,6 +8,8 @@ const CORE = [
   "fonts/barlow-condensed-latin-600-normal.woff2", "fonts/barlow-condensed-latin-700-normal.woff2",
   "ocr/tesseract.min.js", "ocr/worker.min.js", "ocr/spa-traineddata.wasm",
   "ocr/tesseract-core-simd-lstm.wasm.js", "ocr/tesseract-core-lstm.wasm.js",
+  "css/app.css", "js/00-acceso.js", "js/01-direcciones.js", "js/02-ruta.js", "js/03-mapas.js", "js/04-jornada.js",
+  "js/05-pantalla.js", "js/06-escaner.js", "js/07-cargue.js", "js/08-voz.js", "js/09-arranque.js",
   "scan/zxing.min.js", "map/leaflet.js", "map/leaflet.css", "map/images/marker-icon.png", "map/images/marker-shadow.png"
 ];
 self.addEventListener("install", e => {
@@ -59,11 +61,11 @@ self.addEventListener("fetch", e => {
   const req = e.request;
   if (req.method === "GET" && new URL(req.url).hostname === "tile.openstreetmap.org") { e.respondWith(tileFetch(req)); return; }
   if (req.method !== "GET" || new URL(req.url).origin !== self.location.origin) return;
-  // Página: red primero (para recibir cambios), caché si no hay señal.
+  // Página: sale de la versión instalada, junto con sus archivos js/ y css/, para que nunca se mezcle una página
+  // nueva con código viejo. Las versiones nuevas llegan por la actualización del service worker (botón «Actualizar»).
   if (req.mode === "navigate") {
     e.respondWith(
-      fetch(req).then(r => { const copy = r.clone(); caches.open(CACHE).then(c => c.put("index.html", copy)); return r; })
-        .catch(() => caches.match("index.html"))
+      caches.open(CACHE).then(c => c.match("index.html")).then(hit => hit || fetch(req))
     );
     return;
   }

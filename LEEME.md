@@ -10,9 +10,9 @@ Es una app web estática: no tiene backend ni base de datos y no envía datos a 
 ## Opción A: GitHub Pages (gratis, recomendada)
 
 1. Crea un repositorio, por ejemplo `ruta-entregas`.
-2. Sube el **contenido** de esta carpeta a la raíz del repositorio: `index.html`, `sw.js`, `manifest.webmanifest`, `.htaccess` y las carpetas `fonts/`, `icons/` y `ocr/`.
-3. Entra a Settings → Pages → Source: *Deploy from a branch* → `main` / `(root)` → Save.
-4. En uno o dos minutos queda publicada en `https://TU-USUARIO.github.io/ruta-entregas/`.
+2. Sube el **contenido** de esta carpeta a la raíz del repositorio, incluida la carpeta oculta `.github/`.
+3. Entra a Settings → Pages → Build and deployment → Source: **GitHub Actions**.
+4. Con cada cambio, GitHub corre las pruebas automáticas y, solo si todas pasan, publica la app en `https://TU-USUARIO.github.io/ruta-entregas/`. El avance se ve en la pestaña **Actions**.
 
 El repositorio es público, pero solo contiene el código. Los datos de clientes nunca salen del celular.
 
@@ -37,10 +37,57 @@ El repositorio es público, pero solo contiene el código. Los datos de clientes
 ## Publicar cambios
 
 1. Edita los archivos.
-2. En `sw.js` sube el número de `CACHE` (por ejemplo `ruta-v1.0.1`), y en `index.html` el de `APP_VERSION`.
-3. Sube los archivos de nuevo.
+2. Sube el mismo número en dos sitios: `CACHE` en `sw.js` (por ejemplo `ruta-v2.0.1`) y `APP_VERSION` en `js/09-arranque.js` (`2.0.1`). Una prueba automática falla si no coinciden.
+3. Si agregas un archivo en `js/` o `css/`, inclúyelo en la lista `CORE` de `sw.js`. Si es de `js/`, inclúyelo también en `APP_FILES` de `js/00-acceso.js`. Una prueba revisa ambas listas.
+4. Sube los cambios a `main`. GitHub corre las pruebas y publica solo si pasan.
 
-Al abrir la app, el celular detecta la versión nueva y avisa que hay que cerrarla y volver a abrirla. Si no subes `CACHE`, los celulares siguen usando la versión vieja.
+Los celulares descargan la versión nueva en segundo plano y muestran «Hay una versión nueva — Actualizar». Si no subes `CACHE`, siguen con la versión vieja.
+
+## Estructura del código
+
+| Archivo | Qué hace |
+|---|---|
+| `index.html` | Estructura de las pantallas y ventanas. |
+| `css/app.css` | Estilos (tema claro/oscuro, diseño para celular). |
+| `js/00-acceso.js` | Usuarios y PIN. Carga el resto de la app solo después de entrar. |
+| `js/01-direcciones.js` | Almacenamiento y lectura de direcciones de Bogotá y de etiquetas. |
+| `js/02-ruta.js` | Estado de la jornada y optimización del orden. |
+| `js/03-mapas.js` | Ubicación en el mapa, ubicaciones aprendidas, barrios, calles reales y zona de trabajo. |
+| `js/04-jornada.js` | Comparación de órdenes, historial y reporte del día. |
+| `js/05-pantalla.js` | Mapa, Waze/Maps, lista de paradas y ventanas de edición. |
+| `js/06-escaner.js` | Lector de texto (OCR) y escáner de códigos. |
+| `js/07-cargue.js` | Buscar por guía, repetidos, revisión y orden de cargue. |
+| `js/08-voz.js` | Dictado por voz. |
+| `js/09-arranque.js` | Botones generales, respaldo, actualizaciones y arranque. |
+| `sw.js` | Service worker: uso sin señal, actualizaciones y mapas guardados. |
+| `tests/` | Pruebas automáticas (no se publican). |
+
+Los archivos de `js/` se cargan en ese orden y comparten variables globales: son scripts clásicos, no módulos ES. Así la app abre sin herramientas de compilación.
+
+## Pruebas automáticas
+
+Simulan un Pixel 7 con Chromium. Los servicios de mapas y rutas se simulan, así que no dependen de internet. Cubren:
+
+- PIN, usuarios y bloqueo;
+- lectura de direcciones y etiquetas;
+- ruta, zona y entregas;
+- buscar por guía, guías repetidas y revisión del cargue;
+- escáner con cámara simulada;
+- ubicaciones aprendidas;
+- Excel del historial;
+- diseño a 320, 360 y 412 px;
+- uso sin señal;
+- coincidencia de versiones.
+
+Para correrlas en un computador:
+
+```
+npm ci
+npx playwright install chromium
+npx playwright test
+```
+
+La prueba de mapas sin señal necesita la variable `PW_EXPERIMENTAL_SERVICE_WORKER_NETWORK_EVENTS=1`. Las pruebas de cámara necesitan `ffmpeg`.
 
 ## Datos y privacidad (Ley 1581 de 2012)
 
@@ -99,7 +146,7 @@ Con internet, la app hace tres cosas:
 - La app revisa si hay versión nueva al volver a ella y cada 30 minutos. También se puede revisar a mano en «Más opciones» → «Buscar actualización».
 - Si hay versión nueva, se descarga sola y aparece arriba «Hay una versión nueva (x.y) — Actualizar».
 - La app nunca se recarga sola, así que no se pierde una edición a medias. Al tocar «Actualizar» se recarga sin pedir el PIN y conserva la ruta.
-- Al publicar cambios: subir `CACHE` en `sw.js` y `APP_VERSION` en `index.html` con el mismo número.
+- Al publicar cambios: subir `CACHE` en `sw.js` y `APP_VERSION` en `js/09-arranque.js` con el mismo número.
 
 ## Buscar por guía, repetidos y revisión del cargue (v1.21)
 
@@ -119,3 +166,18 @@ Con internet, la app hace tres cosas:
 - Cuando esa dirección vuelve a llegar, se ubica exacta, sin consultar el mapa. Waze recibe las coordenadas y la tarjeta muestra «Ubicación exacta». Cada entrega nueva en el mismo sitio afina el punto con un promedio ponderado por precisión.
 - Los usuarios del celular comparten estas ubicaciones. Se guardan solo la dirección y las coordenadas, hasta 3.000 direcciones; las más viejas salen primero.
 - Se apaga o se borra en «Más opciones» → «Ubicaciones aprendidas».
+
+## Orden de cargue y mapas sin señal (v1.23)
+
+- **Revisar cargue → Orden para acomodar en el vehículo**: la lista va al revés de la ruta. Lo último en entregarse va al fondo y la parada 1 queda a la mano. Muestra el número grande de parada para escribirlo en cada paquete.
+- **Mapas sin señal**:
+  - El mapa guarda los cuadros de calles que ya se vieron, hasta unos 2.000 (≈ 40 MB). Se reusan durante 7 días; sin señal se usan aunque sean más viejos.
+  - Las condiciones de uso de OpenStreetMap prohíben descargar zonas completas por adelantado, por eso solo se guarda lo visto.
+  - Se borran en «Más opciones».
+
+## Versión 2.0
+
+- El código quedó dividido en archivos por tema (ver «Estructura del código»).
+- Hay pruebas automáticas que corren en GitHub antes de publicar.
+- La página y sus archivos salen siempre de la versión instalada, así que nunca se mezcla una página nueva con código viejo. Lo nuevo llega con el botón «Actualizar».
+- «Buscar guía» deja escribir el número aunque el celular no dé permiso de cámara.

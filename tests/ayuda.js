@@ -16,7 +16,7 @@ async function entrar(page, nombre = "Camilo", pin = PIN){
   await page.fill("#suName", nombre); await page.fill("#suPin", pin); await page.fill("#suPin2", pin);
   await page.click("#lkSetup button[type=submit]");
   await expect(page.locator("#lock")).toBeHidden({ timeout: 15000 });
-  await page.waitForFunction(() => typeof state !== "undefined" && typeof render === "function");
+  await page.waitForFunction(() => window.RUTA_LISTA === true);
   await page.evaluate(() => { state.autoWaze = false; state.realRoads = false; save(); });
 }
 // Escribe un PIN en el teclado numérico de la pantalla de bloqueo.
