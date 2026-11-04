@@ -253,6 +253,21 @@ details summary{cursor:pointer;font-weight:600}
             <label for="zMinCl">Desde Calle<input id="zMinCl" type="number" inputmode="numeric"></label>
             <label for="zMaxCl">Hasta Calle<input id="zMaxCl" type="number" inputmode="numeric"></label>
           </div>
+          <label for="zEntry">Si no pones punto de partida, entrar a la zona por
+            <select id="zEntry">
+              <option value="145">Av. Cali con Calle 145 (Portal Suba)</option>
+              <option value="139">Av. Cali con Calle 139</option>
+              <option value="132">Av. Cali con Calle 132 (Av. El Tabor)</option>
+              <option value="153">Av. Cali con Calle 153 (Av. Las Mercedes)</option>
+              <option value="0">Sin punto fijo (la app elige)</option>
+            </select>
+          </label>
+          <label style="flex-direction:row;align-items:center;gap:8px;color:var(--ink);font-size:15px">
+            <input type="checkbox" id="zSectors" style="width:auto"> Recorrer por sectores entre avenidas (Calle 132, 139, 145 y 153) cuando dé igual o mejor
+          </label>
+          <label style="flex-direction:row;align-items:center;gap:8px;color:var(--ink);font-size:15px">
+            <input type="checkbox" id="zOutLast" style="width:auto"> Dejar al final las paradas fuera de la zona
+          </label>
           <p class="hint" style="margin:0">Por defecto: Suba de la Av. Ciudad de Cali (Av. Carrera 104) hacia el río Bogotá, entre el río Juan Amarillo (≈ Calle 125) y la Calle 175. Puedes ajustar los números.</p>
         </fieldset>
         <label for="orsKey">Clave de openrouteservice (opcional, gratis): respaldo si fallan los servidores de rutas gratuitos
@@ -533,7 +548,19 @@ function save(){ store.set(KEY,state); }
 /* ============ Optimización de ruta ============ */
 // Distancia en "cuadras": la ciudad es una cuadrícula, así que se suma lo recorrido en calles y en carreras
 // (distancia Manhattan), que se parece más a lo que anda un carro o una moto que la línea recta.
-const gridDist = (a,b) => Math.abs(a.x-b.x) + Math.abs(a.y-b.y);
+// Sin calles reales, cruzar una avenida principal de la zona (Calle 132, 139, 145, 153) se penaliza con ≈ 2 cuadras:
+// hay que buscar el semáforo o el puente, no se cruza por cualquier cuadra.
+const CROSS_PENALTY = 2;
+function gridDist(a,b){
+  let d = Math.abs(a.x-b.x) + Math.abs(a.y-b.y);
+  const st = typeof state !== "undefined" ? state : null;
+  if(!st || !st.zone || st.zone.on !== false){
+    const cuts = (st && st.zone && st.zone.cuts) || [132,139,145,153];
+    const lo = Math.min(a.y,b.y), hi = Math.max(a.y,b.y);
+    for(const c of cuts) if(lo < c && hi >= c) d += CROSS_PENALTY;
+  }
+  return d;
+}
 // Cuando hay internet se usa una matriz de tiempos reales en carro (segundos); IDX dice qué fila corresponde a cada punto.
 let MATRIX = null; const IDX = new Map();
 const dist = (a,b) => (MATRIX && IDX.has(a) && IDX.has(b)) ? MATRIX[IDX.get(a)][IDX.get(b)] : gridDist(a,b);
@@ -660,21 +687,57 @@ function currentOrigin(){
     const ld = done.find(s=>s.id===state.lastDoneId);
     if(ld) return {x:ld.x,y:ld.y,label:ld.label,lat:ld.lat,lng:ld.lng,id:ld.id};
   }
-  const sp = parseAddress(state.start); if(!sp) return null;
+  const sp = parseAddress(state.start);
+  if(!sp){
+    // Sin punto de partida: se arranca por la entrada a la zona de trabajo (si está activa).
+    const z = zone();
+    if(z.on && z.entry){
+      const e = {x:z.minCra, y:z.entry, label:ZONE_ENTRIES[z.entry] || ("Av. Cali con Calle "+z.entry), entry:true};
+      const g = state.entryGeo && state.entryGeo.calle===z.entry ? state.entryGeo : null;
+      return g ? {...e, lat:g.lat, lng:g.lng} : e;
+    }
+    return null;
+  }
   const c = geoCache[geoKey(sp)] || (state.startGeo && state.startGeo.label===sp.label ? state.startGeo : null);
   return c ? {...sp, lat:c.lat, lng:c.lng} : sp;
 }
+// Sector de la zona según las avenidas que la cortan (calles 132, 139, 145, 153 por defecto).
+function sectorOf(s){ const cuts = zone().cuts||[]; let k = 0; for(const c of cuts) if(s.y >= c) k++; return k; }
+function groupedOrder(origin, geo, back, keyFn){
+  const groups = {};
+  geo.forEach(s=>{ (groups[keyFn(s)] ||= []).push(s); });
+  const zs = Object.entries(groups).map(([z,arr])=>({z,arr,x:arr.reduce((a,s)=>a+s.x,0)/arr.length,y:arr.reduce((a,s)=>a+s.y,0)/arr.length}));
+  const zOrder = solve(origin, zs, false);
+  const ordered = []; let cur = origin;
+  zOrder.forEach((zg,i)=>{ const last = i===zOrder.length-1; const part = solve(cur, zg.arr, last && back); ordered.push(...part); cur = part[part.length-1]; });
+  return ordered;
+}
+let lastStrategy = "";
 function orderStops(origin, geo, back){
-  if(state.byZone){
-    const groups = {};
-    geo.forEach(s=>{ (groups[s.zone||"—"] ||= []).push(s); });
-    const zs = Object.entries(groups).map(([z,arr])=>({z,arr,x:arr.reduce((a,s)=>a+s.x,0)/arr.length,y:arr.reduce((a,s)=>a+s.y,0)/arr.length}));
-    const zOrder = solve(origin, zs, false);
-    const ordered = []; let cur = origin;
-    zOrder.forEach((zg,i)=>{ const last = i===zOrder.length-1; const part = solve(cur, zg.arr, last && back); ordered.push(...part); cur = part[part.length-1]; });
-    return ordered;
+  const z = zone();
+  // Las paradas fuera de la zona (casi siempre errores o paquetes de otra ruta) van al final para no desviar el recorrido.
+  if(z.on && z.outLast){
+    const inZ = geo.filter(s=>!zoneIssue(s)), outZ = geo.filter(s=>zoneIssue(s));
+    if(outZ.length && inZ.length){
+      const a = orderCore(origin, inZ, false);
+      const b = solve(a[a.length-1], outZ, back);
+      return a.concat(b);
+    }
   }
-  return solve(origin, geo, back);
+  return orderCore(origin, geo, back);
+}
+function orderCore(origin, geo, back){
+  if(state.byZone){ lastStrategy = "por zona ST"; return groupedOrder(origin, geo, back, s=>s.zone||"—"); }
+  const z = zone();
+  const free = solve(origin, geo, back);
+  if(z.on && z.sectors && geo.length >= 4){
+    const sect = groupedOrder(origin, geo, back, sectorOf);
+    const cf = pathLen(origin, free, back), cs = pathLen(origin, sect, back);
+    // Por sectores es más fácil de seguir en la calle: se prefiere si cuesta como máximo 3 % más que el orden libre.
+    if(cs <= cf * 1.03){ lastStrategy = "por sectores entre avenidas"; return sect; }
+  }
+  lastStrategy = "libre (el más corto)";
+  return free;
 }
 // Aplica un orden calculado sobre el estado actual (por si el repartidor marcó entregas mientras se calculaba).
 function applyOrder(orderIds){
@@ -996,7 +1059,14 @@ async function realOrder(silent){
   // Con las direcciones ya ubicadas, se valida cada una contra su barrio.
   await checkBarrios().catch(e=>console.warn("barrios", e));
   save();
-  const origin = currentOrigin();
+  let origin = currentOrigin();
+  // Ubicar la entrada a la zona (esquina de la Av. Cali con la calle elegida).
+  if(origin && origin.entry && origin.lat==null){
+    const pe = parseAddress(`Avenida Carrera ${zone().minCra} # ${origin.y}-00`);
+    const g = pe ? await geocode(pe) : null;
+    const e = g || estimate(origin.x, origin.y);
+    if(e){ state.entryGeo = {calle:origin.y, lat:e.lat, lng:e.lng}; save(); origin = currentOrigin(); }
+  }
   const back = !!state.roundTrip && !!sp;
   const geo = pendNow.filter(s=>s.lat!=null);
   if(geo.length < 1) throw new Error("ninguna dirección ubicada");
@@ -1026,7 +1096,9 @@ async function realOrder(silent){
   state.suggestedIds = ordered.map(s=>s.id);
   const est = geo.filter(s=>s.geo!=="osm").length;
   state.route = {mode:"real", km: KM ? m/1000 : null, min: sec/60};
-  setRouteInfo(`Ruta con calles reales: ${KM ? (m/1000).toFixed(1)+" km · " : ""}${Math.round(sec/60)} min en carro sin trancón, más el tiempo en cada entrega. Calculada con ${j.provider}.` +
+  const outN = geo.filter(s=>zoneIssue(s)).length;
+  setRouteInfo(`Ruta con calles reales: ${KM ? (m/1000).toFixed(1)+" km · " : ""}${Math.round(sec/60)} min en carro sin trancón, más el tiempo en cada entrega. Calculada con ${j.provider}. ` +
+    `Orden ${lastStrategy}${o && o.entry ? ", entrando por " + o.label : ""}${outN && zone().outLast ? `; ${outN} fuera de zona al final` : ""}.` +
     (est ? ` ${est} dirección(es) ubicadas de forma aproximada (borde punteado en el mapa).` : "") +
     (geo.filter(s=>s.zoneCheck && s.zoneCheck.bad).length ? ` Atención: ${geo.filter(s=>s.zoneCheck && s.zoneCheck.bad).length} dirección(es) quedaron lejos del barrio que dice la etiqueta; revísalas.` : ""));
   save(); render();
@@ -1040,7 +1112,10 @@ async function realOrder(silent){
 /* ============ Zona de trabajo ============ */
 // Zona por defecto: Suba al occidente de la Av. Ciudad de Cali (que en Suba es la Av. Carrera 104, según el IDU),
 // hasta el río Bogotá; al sur el río Juan Amarillo y al norte la Calle 175 aprox. Los límites se pueden ajustar.
-const ZONE_DEFAULT = {on:true, minCra:104, maxCra:170, minCl:125, maxCl:175, name:"Suba occidental: de la Av. Ciudad de Cali hacia el río Bogotá"};
+const ZONE_DEFAULT = {on:true, minCra:104, maxCra:170, minCl:125, maxCl:175, name:"Suba occidental: de la Av. Ciudad de Cali hacia el río Bogotá",
+  entry:145, sectors:true, outLast:true, cuts:[132,139,145,153]};
+// Entradas a la zona sobre la Av. Ciudad de Cali (Av. Carrera 104).
+const ZONE_ENTRIES = {132:"Av. Cali con Calle 132 (Av. El Tabor)", 139:"Av. Cali con Calle 139", 145:"Av. Cali con Calle 145 (Portal Suba)", 153:"Av. Cali con Calle 153 (Av. Las Mercedes)"};
 // Barrios de la zona (UPZ 71 Tibabuyes, Decreto 430 de 2004, y barrios vecinos al occidente de la Av. Cali). Sirven para sugerir y unificar nombres.
 const ZONE_BARRIOS = ["Tibabuyes","Tibabuyes Universal","Sabana de Tibabuyes","San Pedro de Tibabuyes","San Carlos de Tibabuyes","San Carlos de Suba",
   "Lisboa","Berlín","Bilbao","Santa Cecilia","Santa Rita","Villa Cindy","La Isabela","Verona","San Juan Bautista","Villa Nelly","Marichuela",
@@ -1065,6 +1140,7 @@ function canonBarrio(name){
 function renderZoneSettings(){
   const z = zone();
   $("zOn").checked = z.on; $("zName").textContent = z.name;
+  $("zEntry").value = String(z.entry||0); $("zSectors").checked = !!z.sectors; $("zOutLast").checked = !!z.outLast;
   for(const [id,k] of [["zMinCra","minCra"],["zMaxCra","maxCra"],["zMinCl","minCl"],["zMaxCl","maxCl"]]) if(document.activeElement!==$(id)) $(id).value = z[k];
   const dl = $("barriosZona"); if(!dl.childElementCount) dl.innerHTML = ZONE_BARRIOS.map(b=>`<option value="${esc(b)}"></option>`).join("");
 }
@@ -1890,7 +1966,10 @@ $("btnNext").onclick = ()=>{
   const li = document.querySelector(`li[data-id="${s.id}"]`); if(li) li.scrollIntoView({behavior:"smooth",block:"center"});
   openExternal(wazeUrl(s));
 };
-$("zOn").addEventListener("change", e=>{ state.zone = {...zone(), on:e.target.checked}; save(); render(); });
+$("zOn").addEventListener("change", e=>{ state.zone = {...zone(), on:e.target.checked}; save(); render(); optimize(true); });
+$("zEntry").addEventListener("change", e=>{ state.zone = {...zone(), entry:parseInt(e.target.value,10)||0}; save(); optimize(true); });
+$("zSectors").addEventListener("change", e=>{ state.zone = {...zone(), sectors:e.target.checked}; save(); optimize(true); });
+$("zOutLast").addEventListener("change", e=>{ state.zone = {...zone(), outLast:e.target.checked}; save(); optimize(true); });
 for(const [id,k] of [["zMinCra","minCra"],["zMaxCra","maxCra"],["zMinCl","minCl"],["zMaxCl","maxCl"]]){
   $(id).addEventListener("change", e=>{ const v = parseInt(e.target.value,10); if(!isNaN(v)){ state.zone = {...zone(), [k]:v, name:"Zona personalizada"}; save(); render(); } });
 }
@@ -1947,7 +2026,7 @@ $("restoreFile").addEventListener("change", async e=>{
 });
 
 /* ============ App instalable y sin conexión ============ */
-const APP_VERSION = "1.10.1";
+const APP_VERSION = "1.11.0";
 $("ver").textContent = "Versión " + APP_VERSION + ". Funciona sin internet una vez abierta la primera vez.";
 function netState(){ if(SERVED) $("net").hidden = navigator.onLine; }
 addEventListener("online", ()=>{ netState(); if(state.stops.some(s=>s.status!=="done")) optimize(true); }); addEventListener("offline", netState); netState();
