@@ -49,6 +49,20 @@ Al abrir la app, el celular detecta la versión nueva y avisa que hay que cerrar
 - El respaldo `.json` contiene nombres, teléfonos y direcciones de clientes. No lo compartas, y bórralo de Descargas cuando ya no lo necesites.
 - Usa **Nueva jornada** al terminar cada día.
 
+## Ruta con calles reales (v1.2)
+
+Con internet, la app hace tres cosas:
+
+1. **Ubica cada dirección** en la esquina de su calle con la vía generadora. Usa los datos de OpenStreetMap a través del servicio Overpass, y guarda el resultado en el celular para no volver a buscar la misma dirección.
+2. **Calcula los tiempos reales en carro** entre todas las paradas con OSRM, el servidor público de demostración (`router.project-osrm.org`). Con eso ordena la ruta respetando los sentidos de las vías.
+3. **Dibuja el recorrido** en un mapa de OpenStreetMap.
+
+**Riesgos a tener en cuenta:**
+- Los servicios de Overpass y OSRM son gratuitos, sin garantía de que estén disponibles, y con límites de uso razonable. Si fallan o no hay señal, la app usa sola el orden aproximado.
+- Para un uso intensivo o de varias personas, conviene montar un OSRM propio o cambiar a un servicio pago (Google Routes, Mapbox u openrouteservice).
+- Si una dirección no aparece en el mapa, su ubicación se estima a partir de puntos de referencia y se marca con borde punteado.
+- OSRM no tiene un perfil especial para moto: los tiempos son de carro y no incluyen el trancón.
+
 ## Limitaciones conocidas
 
 - **El orden es aproximado.** Se calcula con la cuadrícula de calles y carreras, no con el mapa vial: no tiene en cuenta sentidos de las vías, humedales ni cierres.
