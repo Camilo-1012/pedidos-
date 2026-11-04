@@ -131,6 +131,11 @@ dialog.scan{width:min(640px,calc(100% - 16px))}
 .hrow{border:1px solid var(--line);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:2px;font-size:14px}
 .hrow b{font-family:var(--display);font-size:17px}
 .scanStat{display:flex;flex-wrap:wrap;gap:6px}
+.phoneRow{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:6px;align-items:center}
+.btn.call{background:var(--ok);color:#fff;border-color:var(--ok)}
+.btn.wa{background:#1f8f4e;color:#fff;border-color:#1f8f4e}
+.btn[aria-disabled="true"]{opacity:.35;pointer-events:none}
+@media (max-width:400px){.phoneRow{grid-template-columns:repeat(2,minmax(0,1fr))}.phoneRow input{grid-column:1 / -1}}
 .toast{position:fixed;left:50%;bottom:84px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 14px;border-radius:10px;font-size:14px;z-index:20;max-width:calc(100% - 32px);display:none}
 .toast.show{display:block}
 details summary{cursor:pointer;font-weight:600}
@@ -314,10 +319,14 @@ details summary{cursor:pointer;font-weight:600}
         <button type="button" id="qtyPlus" aria-label="Uno más">+</button>
       </div>
     </div>
-    <div class="grid2">
-      <label for="fZone">Zona / ST<input id="fZone" inputmode="numeric" autocomplete="off"></label>
-      <label for="fPhone">Teléfono<input id="fPhone" inputmode="tel" autocomplete="off"></label>
+    <label for="fPhone">Teléfono</label>
+    <div class="phoneRow">
+      <input id="fPhone" inputmode="tel" autocomplete="off">
+      <a class="btn call" id="fCall" href="#" aria-disabled="true">Llamar</a>
+      <a class="btn wa" id="fWa" href="#" target="_blank" rel="noopener" aria-disabled="true">WhatsApp</a>
     </div>
+    <p class="hint" id="fPhoneHint" hidden></p>
+    <label for="fZone">Zona / ST<input id="fZone" inputmode="numeric" autocomplete="off"></label>
     <label for="fName">Destinatario<input id="fName" autocomplete="off"></label>
     <div class="grid2">
       <label for="fBarrio">Barrio / localidad<input id="fBarrio" autocomplete="off" list="barriosZona"></label>
@@ -1547,6 +1556,7 @@ function render(){
       <div class="actions2">
         <button class="small" data-act="up" aria-label="Subir" ${idx===0?"disabled":""}>▲</button>
         <button class="small" data-act="down" aria-label="Bajar" ${idx===state.stops.length-1?"disabled":""}>▼</button>
+        ${s.phone && cleanPhone(s.phone).startsWith("3") ? `<a class="btn small" href="${waUrl(cleanPhone(s.phone), s)}" target="_blank" rel="noopener">WhatsApp</a>` : ""}
         <button class="small" data-act="fail">${isFail?"Quitar fallido":"No estaba"}</button>
         <button class="small" data-act="edit">Editar</button>
         <button class="small danger" data-act="del">Borrar</button>
@@ -1592,6 +1602,7 @@ function openEdit(s, isNew){
   $("dlgTitle").textContent = isNew ? "Revisa y guarda" : "Editar paquete";
   $("fAddr").value = s.addr||""; $("fZone").value = s.zone||""; $("fPhone").value = s.phone||"";
   setType(s.type||"casa"); $("fUnit").value = s.unit||"";   // por defecto Casa; se cambia si es otro tipo
+  setTimeout(updPhone, 0);
   $("fQty").value = s.qty||1; $("fName").value = s.name||""; $("fBarrio").value = s.barrio||""; $("fGuia").value = s.guia||""; $("fNotes").value = s.notes||"";
   $("fRaw").textContent = s.raw||""; $("rawWrap").hidden = !s.raw;
   updParsed();
@@ -1604,6 +1615,23 @@ function updParsed(){
     `<span class="chip warn">No reconocida</span> Escríbela así: Calle 143 # 151B-23 (o Cra, Dg, Tv; agrega Sur o Este si aplica).`;
 }
 $("fAddr").addEventListener("input", updParsed);
+// Llamar o escribir por WhatsApp al cliente desde el formulario (apenas se escanea la etiqueta).
+function cleanPhone(v){ const d = String(v||"").replace(/\D/g,""); const t = d.length===12 && d.startsWith("57") ? d.slice(2) : d; return /^3\d{9}$/.test(t) || /^60\d{8}$/.test(t) ? t : ""; }
+function waText(s){ return `Hola${s.name ? " " + s.name.split(" ")[0] : ""}, le escribe el domiciliario. Voy en camino con su paquete a ${s.label || s.addr || "su dirección"}${s.unit ? " (" + s.unit + ")" : ""}. ¿Me confirma si hay alguien para recibir?`; }
+function waUrl(phone, s){ return "https://wa.me/57" + phone + "?text=" + encodeURIComponent(waText(s)); }
+function updPhone(){
+  const ph = cleanPhone($("fPhone").value);
+  const pa = parseAddress($("fAddr").value);
+  const s = {name:$("fName").value.trim(), label: pa ? pa.label : $("fAddr").value.trim(), unit:$("fUnit").value.trim()};
+  $("fCall").setAttribute("aria-disabled", ph ? "false" : "true");
+  $("fWa").setAttribute("aria-disabled", ph && ph.startsWith("3") ? "false" : "true");
+  $("fCall").href = ph ? "tel:" + ph : "#";
+  $("fWa").href = ph ? waUrl(ph, s) : "#";
+  const raw = $("fPhone").value.trim();
+  $("fPhoneHint").hidden = !raw || !!ph;
+  $("fPhoneHint").textContent = raw && !ph ? "Revisa el teléfono: un celular en Colombia tiene 10 dígitos y empieza por 3." : "";
+}
+for(const id of ["fPhone","fName","fAddr","fUnit"]) $(id).addEventListener("input", updPhone);
 $("qtyMinus").onclick = ()=>{ $("fQty").value = Math.max(1,(parseInt($("fQty").value,10)||1)-1); };
 function setType(t){
   document.querySelectorAll('input[name="fType"]').forEach(r=>{ r.checked = r.value===t; });
@@ -2246,7 +2274,7 @@ $("restoreFile").addEventListener("change", async e=>{
 });
 
 /* ============ App instalable y sin conexión ============ */
-const APP_VERSION = "1.14.0";
+const APP_VERSION = "1.15.0";
 $("ver").textContent = "Versión " + APP_VERSION + ". Funciona sin internet una vez abierta la primera vez.";
 if(navigator.storage && navigator.storage.estimate){
   navigator.storage.estimate().then(e=>{ if(e && e.usage) $("ver").textContent += ` Espacio usado en este celular: ${(e.usage/1048576).toFixed(1).replace(".",",")} MB (la mayor parte es el lector de etiquetas).`; }).catch(()=>{});
