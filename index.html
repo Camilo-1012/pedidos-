@@ -186,9 +186,13 @@ details summary{cursor:pointer;font-weight:600}
 
   <section class="card" aria-labelledby="hRoute">
     <h2 id="hRoute">Ruta</h2>
-    <label for="start">Punto de partida (dirección donde arrancas)
+    <label for="start">Punto de partida: tu ubicación o una dirección
       <input id="start" placeholder="Ej: Calle 145 # 120-10" autocomplete="off">
     </label>
+    <div class="row">
+      <button type="button" class="dark" id="btnGps">Usar mi ubicación actual</button>
+      <button type="button" class="small" id="btnGpsClear" hidden>Quitar ubicación</button>
+    </div>
     <p class="hint" id="startInfo"></p>
     <label style="flex-direction:row;align-items:center;gap:8px;color:var(--ink);font-size:15px">
       <input type="checkbox" id="byZone" style="width:auto"> Terminar una zona (ST) antes de pasar a otra
@@ -682,11 +686,15 @@ function solve(start, pts, back){
 }
 // Punto desde donde se calcula: si ya hay entregas hechas, la última entregada (ahí está el repartidor); si no, el punto de partida.
 function currentOrigin(){
+  const g = state.startGPS && state.startGPS.x!=null ? state.startGPS : null;
+  const gpsOrigin = g ? {x:g.x, y:g.y, lat:g.lat, lng:g.lng, label:"Mi ubicación", gps:true, t:g.t} : null;
   const done = state.stops.filter(s=>s.status==="done" && s.x!==null);
   if(done.length && state.lastDoneId){
     const ld = done.find(s=>s.id===state.lastDoneId);
-    if(ld) return {x:ld.x,y:ld.y,label:ld.label,lat:ld.lat,lng:ld.lng,id:ld.id};
+    // La ubicación GPS manda si se tomó después de la última entrega (p. ej. el repartidor se desvió).
+    if(ld && !(gpsOrigin && g.t > (ld.doneAt||0))) return {x:ld.x,y:ld.y,label:ld.label,lat:ld.lat,lng:ld.lng,id:ld.id};
   }
+  if(gpsOrigin) return gpsOrigin;
   const sp = parseAddress(state.start);
   if(!sp){
     // Sin punto de partida: se arranca por la entrada a la zona de trabajo (si está activa).
@@ -758,13 +766,12 @@ function optimize(silent){
   });
   return optimizing;
 }
-async function optimizeNow(silent){
+// Orden inmediato con la cuadrícula (funciona sin internet). Se puede llamar aunque haya un cálculo con calles reales en curso.
+function quickOrder(){
   const origin = currentOrigin();
   const back = !!state.roundTrip && !!parseAddress(state.start);
-  const pend = state.stops.filter(s=>s.status!=="done");
-  const geo = pend.filter(s=>s.x!==null), unk = pend.filter(s=>s.x===null);
-  // 1) Orden inmediato con la cuadrícula (funciona sin internet).
-  MATRIX = null;
+  const geo = state.stops.filter(s=>s.status!=="done" && s.x!==null);
+  if(MATRIX) return;   // no interferir si justo se está usando la matriz real
   const quick = orderStops(origin, geo, back);
   applyOrder(quick.map(s=>s.id));
   state.suggestedIds = quick.map(s=>s.id);
@@ -772,6 +779,12 @@ async function optimizeNow(silent){
   state.route = {mode:"aprox", km: pathLen(origin, quick, back)*KM_PER_UNIT};
   ROUTE_GEOM = null;
   save(); render();
+}
+async function optimizeNow(silent){
+  const pend = state.stops.filter(s=>s.status!=="done");
+  const geo = pend.filter(s=>s.x!==null), unk = pend.filter(s=>s.x===null);
+  // 1) Orden inmediato con la cuadrícula.
+  quickOrder();
   // 2) Con internet: ubicar en el mapa y ordenar con tiempos reales en carro.
   if(state.realRoads !== false && navigator.onLine && geo.length >= 1){
     try{
@@ -1051,7 +1064,7 @@ async function realOrder(silent){
   const pendNow = state.stops.filter(s=>s.status!=="done" && s.x!==null);
   // Ubicar paradas y punto de partida.
   const toLocate = pendNow.filter(s=>(s.lat==null || s.geo!=="osm") && s.geo!=="barrio");
-  if(sp && !(state.startGeo && state.startGeo.label===sp.label && state.startGeo.geo==="osm")){
+  if(sp && !state.startGPS && !(state.startGeo && state.startGeo.label===sp.label && state.startGeo.geo==="osm")){
     const ps = {label:sp.label, addr:state.start}; await locateAll([ps]);
     if(ps.lat!=null) state.startGeo = {label:sp.label, lat:ps.lat, lng:ps.lng, geo:ps.geo};
   }
@@ -1387,7 +1400,16 @@ function render(){
   $("zoneInfo").textContent = outZ ? `${outZ} parada(s) fuera de tu zona de trabajo (${zone().name}). Revisa si la dirección está bien escrita.` : "";
   $("start").value = state.start;
   $("byZone").checked = !!state.byZone;
-  $("startInfo").textContent = state.start ? (sp ? "Ubicado: " + sp.label : "No reconozco esa dirección; se ordenará sin punto de partida.") : "Opcional. Sin punto de partida, la app elige el recorrido más corto.";
+  const g = state.startGPS;
+  $("btnGpsClear").hidden = !g;
+  if(g){
+    const near = g.x!=null ? ` Aproximadamente por la Calle ${Math.round(g.y)} con Carrera ${Math.round(g.x)}.` : "";
+    $("startInfo").textContent = `Arrancas desde tu ubicación (precisión ±${g.acc} m, tomada a las ${hhmm(g.t)}).${near}` + (g.acc>300 ? " La precisión es baja: activa el GPS del celular y vuelve a tocar el botón." : "");
+  } else {
+    const z = zone();
+    $("startInfo").textContent = state.start ? (sp ? "Ubicado: " + sp.label : "No reconozco esa dirección; se ordenará sin punto de partida.")
+      : (z.on && z.entry ? `Sin punto de partida: se arranca por ${ZONE_ENTRIES[z.entry]}. Mejor usa «Usar mi ubicación actual» al salir.` : "Opcional. Sin punto de partida, la app elige el recorrido más corto.");
+  }
 
   if(state.stops.length===0){
     list.innerHTML = '<li class="empty">Sin paquetes. Toma una foto de la etiqueta para empezar.</li>';
@@ -1954,7 +1976,28 @@ $("btnBulk").onclick = ()=>openText("bulk");
 $("btnManual").onclick = ()=>openEdit({addr:""}, true);
 $("btnVoice").onclick = ()=>{ openEdit({addr:""}, true); startDictation(); };
 $("btnSort").onclick = optimize;
-$("start").addEventListener("change", e=>{ state.start = e.target.value.trim(); save(); optimize(true); });
+$("start").addEventListener("change", e=>{ state.start = e.target.value.trim(); if(state.start) state.startGPS = null; save(); optimize(true); });
+// Punto de partida por GPS: la posición exacta del celular. Se puede volver a tocar a mitad de ruta para recalcular desde donde se está.
+$("btnGps").onclick = ()=>{
+  if(!navigator.geolocation){ toast("Este celular no permite usar la ubicación aquí."); return; }
+  const btn = $("btnGps"); btn.disabled = true; btn.textContent = "Buscando tu ubicación…";
+  navigator.geolocation.getCurrentPosition(pos=>{
+    btn.disabled = false; btn.textContent = "Actualizar mi ubicación";
+    const {latitude:lat, longitude:lng, accuracy} = pos.coords;
+    if(meters({lat,lng},{lat:4.65,lng:-74.1}) > 45000){ toast("Tu ubicación está fuera de Bogotá; no se usó como punto de partida."); return; }
+    const gxy = inverseEstimate(lat, lng);
+    state.startGPS = {lat, lng, acc:Math.round(accuracy), t:Date.now(), x:gxy?gxy.x:null, y:gxy?gxy.y:null};
+    state.start = ""; $("start").value = "";
+    save(); render();
+    toast(accuracy>300 ? "Ubicación tomada, pero poco precisa. Activa el GPS para mejorarla." : "Ubicación tomada. Reordenando la ruta desde aquí…");
+    quickOrder();      // se ve de inmediato
+    optimize(true);    // y luego se afina con las calles reales
+  }, err=>{
+    btn.disabled = false; btn.textContent = state.startGPS ? "Actualizar mi ubicación" : "Usar mi ubicación actual";
+    toast({1:"No hay permiso de ubicación. Actívalo para esta app en los ajustes del celular.",2:"No se pudo obtener la ubicación. Activa el GPS e intenta de nuevo.",3:"La ubicación tardó demasiado. Intenta de nuevo al aire libre."}[err.code] || "No se pudo obtener la ubicación.");
+  }, {enableHighAccuracy:true, timeout:20000, maximumAge:0});
+};
+$("btnGpsClear").onclick = ()=>{ state.startGPS = null; save(); $("btnGps").textContent = "Usar mi ubicación actual"; quickOrder(); optimize(true); };
 $("byZone").addEventListener("change", e=>{ state.byZone = e.target.checked; save(); optimize(true); });
 $("roundTrip").addEventListener("change", e=>{ state.roundTrip = e.target.checked; save(); optimize(true); });
 $("realRoads").addEventListener("change", e=>{ state.realRoads = e.target.checked; save(); optimize(); });
@@ -2001,7 +2044,7 @@ $("btnNew").onclick = ()=>{
   const pend = state.stops.filter(s=>s.status!=="done").length;
   confirmBox("Empezar jornada nueva",
     (pend ? `Quedan ${pend} paquete(s) sin entregar. ` : "") + "Se borran todos los paquetes de este celular y la lista queda en cero. El punto de partida se conserva.",
-    ()=>{ state.stops=[]; state.seeded=true; state.lastDoneId=null; state.cmpFirst=null; state.cmpLast=null; state.suggestedIds=null; LASTM=null; save(); render(); window.scrollTo(0,0); toast("Jornada nueva lista. Toma la primera foto."); });
+    ()=>{ state.stops=[]; state.seeded=true; state.lastDoneId=null; state.cmpFirst=null; state.cmpLast=null; state.suggestedIds=null; LASTM=null; state.startGPS=null; save(); render(); window.scrollTo(0,0); toast("Jornada nueva lista. Toma la primera foto."); });
 };
 $("btnClearAll").onclick = ()=>confirmBox("Borrar toda la jornada","Se eliminan todos los paquetes y sus datos de este celular.",()=>{ state.stops=[]; state.lastDoneId=null; save(); render(); toast("Jornada borrada."); });
 
@@ -2026,7 +2069,7 @@ $("restoreFile").addEventListener("change", async e=>{
 });
 
 /* ============ App instalable y sin conexión ============ */
-const APP_VERSION = "1.11.0";
+const APP_VERSION = "1.12.0";
 $("ver").textContent = "Versión " + APP_VERSION + ". Funciona sin internet una vez abierta la primera vez.";
 function netState(){ if(SERVED) $("net").hidden = navigator.onLine; }
 addEventListener("online", ()=>{ netState(); if(state.stops.some(s=>s.status!=="done")) optimize(true); }); addEventListener("offline", netState); netState();
