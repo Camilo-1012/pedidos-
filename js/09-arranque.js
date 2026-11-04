@@ -113,29 +113,51 @@ $("btnNew").onclick = ()=>{
 $("btnClearAll").onclick = ()=>confirmBox("Borrar toda la jornada","Se eliminan todos los paquetes y sus datos de este celular.",()=>{ state.stops=[]; state.lastDoneId=null; save(); render(); toast("Jornada borrada."); });
 
 /* ============ Respaldo (archivo en el celular) ============ */
+// Formato 2: {app, v:2, fecha, state, hist}. Lleva la jornada, los ajustes y el historial (resúmenes por pedido, sin nombres).
+// Los respaldos viejos (solo la jornada) se siguen pudiendo restaurar.
 $("btnBackup").onclick = ()=>{
-  const blob = new Blob([JSON.stringify(state,null,1)],{type:"application/json"});
+  const data = {app:"ruta-entregas", v:2, fecha:new Date().toISOString(), state, hist: histLoad()};
+  const blob = new Blob([JSON.stringify(data,null,1)],{type:"application/json"});
   const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
   a.download = "ruta-" + new Date().toISOString().slice(0,10) + ".json";
   document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),2000);
-  toast("Respaldo guardado en Descargas. Contiene datos de clientes: bórralo cuando no lo necesites.");
+  toast(`Respaldo guardado en Descargas (jornada + ${data.hist.length} día(s) de historial). Contiene datos de clientes: bórralo cuando no lo necesites.`);
 };
+// Junta dos historiales sin duplicar días: si un día está en ambos, queda el que tenga la última entrega más tarde.
+function mergeHist(cur, inc){
+  const m = new Map(cur.map(x=>[x.id, x]));
+  for(const x of inc){
+    if(!x || !x.id || typeof x.inicio !== "number") continue;
+    const y = m.get(x.id);
+    if(!y || (x.fin||0) > (y.fin||0)) m.set(x.id, x);
+  }
+  const limit = Date.now() - HIST_DAYS*864e5;
+  return [...m.values()].filter(x=>x.inicio >= limit).sort((a,b)=>a.inicio-b.inicio).slice(-150);
+}
 $("restoreFile").addEventListener("change", async e=>{
   const f = e.target.files && e.target.files[0]; e.target.value=""; if(!f) return;
   try{
     const d = JSON.parse(await f.text());
-    if(!d || !Array.isArray(d.stops)) throw new Error("formato");
-    d.stops = d.stops.filter(s=>s && typeof s.addr==="string").map(s=>({...mkStop(s), ...s}));
-    confirmBox("Restaurar respaldo", `Se reemplaza la lista actual por ${d.stops.length} paquete(s) del archivo.`, ()=>{
-      state = {stops:d.stops, start:String(d.start||""), byZone:!!d.byZone, seeded:true}; save(); render(); toast("Respaldo restaurado.");
-    });
+    const st = d && d.v === 2 ? d.state : d;
+    if(!st || !Array.isArray(st.stops)) throw new Error("formato");
+    const stops = st.stops.filter(s=>s && typeof s.addr==="string").map(s=>({...mkStop(s), ...s}));
+    const hist = d && d.v === 2 && Array.isArray(d.hist) ? d.hist : [];
+    const cur = histLoad(), merged = mergeHist(cur, hist), nuevos = merged.length - cur.length;
+    confirmBox("Restaurar respaldo",
+      `Se reemplaza la lista actual por ${stops.length} parada(s) del archivo` + (hist.length ? ` y se juntan ${hist.length} día(s) de historial con los que ya tienes (${Math.max(0,nuevos)} nuevo(s); los de más de ${HIST_DAYS} días no se guardan).` : ". Este respaldo no trae historial."),
+      ()=>{
+        state = {...st, stops, seeded:true, driveOn:false};
+        save();
+        if(hist.length) store.set(HIST_KEY, merged);
+        render(); toast("Respaldo restaurado.");
+      });
   }catch(err){ toast("Ese archivo no es un respaldo válido de la app."); }
 });
 
 /* ============ App instalable y sin conexión ============ */
 // Al bloquear: apaga la cámara y cierra ventanas abiertas para que no queden datos a la vista.
 window.RUTA_onLock = ()=>{ try{ stopScan(); }catch(e){} };
-const APP_VERSION = "2.0";
+const APP_VERSION = "2.1";
 $("ver").textContent = "Versión " + APP_VERSION + ". Funciona sin internet una vez abierta la primera vez.";
 if(navigator.storage && navigator.storage.estimate){
   navigator.storage.estimate().then(e=>{ if(e && e.usage) $("ver").textContent += ` Espacio usado en este celular: ${(e.usage/1048576).toFixed(1).replace(".",",")} MB (la mayor parte es el lector de etiquetas).`; }).catch(()=>{});

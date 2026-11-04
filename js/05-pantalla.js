@@ -127,6 +127,8 @@ function render(){
   updateComparison();
   renderZoneSettings();
   renderLearn();
+  renderPace();
+  if(typeof renderDrive === "function") renderDrive();
   const outZ = state.stops.filter(s=>s.status!=="done" && zoneIssue(s)).length;
   $("zoneInfo").hidden = !outZ;
   $("zoneInfo").textContent = outZ ? `${outZ} parada(s) fuera de tu zona de trabajo (${zone().name}). Revisa si la dirección está bien escrita.` : "";
@@ -208,6 +210,19 @@ function toggleDone(s){
       else if(state.lastDoneId===s.id){ state.lastDoneId = null; }
         save(); render();
 }
+// «No estaba»: queda como intento fallido al final de los pendientes (o se quita la marca).
+function toggleFail(s){
+  const i = state.stops.indexOf(s); if(i<0) return;
+  s.status = s.status==="fail" ? "pend" : "fail";
+  if(s.status==="fail"){
+    s.failAt = Date.now(); s.failCount = (s.failCount||0)+1;
+    recordDay(); state.stops.splice(i,1);
+    const firstDone = state.stops.findIndex(q=>q.status==="done");
+    state.stops.splice(firstDone<0?state.stops.length:firstDone,0,s);
+    toast("Marcado como no estaba. Se movió al final de los pendientes.");
+  }
+  save(); render();
+}
 $("list").addEventListener("click", e=>{
   const b = e.target.closest("button[data-act]"); if(!b) return;
   const id = b.closest("li").dataset.id;
@@ -215,9 +230,7 @@ $("list").addEventListener("click", e=>{
   const s = state.stops[i];
   switch(b.dataset.act){
     case "done": toggleDone(s); return;
-    case "fail": s.status = s.status==="fail" ? "pend" : "fail"; if(s.status==="fail"){ s.failAt = Date.now(); s.failCount = (s.failCount||0)+1; }
-      if(s.status==="fail"){ recordDay(); state.stops.splice(i,1); const firstDone = state.stops.findIndex(q=>q.status==="done"); state.stops.splice(firstDone<0?state.stops.length:firstDone,0,s); toast("Marcado como no estaba. Se movió al final de los pendientes."); }
-      break;
+    case "fail": toggleFail(s); return;
     case "up": if(i>0){ [state.stops[i-1],state.stops[i]]=[state.stops[i],state.stops[i-1]]; } break;
     case "down": if(i<state.stops.length-1){ [state.stops[i+1],state.stops[i]]=[state.stops[i],state.stops[i+1]]; } break;
     case "edit": openEdit(s); return;

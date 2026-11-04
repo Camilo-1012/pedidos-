@@ -8,7 +8,7 @@ const DB_KEY = "rutaEntregas.users.v1", SES_KEY = "rutaEntregas.session.v1";
 const LEGACY = {state:"rutaEntregas.v1", hist:"rutaEntregas.hist.v1"};
 const ITER = 150000, MAX_USERS = 6, FREE_TRIES = 5;
 // Archivos de la app, en el orden en que deben ejecutarse (ver LEEME.md → «Estructura del código»).
-const APP_FILES = ["js/01-direcciones.js","js/02-ruta.js","js/03-mapas.js","js/04-jornada.js","js/05-pantalla.js","js/06-escaner.js","js/07-cargue.js","js/08-voz.js","js/09-arranque.js"];
+const APP_FILES = ["js/01-direcciones.js","js/02-ruta.js","js/03-mapas.js","js/04-jornada.js","js/05-pantalla.js","js/06-escaner.js","js/07-cargue.js","js/08-voz.js","js/09-arranque.js","js/10-conduccion.js"];
 const q = id => document.getElementById(id);
 const ls = {
   get(k){ try{ const v = localStorage.getItem(k); return v ? JSON.parse(v) : null; }catch(e){ return null; } },
@@ -64,7 +64,7 @@ async function checkPin(u, pin){
 /* ---- Arranque de la app para un usuario ---- */
 let started = null, locked = true;
 function fmtWait(s){ return s >= 60 ? Math.ceil(s/60) + " min" : s + " s"; }
-function setInert(on){ document.querySelectorAll("body > header, body > main, body > .toolbar").forEach(e => { e.inert = on; }); }
+function setInert(on){ document.querySelectorAll("body > header, body > main, body > .toolbar, body > .drive").forEach(e => { e.inert = on; }); }
 function enter(u){
   ss.set({id:u.id, away:null});
   if(started && started !== u.id){ location.reload(); return; }

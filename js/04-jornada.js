@@ -120,6 +120,43 @@ function daySummary(){
     pedidos: pedidosDelDia()
   };
 }
+/* ---- Ritmo del día ----
+   Con 2 o más entregas: minutos por parada (de la primera a la última entrega), paquetes por hora y hora estimada
+   de terminar = última entrega + paradas que faltan × minutos por parada. Antes de la segunda entrega, si la ruta
+   se calculó con calles reales, se estima con el tiempo de manejo + 5 min por parada. */
+const SERVICE_MIN = 5;
+function dayPace(){
+  const done = state.stops.filter(s=>s.status==="done" && s.doneAt).sort((a,b)=>a.doneAt-b.doneAt);
+  const rem = state.stops.filter(s=>s.status!=="done" && !s.example).length;
+  const out = {done: done.length, rem, paq: done.reduce((a,s)=>a+(s.qty||1),0), perStop:null, perHour:null, eta:null, aprox:false};
+  if(done.length >= 2){
+    const t0 = done[0].doneAt, t1 = done[done.length-1].doneAt, h = (t1-t0)/3600000;
+    if(h >= 5/60){
+      out.perStop = (t1-t0)/60000/(done.length-1);
+      out.perHour = (out.paq - (done[0].qty||1)) / h;
+      if(rem) out.eta = Math.max(Date.now(), t1) + rem*out.perStop*60000;
+    }
+  } else if(rem && state.route && state.route.mode==="real" && state.route.min){
+    out.eta = Date.now() + (state.route.min + rem*SERVICE_MIN)*60000; out.aprox = true;
+  }
+  return out;
+}
+const num1 = v => v.toFixed(1).replace(".",",");
+function paceText(){
+  const p = dayPace();
+  if(!p.done && !p.eta) return "";
+  const parts = [];
+  if(p.perHour!=null) parts.push(`${num1(p.perHour)} paq/hora`);
+  if(p.perStop!=null) parts.push(`${Math.round(p.perStop)} min por parada`);
+  if(p.eta) parts.push(`terminas ≈ ${hhmm(p.eta)}${p.aprox ? " (estimado inicial)" : ""}`);
+  else if(p.done && !p.rem) parts.push("jornada terminada");
+  else if(p.done === 1) parts.push("el ritmo aparece desde la 2.ª entrega");
+  return parts.join(" · ");
+}
+function renderPace(){ const t = paceText(); $("pace").hidden = !t; $("pace").textContent = t ? "Ritmo: " + t : ""; }
+setInterval(()=>{ if(document.visibilityState==="visible") renderPace(); }, 60000);
+// Paquetes por hora de una jornada del historial (null si fue muy corta para medir).
+const dayRate = x => x.minutos >= 20 && x.paquetes > 1 ? x.paquetes / (x.minutos/60) : null;
 // Guarda (o actualiza) el resumen del día en curso. Se llama al entregar, al marcar «No estaba» y al empezar una jornada nueva.
 function recordDay(){
   try{
@@ -144,10 +181,18 @@ function renderHist(){
   const t7 = histTotals(h,7), t30 = histTotals(h,30);
   const line = (lbl,t) => t.n ? `<div><b>${lbl}:</b> ${t.n} jornada(s) · ${t.e} entregas (${t.pq} paquetes)${t.efect!=null?` · efectividad ${t.efect} %`:""}${t.porHora?` · ${t.porHora} entregas por hora`:""}${t.ahorro>0?` · ahorro estimado ${fmtKm(t.ahorro)}`:""}</div>` : `<div><b>${lbl}:</b> sin jornadas</div>`;
   $("histTotals").innerHTML = line("Últimos 7 días", t7) + line("Últimos 30 días", t30);
+  // Comparar días: barras de paquetes por hora de las últimas 14 jornadas, con el mejor día y el promedio.
+  const rated = h.slice(0,14).reverse().filter(x=>dayRate(x)!=null);
+  if(rated.length >= 2){
+    const max = Math.max(...rated.map(dayRate)), avg = rated.reduce((a,x)=>a+dayRate(x),0)/rated.length;
+    const best = rated.find(x=>dayRate(x)===max);
+    $("histChart").innerHTML = rated.map(x=>`<div title="${esc(fmtDate(x.inicio))}: ${num1(dayRate(x))} paq/hora"><b>${num1(dayRate(x))}</b><i style="height:${Math.round(70*dayRate(x)/max)}%"></i><span>${new Date(x.inicio).getDate()}/${new Date(x.inicio).getMonth()+1}</span></div>`).join("");
+    $("histTotals").innerHTML += `<div><b>Paquetes por hora:</b> promedio ${num1(avg)} · mejor día ${esc(fmtDate(best.inicio))} (${num1(max)})</div>`;
+  } else $("histChart").innerHTML = "";
   $("histList").innerHTML = h.length ? h.map(x=>`<div class="hrow">
       <b>${esc(fmtDate(x.inicio))}</b>
       <span>${x.entregas} ${x.entregas===1?"entrega":"entregas"} (${x.paquetes} paq.)${x.noEntregadas?` · ${x.noEntregadas} no ${x.noEntregadas===1?"entregada":"entregadas"}`:""}${x.pendientes?` · ${x.pendientes} ${x.pendientes===1?"pendiente":"pendientes"}`:""}</span>
-      <span>${hhmm(x.inicio)} a ${hhmm(x.fin)} · ${Math.floor(x.minutos/60)} h ${x.minutos%60} min${x.promEntreEntregas?` · ${x.promEntreEntregas} min entre entregas`:""}</span>
+      <span>${hhmm(x.inicio)} a ${hhmm(x.fin)} · ${Math.floor(x.minutos/60)} h ${x.minutos%60} min${x.promEntreEntregas?` · ${x.promEntreEntregas} min entre entregas`:""}${dayRate(x)!=null?` · ${num1(dayRate(x))} paq/hora`:""}</span>
       ${x.kmEstimados||x.ahorroKm ? `<span>${x.kmEstimados?`≈ ${fmtKm(x.kmEstimados)} recorridos`:""}${x.ahorroKm?`${x.kmEstimados?" · ":""}ahorro ${fmtKm(x.ahorroKm)}${x.ahorroMin?" / "+x.ahorroMin+" min":""}`:""}</span>` : ""}
     </div>`).join("") : `<p class="hint">Aún no hay jornadas. El resumen se guarda solo al marcar entregas.</p>`;
   const kb = (new Blob([JSON.stringify(histLoad())]).size/1024).toFixed(1).replace(".",",");

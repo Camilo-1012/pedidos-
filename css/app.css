@@ -199,3 +199,29 @@ details summary{cursor:pointer;font-weight:600}
 .urow b{font-size:16px}
 .urow .row{gap:6px}
 .uerr{color:var(--bad);font-weight:600;margin:0;min-height:18px;font-size:14px}
+
+/* Ritmo del día (bajo los totales) */
+.pace:not([hidden]){display:flex;flex-wrap:wrap;gap:4px 12px;font-size:13px;font-weight:600;color:var(--accent)}
+/* Modo conducción: una parada a la vez, botones grandes para usar con una mano */
+.drive:not([hidden]){position:fixed;inset:0;z-index:40;background:var(--ink);color:var(--bg);display:flex;flex-direction:column;padding:calc(10px + env(safe-area-inset-top)) 14px calc(12px + env(safe-area-inset-bottom));gap:10px;overflow:auto}
+.dvTop{display:flex;justify-content:space-between;align-items:center;font:600 16px var(--body)}
+.dvTop button{background:transparent;color:var(--bg);border-color:rgba(255,255,255,.3)}
+.dvMain{flex:1;display:flex;flex-direction:column;justify-content:center;gap:8px;min-height:0}
+.dvQty{font:700 22px var(--display);color:var(--accent)}
+.dvAddr{font:700 clamp(34px,11vw,56px)/1.02 var(--display);overflow-wrap:anywhere}
+.dvUnit{font-size:20px;font-weight:600}
+.dvGuia{font:600 17px ui-monospace,"Roboto Mono",Menlo,monospace;opacity:.85;overflow-wrap:anywhere}
+.dvWho,.dvNext{font-size:15px;opacity:.8;overflow-wrap:anywhere}
+.dvBtns{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.dvBtns > *{min-height:72px;font:700 22px var(--display);border-radius:14px}
+.dvBtns .dvWaze{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.dvBtns .dvDone{background:var(--ok);color:#fff;border-color:var(--ok)}
+.dvBtns a[aria-disabled="true"]{opacity:.35;pointer-events:none}
+.dvSkip{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13px;opacity:.85;text-align:center}
+.dvSkip button{background:transparent;color:var(--bg);border-color:rgba(255,255,255,.3)}
+/* Historial: barras de paquetes por hora */
+.hchart:not(:empty){display:flex;align-items:flex-end;gap:4px;height:96px;padding:6px 0 0;border-bottom:1px solid var(--line)}
+.hchart div{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;gap:2px}
+.hchart i{display:block;width:100%;background:var(--accent);border-radius:3px 3px 0 0;min-height:2px}
+.hchart span{font-size:10px;color:var(--muted);white-space:nowrap}
+.hchart b{font-size:10px}

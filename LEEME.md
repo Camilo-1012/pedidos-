@@ -181,3 +181,18 @@ Con internet, la app hace tres cosas:
 - Hay pruebas automáticas que corren en GitHub antes de publicar.
 - La página y sus archivos salen siempre de la versión instalada, así que nunca se mezcla una página nueva con código viejo. Lo nuevo llega con el botón «Actualizar».
 - «Buscar guía» deja escribir el número aunque el celular no dé permiso de cámara.
+
+## Versión 2.1
+
+- **Modo conducción** (botón en la sección Ruta):
+  - Muestra la parada actual en letra grande y cuatro botones grandes: Waze, Llamar, No estaba y Entregado. Al entregar pasa sola a la siguiente.
+  - Con «Anterior» y «Siguiente» se revisan otras paradas sin cambiar el orden.
+  - La pantalla no se apaga mientras está abierto. El botón Atrás de Android lo cierra, y si se cierra la app estando en este modo, vuelve a abrir en él.
+- **Ritmo del día**, bajo los totales:
+  - Paquetes por hora, minutos por parada y hora estimada de terminar.
+  - La hora estimada se calcula como: última entrega + paradas que faltan × minutos por parada. Antes de la segunda entrega usa el tiempo de manejo de la ruta más 5 minutos por parada.
+  - En el historial: paquetes por hora de cada día, barras de las últimas 14 jornadas, promedio y mejor día.
+- **El respaldo incluye el historial.**
+  - El archivo nuevo lleva la jornada, los ajustes y el historial.
+  - Al restaurar, el historial se junta con el que ya hay sin duplicar días; si un día está en ambos, queda la versión más completa.
+  - Los respaldos viejos se siguen pudiendo restaurar.

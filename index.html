@@ -35,6 +35,7 @@
       <div class="stat"><b id="stDone">0</b><span>entregados</span></div>
       <div class="stat"><b id="stKm">0</b><span id="stKmLbl">km aprox.</span></div>
     </div>
+    <div class="pace" id="pace" hidden aria-live="polite"></div>
   </div>
 </header>
 
@@ -89,6 +90,7 @@
       <p id="cmpInfo" style="margin:0;color:var(--ink)"></p>
       <button type="button" class="small" id="btnRestore" hidden style="margin-top:8px">Volver al orden sugerido</button>
     </div>
+    <button type="button" class="primary" id="btnDrive">Modo conducción</button>
     <div class="row">
       <button type="button" id="btnFind">Buscar paquete por guía</button>
       <button type="button" id="btnLoad">Revisar cargue</button>
@@ -270,6 +272,32 @@
   </form>
 </dialog>
 
+<div class="drive" id="drive" hidden role="dialog" aria-modal="true" aria-labelledby="dvAddr">
+  <div class="dvTop">
+    <span id="dvPos"></span>
+    <button type="button" class="small" id="dvExit">Salir</button>
+  </div>
+  <div class="dvMain">
+    <div class="dvQty" id="dvQty"></div>
+    <div class="dvAddr" id="dvAddr"></div>
+    <div class="dvUnit" id="dvUnit"></div>
+    <div class="dvGuia" id="dvGuia"></div>
+    <div class="dvWho" id="dvWho"></div>
+    <div class="dvNext" id="dvNext"></div>
+  </div>
+  <div class="dvBtns">
+    <a class="btn dvWaze" id="dvWaze" target="_blank" rel="noopener">Waze</a>
+    <a class="btn" id="dvCall">Llamar</a>
+    <button type="button" id="dvFail">No estaba</button>
+    <button type="button" class="dvDone" id="dvDone">Entregado</button>
+  </div>
+  <div class="dvSkip">
+    <button type="button" class="small" id="dvPrev">◀ Anterior</button>
+    <span id="dvPace"></span>
+    <button type="button" class="small" id="dvNextBtn">Siguiente ▶</button>
+  </div>
+</div>
+
 <dialog id="dlgFound" aria-labelledby="fdTitle">
   <form method="dialog">
     <h2 id="fdTitle">Paquete</h2>
@@ -326,6 +354,7 @@
   <form id="frmHist">
     <h2 id="histTitle">Historial de jornadas</h2>
     <div id="histTotals" class="preview" style="color:var(--ink)"></div>
+    <div id="histChart" class="hchart" aria-label="Paquetes por hora en los últimos días"></div>
     <div id="histList" style="display:flex;flex-direction:column;gap:8px;max-height:45vh;overflow:auto"></div>
     <p class="hint" id="histInfo"></p>
     <div class="row">
