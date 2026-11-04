@@ -8,6 +8,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="stylesheet" href="map/leaflet.css">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
@@ -49,6 +50,7 @@
   color-scheme:dark;
 }
 *{box-sizing:border-box}
+[hidden]{display:none!important}
 html,body{margin:0}
 body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:16px;line-height:1.4;-webkit-text-size-adjust:100%}
 main{max-width:640px;margin:0 auto;padding:16px 16px 96px;display:flex;flex-direction:column;gap:16px}
@@ -101,6 +103,10 @@ dialog{border:none;border-radius:14px;padding:0;background:var(--surface);color:
 dialog::backdrop{background:rgba(0,0,0,.55)}
 dialog form{padding:16px;display:flex;flex-direction:column;gap:12px}
 .net{font-size:12px;font-weight:600;color:var(--accent)}
+#lmap{height:360px;border-radius:8px;z-index:0}
+.pin{background:var(--ink);color:var(--bg);border:2px solid var(--accent);border-radius:50%;width:26px;height:26px;display:flex;align-items:center;justify-content:center;font:600 12px var(--body)}
+.pin.start{background:var(--ok);border-color:var(--ok);border-radius:4px}
+.pin.est{border-style:dashed;border-color:var(--warn)}
 .toast{position:fixed;left:50%;bottom:84px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 14px;border-radius:10px;font-size:14px;z-index:20;max-width:calc(100% - 32px);display:none}
 .toast.show{display:block}
 details summary{cursor:pointer;font-weight:600}
@@ -123,7 +129,7 @@ details summary{cursor:pointer;font-weight:600}
     <div class="stats">
       <div class="stat"><b id="stPend">0</b><span>pendientes</span></div>
       <div class="stat"><b id="stDone">0</b><span>entregados</span></div>
-      <div class="stat"><b id="stKm">0</b><span>km aprox.</span></div>
+      <div class="stat"><b id="stKm">0</b><span id="stKmLbl">km aprox.</span></div>
     </div>
   </div>
 </header>
@@ -156,6 +162,10 @@ details summary{cursor:pointer;font-weight:600}
     <label style="flex-direction:row;align-items:center;gap:8px;color:var(--ink);font-size:15px">
       <input type="checkbox" id="roundTrip" style="width:auto"> Volver al punto de partida al terminar
     </label>
+    <label style="flex-direction:row;align-items:center;gap:8px;color:var(--ink);font-size:15px">
+      <input type="checkbox" id="realRoads" style="width:auto" checked> Calcular con las calles reales (necesita internet)
+    </label>
+    <p class="hint" id="routeInfo" aria-live="polite"></p>
     <div class="row">
       <button type="button" class="dark" id="btnSort">Ordenar ruta</button>
       <button type="button" id="btnMaps">Abrir siguientes en Maps</button>
@@ -168,8 +178,9 @@ details summary{cursor:pointer;font-weight:600}
       <button type="button" class="small" id="btnMap">Ver</button>
     </div>
     <div id="mapWrap" hidden>
+      <div id="lmap" hidden></div>
       <canvas id="map" style="width:100%;display:block;border-radius:8px;background:var(--bg)" aria-label="Mapa esquemático de la ruta"></canvas>
-      <p class="hint" style="margin-top:8px">Norte arriba, occidente a la izquierda. El cuadro verde es desde donde arrancas. Es un esquema de calles y carreras, no un mapa real: no muestra humedales ni avenidas cerradas.</p>
+      <p class="hint" style="margin-top:8px" id="mapHint">Norte arriba, occidente a la izquierda. El cuadro verde es desde donde arrancas.</p>
     </div>
   </section>
 
@@ -252,6 +263,7 @@ details summary{cursor:pointer;font-weight:600}
 <div class="toast" id="toast" role="status"></div>
 
 <script src="ocr/tesseract.min.js"></script>
+<script src="map/leaflet.js"></script>
 <script>
 "use strict";
 /* ============ Almacenamiento (solo en este navegador) ============ */
@@ -309,7 +321,7 @@ function parseAddress(text){
   if(este) x = -x;
   const fmtN = o => o.n + (o.l1||"") + (o.bis?" Bis":"") + (o.l2?" "+o.l2:"");
   const label = `${v.name} ${fmtN(p)}${m[6]?" "+m[6][0]+m[6].slice(1).toLowerCase():""} # ${fmtN(g)}-${m[11].padStart(2,"0")}${sur&&m[6]!=="SUR"?" Sur":""}${este&&m[6]!=="ESTE"?" Este":""}`;
-  return {x,y,label,via:v.code};
+  return {x,y,label,via:v.code,parts:{axis:v.axis,p,g,placa,sur,este}};
 }
 
 /* ============ Extraer datos del texto de la etiqueta ============ */
@@ -376,7 +388,10 @@ function save(){ store.set(KEY,state); }
 /* ============ Optimización de ruta ============ */
 // Distancia en "cuadras": la ciudad es una cuadrícula, así que se suma lo recorrido en calles y en carreras
 // (distancia Manhattan), que se parece más a lo que anda un carro o una moto que la línea recta.
-const dist = (a,b) => Math.abs(a.x-b.x) + Math.abs(a.y-b.y);
+const gridDist = (a,b) => Math.abs(a.x-b.x) + Math.abs(a.y-b.y);
+// Cuando hay internet se usa una matriz de tiempos reales en carro (segundos); IDX dice qué fila corresponde a cada punto.
+let MATRIX = null; const IDX = new Map();
+const dist = (a,b) => (MATRIX && IDX.has(a) && IDX.has(b)) ? MATRIX[IDX.get(a)][IDX.get(b)] : gridDist(a,b);
 const KM_PER_UNIT = 0.1; // ~100 m por número de calle/carrera (aproximado)
 
 // Costo total de un recorrido: desde el inicio (si hay), por todas las paradas y, si se pide, de vuelta al inicio.
@@ -497,40 +512,305 @@ function solve(start, pts, back){
 function currentOrigin(){
   const done = state.stops.filter(s=>s.status==="done" && s.x!==null);
   if(done.length && state.lastDoneId){
-    const ld = done.find(s=>s.id===state.lastDoneId); if(ld) return {x:ld.x,y:ld.y,label:ld.label};
+    const ld = done.find(s=>s.id===state.lastDoneId);
+    if(ld) return {x:ld.x,y:ld.y,label:ld.label,lat:ld.lat,lng:ld.lng};
   }
-  return parseAddress(state.start);
+  const sp = parseAddress(state.start); if(!sp) return null;
+  const c = geoCache[geoKey(sp)] || (state.startGeo && state.startGeo.label===sp.label ? state.startGeo : null);
+  return c ? {...sp, lat:c.lat, lng:c.lng} : sp;
 }
-function optimize(silent){
-  const origin = currentOrigin();
-  const back = !!state.roundTrip && !!parseAddress(state.start);
-  const pend = state.stops.filter(s=>s.status!=="done");
-  const done = state.stops.filter(s=>s.status==="done");
-  const geo = pend.filter(s=>s.x!==null), unk = pend.filter(s=>s.x===null);
-  let ordered;
+function orderStops(origin, geo, back){
   if(state.byZone){
     const groups = {};
     geo.forEach(s=>{ (groups[s.zone||"—"] ||= []).push(s); });
     const zs = Object.entries(groups).map(([z,arr])=>({z,arr,x:arr.reduce((a,s)=>a+s.x,0)/arr.length,y:arr.reduce((a,s)=>a+s.y,0)/arr.length}));
     const zOrder = solve(origin, zs, false);
-    ordered = []; let cur = origin;
+    const ordered = []; let cur = origin;
     zOrder.forEach((zg,i)=>{ const last = i===zOrder.length-1; const part = solve(cur, zg.arr, last && back); ordered.push(...part); cur = part[part.length-1]; });
-  } else {
-    ordered = solve(origin, geo, back);
+    return ordered;
   }
-  const before = pathLen(origin, geo, back), after = pathLen(origin, ordered, back);
-  state.stops = [...ordered, ...unk, ...done];
+  return solve(origin, geo, back);
+}
+// Aplica un orden calculado sobre el estado actual (por si el repartidor marcó entregas mientras se calculaba).
+function applyOrder(orderIds){
+  const byId = new Map(state.stops.map(s=>[s.id,s]));
+  const seen = new Set(), out = [];
+  for(const id of orderIds){ const s = byId.get(id); if(s && s.status!=="done" && s.x!==null){ out.push(s); seen.add(id); } }
+  const restGeo = state.stops.filter(s=>s.status!=="done" && s.x!==null && !seen.has(s.id));
+  const unk = state.stops.filter(s=>s.status!=="done" && s.x===null);
+  const done = state.stops.filter(s=>s.status==="done");
+  state.stops = [...out, ...restGeo, ...unk, ...done];
+}
+let optimizing = null, pendingOpt = false;
+function optimize(silent){
+  if(optimizing){ pendingOpt = true; return optimizing; }
+  optimizing = optimizeNow(silent).catch(err=>console.error(err)).finally(()=>{
+    optimizing = null;
+    if(pendingOpt){ pendingOpt = false; optimize(true); }
+  });
+  return optimizing;
+}
+async function optimizeNow(silent){
+  const origin = currentOrigin();
+  const back = !!state.roundTrip && !!parseAddress(state.start);
+  const pend = state.stops.filter(s=>s.status!=="done");
+  const geo = pend.filter(s=>s.x!==null), unk = pend.filter(s=>s.x===null);
+  // 1) Orden inmediato con la cuadrícula (funciona sin internet).
+  MATRIX = null;
+  const quick = orderStops(origin, geo, back);
+  applyOrder(quick.map(s=>s.id));
+  state.route = {mode:"aprox", km: pathLen(origin, quick, back)*KM_PER_UNIT};
+  ROUTE_GEOM = null;
   save(); render();
-  if(!silent){
-    const ahorro = before - after > 0.5 ? ` Ahorro estimado: ${((before-after)*KM_PER_UNIT).toFixed(1)} km.` : "";
-    toast((unk.length ? `Ruta ordenada. ${unk.length} dirección(es) para revisar al final.` : "Ruta ordenada.") + ahorro);
+  // 2) Con internet: ubicar en el mapa y ordenar con tiempos reales en carro.
+  if(state.realRoads !== false && navigator.onLine && geo.length >= 1){
+    try{
+      await realOrder(silent);
+      if(!silent) toast(unk.length ? `Ruta ordenada con calles reales. ${unk.length} dirección(es) para revisar al final.` : "Ruta ordenada con calles reales.");
+      return;
+    }catch(err){
+      console.warn("Calles reales no disponibles:", err);
+      setRouteInfo("No se pudo calcular con calles reales (" + (err && err.message || "sin respuesta") + "). Se usó el orden aproximado.");
+      if(!silent) toast("Sin conexión con el servicio de mapas: se usó el orden aproximado.");
+      return;
+    }
   }
+  setRouteInfo(!geo.length ? "" : state.realRoads === false ? "Orden aproximado por números de calle y carrera." : "Sin internet: orden aproximado por números de calle y carrera.");
+  if(!silent) toast(unk.length ? `Ruta ordenada. ${unk.length} dirección(es) para revisar al final.` : "Ruta ordenada.");
+}
+function setRouteInfo(t){ state.routeNote = t; const el = $("routeInfo"); if(el) el.textContent = t; }
+
+/* ============ Ubicación en el mapa (OpenStreetMap) ============ */
+// Cada dirección se ubica en la esquina de su calle con la vía generadora usando los datos de OpenStreetMap (Overpass).
+// Los resultados se guardan en el celular, así cada dirección se busca una sola vez.
+const GEO_KEY = "rutaEntregas.geo.v1";
+let geoCache = store.get(GEO_KEY) || {};
+function geoKey(pa){ return pa.label.toUpperCase(); }
+function saveGeo(){ store.set(GEO_KEY, geoCache); }
+// Puntos de referencia conocidos (carrera, calle → lat, lng) para estimar la posición cuando no se encuentra la esquina.
+const SEED = [
+  [7.5,10.5,4.59806,-74.07583],   // Plaza de Bolívar (Cra 7 con Cl 10-11)
+  [45,185,4.76194,-74.04639],     // C.C. Santafé (Cl 185 # 45-03)
+  [71.6,-6.94,4.61806,-74.13503], // Plaza de las Américas (Cra 71D # 6-94 Sur)
+  [35.1,-38.2,4.59167,-74.12389], // Centro Mayor (Cl 38A Sur # 34D-51)
+  [62.5,26,4.64778,-74.10139],    // Gran Estación (Cl 26 # 62-47)
+  [11,82.7,4.6668,-74.0531],      // Andino (Cra 11 # 82-71)
+  [91,146.5,4.741,-74.084]        // Suba centro (Cra 91 con Cl 146)
+];
+function solve3(A,b){
+  const M = A.map((r,i)=>[...r,b[i]]);
+  for(let c=0;c<3;c++){
+    let piv=c; for(let r=c+1;r<3;r++) if(Math.abs(M[r][c])>Math.abs(M[piv][c])) piv=r;
+    [M[c],M[piv]]=[M[piv],M[c]]; if(Math.abs(M[c][c])<1e-12) return null;
+    for(let r=0;r<3;r++){ if(r===c) continue; const f=M[r][c]/M[c][c]; for(let k=c;k<4;k++) M[r][k]-=f*M[c][k]; }
+  }
+  return [M[0][3]/M[0][0], M[1][3]/M[1][1], M[2][3]/M[2][2]];
+}
+// Ajuste afín ponderado: los puntos ya ubicados cerca pesan más, así la estimación mejora con el uso.
+function estimate(x,y){
+  const pts = SEED.map(r=>({x:r[0],y:r[1],lat:r[2],lng:r[3],w:0.3}));
+  for(const k in geoCache){ const c = geoCache[k]; if(c.src==="osm" && c.x!=null) pts.push({x:c.x,y:c.y,lat:c.lat,lng:c.lng,w:1}); }
+  const AtA=[[0,0,0],[0,0,0],[0,0,0]], b1=[0,0,0], b2=[0,0,0];
+  for(const p of pts){
+    const d = Math.hypot(p.x-x,p.y-y), w = p.w/(1+(d/15)*(d/15)), v=[1,p.x,p.y];
+    for(let i=0;i<3;i++){ for(let j=0;j<3;j++) AtA[i][j]+=w*v[i]*v[j]; b1[i]+=w*v[i]*p.lat; b2[i]+=w*v[i]*p.lng; }
+  }
+  const a = solve3(AtA,b1), c = solve3(AtA,b2);
+  if(!a||!c) return null;
+  return {lat:a[0]+a[1]*x+a[2]*y, lng:c[0]+c[1]*x+c[2]*y};
+}
+function meters(a,b){
+  const R=6371000, toR=Math.PI/180, dLat=(b.lat-a.lat)*toR, dLng=(b.lng-a.lng)*toR;
+  const h = Math.sin(dLat/2)**2 + Math.cos(a.lat*toR)*Math.cos(b.lat*toR)*Math.sin(dLng/2)**2;
+  return 2*R*Math.asin(Math.sqrt(h));
+}
+// Expresión regular (POSIX, para Overpass) que reconoce el nombre de la vía en OpenStreetMap: "Calle 143", "Carrera 151B", "Avenida Calle 145", "Calle 40 Sur"...
+function nameRe(axis, o, sur, este, strict){
+  const t = axis==="calle" ? "(avenida calle|avenida diagonal|calle|diagonal|ac|cl|dg)" : "(avenida carrera|avenida transversal|carrera|transversal|ak|kr|tv)";
+  let r = "^" + t + "[ .]*0*" + o.n;
+  if(strict){ if(o.l1) r += " ?" + o.l1.toLowerCase(); if(o.bis) r += " ?bis"; if(o.l2) r += " ?" + o.l2.toLowerCase(); }
+  else r += "( ?[a-h])?( ?bis)?( ?[a-h])?";
+  const suf = axis==="calle" ? (sur ? " sur" : "") : (este ? " este" : "");
+  return r + suf + "$";
+}
+const OVERPASS = ["https://overpass-api.de/api/interpreter", "https://overpass.kumi.systems/api/interpreter"];
+async function fetchT(url, opts, ms){
+  const ctl = new AbortController(); const t = setTimeout(()=>ctl.abort(), ms||20000);
+  try{ return await fetch(url, {...(opts||{}), signal: ctl.signal}); } finally { clearTimeout(t); }
+}
+async function overpass(q){
+  let lastErr;
+  for(const ep of OVERPASS){
+    try{
+      const r = await fetchT(ep, {method:"POST", headers:{"Content-Type":"application/x-www-form-urlencoded"}, body:"data="+encodeURIComponent(q)}, 25000);
+      if(!r.ok) throw new Error("Overpass " + r.status);
+      return await r.json();
+    }catch(e){ lastErr = e; }
+  }
+  throw lastErr || new Error("Overpass sin respuesta");
+}
+async function cornerOSM(pa, strict){
+  const P = pa.parts, other = P.axis==="calle" ? "carrera" : "calle";
+  const re1 = nameRe(P.axis, P.p, P.sur, P.este, strict), re2 = nameRe(other, P.g, P.sur, P.este, strict);
+  const keys = '~"^(name|alt_name|official_name|old_name|short_name)$"';
+  const q = `[out:json][timeout:20];area["wikidata"="Q2841"]->.b;` +
+    `way(area.b)["highway"][${keys}~"${re1}",i]->.a;` +
+    `way(area.b)["highway"][${keys}~"${re2}",i]->.c;` +
+    `node(w.a)(w.c);out;`;
+  const j = await overpass(q);
+  return (j.elements||[]).filter(e=>e.type==="node").map(e=>({lat:e.lat,lng:e.lon}));
+}
+// Ubica una dirección: esquina exacta si existe en el mapa; si no, estimación por los puntos de referencia.
+const MISS_KEY = "rutaEntregas.geomiss.v1";
+let geoMiss = store.get(MISS_KEY) || {};
+let overpassDown = false;
+async function geocode(pa){
+  const k = geoKey(pa);
+  if(geoCache[k]) return geoCache[k];
+  const est = estimate(pa.x, pa.y);
+  const estRes = est ? {...est, src:"est", x:pa.x, y:pa.y} : null;
+  // Si esta esquina no apareció en el mapa en las últimas 24 h, o el servicio está caído, no se vuelve a preguntar.
+  if(overpassDown || (geoMiss[k] && Date.now()-geoMiss[k] < 864e5)) return estRes;
+  let hit = null;
+  for(const strict of [true,false]){
+    let nodes;
+    try{ nodes = await cornerOSM(pa, strict); }
+    catch(e){ overpassDown = true; console.warn("Overpass", e); return estRes; }
+    if(nodes.length){
+      const ref = est || nodes[0];
+      nodes.sort((a,b)=>meters(a,ref)-meters(b,ref));
+      const near = nodes.filter(n=>meters(n,nodes[0])<200);
+      const c = {lat:near.reduce((s,n)=>s+n.lat,0)/near.length, lng:near.reduce((s,n)=>s+n.lng,0)/near.length};
+      if(!est || meters(c,est) < 6000){ hit = c; break; }
+    }
+  }
+  if(hit){ const res = {...hit, src:"osm", x:pa.x, y:pa.y, t:Date.now()}; geoCache[k] = res; saveGeo(); return res; }
+  geoMiss[k] = Date.now(); store.set(MISS_KEY, geoMiss);   // las estimaciones no se guardan: mejoran con más esquinas ubicadas
+  return estRes;
+}
+async function locateAll(list, onProgress){
+  let i = 0;
+  for(const s of list){
+    i++;
+    const pa = parseAddress(s.label || s.addr); if(!pa) continue;
+    const had = !!geoCache[geoKey(pa)];
+    if(onProgress && !had) onProgress(i, list.length);
+    const g = await geocode(pa);
+    if(g){ s.lat = g.lat; s.lng = g.lng; s.geo = g.src; }
+    if(!had) await new Promise(r=>setTimeout(r, 250)); // no saturar el servicio gratuito
+  }
+}
+
+/* ============ Rutas con calles reales (OSRM) ============ */
+const OSRM = "https://router.project-osrm.org";
+let ROUTE_GEOM = null;
+const ll = c => c.lng.toFixed(6)+","+c.lat.toFixed(6);
+async function osrmTable(coords){
+  const r = await fetchT(OSRM + "/table/v1/driving/" + coords.map(ll).join(";") + "?annotations=duration,distance", {}, 25000);
+  if(!r.ok) throw new Error("rutas " + r.status);
+  const j = await r.json(); if(j.code!=="Ok") throw new Error("rutas " + j.code);
+  return j;
+}
+async function osrmRoute(coords){
+  const parts = [];
+  for(let i=0;i<coords.length-1;i+=49){
+    const chunk = coords.slice(i, i+50);
+    const r = await fetchT(OSRM + "/route/v1/driving/" + chunk.map(ll).join(";") + "?overview=full&geometries=geojson", {}, 25000);
+    if(!r.ok) throw new Error("trazado " + r.status);
+    const j = await r.json(); if(j.code!=="Ok" || !j.routes || !j.routes[0]) throw new Error("trazado " + j.code);
+    parts.push(...j.routes[0].geometry.coordinates.map(([lng,lat])=>[lat,lng]));
+  }
+  return parts;
+}
+async function realOrder(silent){
+  overpassDown = false;
+  const sp = parseAddress(state.start);
+  const pendNow = state.stops.filter(s=>s.status!=="done" && s.x!==null);
+  // Ubicar paradas y punto de partida.
+  const toLocate = pendNow.filter(s=>s.lat==null || s.geo!=="osm");
+  if(sp && !(state.startGeo && state.startGeo.label===sp.label && state.startGeo.geo==="osm")){
+    const ps = {label:sp.label, addr:state.start}; await locateAll([ps]);
+    if(ps.lat!=null) state.startGeo = {label:sp.label, lat:ps.lat, lng:ps.lng, geo:ps.geo};
+  }
+  await locateAll(toLocate, (i,n)=>setRouteInfo(`Ubicando direcciones en el mapa… ${i} de ${n}`));
+  save();
+  const origin = currentOrigin();
+  const back = !!state.roundTrip && !!sp;
+  const geo = pendNow.filter(s=>s.lat!=null);
+  if(geo.length < 1) throw new Error("ninguna dirección ubicada");
+  if(geo.length + 1 > 100) throw new Error("más de 99 paradas");
+  setRouteInfo("Calculando tiempos con las calles reales…");
+  const hasO = origin && origin.lat!=null;
+  const pts = hasO ? [origin, ...geo] : geo.slice();
+  const j = await osrmTable(pts.map(p=>({lat:p.lat,lng:p.lng})));
+  const n = pts.length, D = j.durations, KM = j.distances || null;
+  // Celdas sin dato: se estiman con la cuadrícula (≈ 25 s por cuadra).
+  for(let a=0;a<n;a++) for(let b=0;b<n;b++) if(D[a][b]==null) D[a][b] = gridDist(pts[a],pts[b])*25;
+  const SYM = D.map((r,a)=>r.map((v,b)=>(v + D[b][a])/2));
+  IDX.clear(); pts.forEach((p,i)=>IDX.set(p,i));
+  const o = hasO ? origin : null;
+  let ordered;
+  try{
+    MATRIX = SYM; ordered = orderStops(o, geo, back);
+    MATRIX = D;   ordered = orOpt(o, ordered, back);   // ajuste final con sentidos reales (ida ≠ vuelta)
+  } finally { MATRIX = null; }
+  // Totales reales.
+  let sec = 0, m = 0, prev = o || ordered[0];
+  for(const s of ordered){ sec += D[IDX.get(prev)][IDX.get(s)]; if(KM) m += KM[IDX.get(prev)][IDX.get(s)] || 0; prev = s; }
+  if(back && o){ sec += D[IDX.get(prev)][IDX.get(o)]; if(KM) m += KM[IDX.get(prev)][IDX.get(o)] || 0; }
+  IDX.clear();
+  applyOrder(ordered.map(s=>s.id));
+  const est = geo.filter(s=>s.geo!=="osm").length;
+  state.route = {mode:"real", km: KM ? m/1000 : null, min: sec/60};
+  setRouteInfo(`Ruta con calles reales: ${KM ? (m/1000).toFixed(1)+" km · " : ""}${Math.round(sec/60)} min en carro sin trancón, más el tiempo en cada entrega.` +
+    (est ? ` ${est} dirección(es) ubicadas de forma aproximada (borde punteado en el mapa).` : ""));
+  save(); render();
+  // Trazado para el mapa (no bloquea el orden si falla).
+  try{
+    const seq = (o ? [o] : []).concat(ordered).concat(back && o ? [o] : []);
+    if(seq.length>1){ ROUTE_GEOM = await osrmRoute(seq.map(p=>({lat:p.lat,lng:p.lng}))); drawMap(); }
+  }catch(e){ console.warn("trazado", e); }
 }
 
 /* ============ Mapa esquemático del recorrido ============ */
 // Dibuja las paradas en la cuadrícula de Bogotá (norte arriba, occidente a la izquierda) para ver si la ruta da vueltas.
+let LMAP = null, LLAYER = null;
 function drawMap(){
-  const cv = $("map"); if(!cv || $("mapWrap").hidden) return;
+  if($("mapWrap").hidden) return;
+  const pend = state.stops.filter(s=>s.status!=="done" && s.lat!=null);
+  const useReal = typeof L !== "undefined" && navigator.onLine && pend.length > 0;
+  $("lmap").hidden = !useReal; $("map").hidden = useReal;
+  $("mapHint").textContent = useReal ? "Mapa de OpenStreetMap. El cuadro verde es desde donde arrancas; los números son el orden de entrega." :
+    "Esquema por números de calle y carrera (norte arriba, occidente a la izquierda). Con internet se muestra el mapa real.";
+  if(useReal) return drawLeaflet(pend);
+  drawSchematic();
+}
+function drawLeaflet(pend){
+  if(!LMAP){
+    LMAP = L.map("lmap", {zoomControl:true, attributionControl:true});
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {maxZoom:19, attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'}).addTo(LMAP);
+    LLAYER = L.layerGroup().addTo(LMAP);
+  }
+  setTimeout(()=>LMAP.invalidateSize(), 50);
+  LLAYER.clearLayers();
+  const o = currentOrigin(), bounds = [];
+  if(ROUTE_GEOM && ROUTE_GEOM.length){
+    L.polyline(ROUTE_GEOM, {color:getComputedStyle(document.documentElement).getPropertyValue("--accent").trim()||"#f2b705", weight:5, opacity:.9}).addTo(LLAYER);
+    ROUTE_GEOM.forEach(p=>bounds.push(p));
+  }
+  if(o && o.lat!=null){
+    L.marker([o.lat,o.lng], {icon:L.divIcon({className:"", html:'<div class="pin start"></div>', iconSize:[26,26]})}).addTo(LLAYER);
+    bounds.push([o.lat,o.lng]);
+  }
+  pend.forEach((s,i)=>{
+    const m = L.marker([s.lat,s.lng], {icon:L.divIcon({className:"", html:`<div class="pin${s.geo!=="osm"?" est":""}">${i+1}</div>`, iconSize:[26,26]})}).addTo(LLAYER);
+    m.bindPopup(`<b>${i+1}. ${esc(s.label||s.addr)}</b>${s.name?"<br>"+esc(s.name):""}${s.geo!=="osm"?"<br><i>Ubicación aproximada</i>":""}`);
+    bounds.push([s.lat,s.lng]);
+  });
+  if(bounds.length) LMAP.fitBounds(bounds, {padding:[24,24], maxZoom:16});
+}
+function drawSchematic(){
+  const cv = $("map"); if(!cv) return;
   const css = getComputedStyle(document.documentElement);
   const C = k => css.getPropertyValue(k).trim();
   const W = cv.clientWidth || 320, H = Math.round(W*0.85), dpr = window.devicePixelRatio || 1;
@@ -584,7 +864,11 @@ function render(){
   $("stDone").textContent = state.stops.filter(s=>s.status==="done").length;
   const sp = parseAddress(state.start);
   const geo = pend.filter(s=>s.x!==null);
-  $("stKm").textContent = geo.length ? (pathLen(currentOrigin(),geo,!!state.roundTrip && !!sp)*KM_PER_UNIT).toFixed(1) : "0";
+  const real = state.route && state.route.mode==="real" && state.route.km!=null;
+  $("stKm").textContent = geo.length ? (real ? state.route.km : pathLen(currentOrigin(),geo,!!state.roundTrip && !!sp)*KM_PER_UNIT).toFixed(1) : "0";
+  $("stKmLbl").textContent = real ? "km reales" : "km aprox.";
+  $("realRoads").checked = state.realRoads !== false;
+  $("routeInfo").textContent = state.routeNote || "";
   $("roundTrip").checked = !!state.roundTrip;
   drawMap();
   $("start").value = state.start;
@@ -683,7 +967,9 @@ $("frmEdit").addEventListener("submit", e=>{
     state.stops.splice(firstDone<0?state.stops.length:firstDone,0,ns);
     toast(p ? "Paquete agregado y ruta reordenada." : "Agregado, pero la dirección quedó para revisar.");
   } else {
+    const changed = (p?p.label:"") !== editing.s.label;
     Object.assign(editing.s, d, {x:p?p.x:null, y:p?p.y:null, label:p?p.label:"", example:false});
+    if(changed){ editing.s.lat = null; editing.s.lng = null; editing.s.geo = null; }
   }
   $("dlgEdit").close();
   optimize(true);
@@ -797,6 +1083,7 @@ $("btnSort").onclick = optimize;
 $("start").addEventListener("change", e=>{ state.start = e.target.value.trim(); save(); optimize(true); });
 $("byZone").addEventListener("change", e=>{ state.byZone = e.target.checked; save(); optimize(true); });
 $("roundTrip").addEventListener("change", e=>{ state.roundTrip = e.target.checked; save(); optimize(true); });
+$("realRoads").addEventListener("change", e=>{ state.realRoads = e.target.checked; save(); optimize(); });
 $("btnMap").onclick = ()=>{ const w=$("mapWrap"); w.hidden=!w.hidden; $("btnMap").textContent = w.hidden?"Ver":"Ocultar"; drawMap(); };
 addEventListener("resize", ()=>drawMap());
 $("btnNext").onclick = ()=>{
@@ -846,10 +1133,10 @@ $("restoreFile").addEventListener("change", async e=>{
 });
 
 /* ============ App instalable y sin conexión ============ */
-const APP_VERSION = "1.1.0";
+const APP_VERSION = "1.2.0";
 $("ver").textContent = "Versión " + APP_VERSION + ". Funciona sin internet una vez abierta la primera vez.";
 function netState(){ if(SERVED) $("net").hidden = navigator.onLine; }
-addEventListener("online", netState); addEventListener("offline", netState); netState();
+addEventListener("online", ()=>{ netState(); if(state.stops.some(s=>s.status!=="done")) optimize(true); }); addEventListener("offline", netState); netState();
 // Pide al navegador no borrar los datos de la app cuando falte espacio.
 if(navigator.storage && navigator.storage.persist){ navigator.storage.persist().catch(()=>{}); }
 let deferredInstall = null;
