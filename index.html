@@ -1757,33 +1757,73 @@ function getWorker(){
   })).catch(err=>{ workerP=null; throw err; });
   return workerP;
 }
-async function prepImage(file){
+async function prepImage(file, opt){
+  opt = opt || {};
   // Reduce tamaño y pasa a escala de grises con más contraste: mejora la lectura y la velocidad.
-  const bmp = await createImageBitmap(file);
+  const bmp = file instanceof ImageBitmap ? file : await createImageBitmap(file);
   // Las etiquetas necesitan letras de ~30 px: se amplían fotos pequeñas y se reducen las enormes.
   const target = 2400, sc = Math.min(3, target/Math.max(bmp.width,bmp.height));
-  const c = document.createElement("canvas"); c.width = Math.round(bmp.width*sc); c.height = Math.round(bmp.height*sc);
-  const g = c.getContext("2d"); g.drawImage(bmp,0,0,c.width,c.height);
+  const rot = opt.rotate || 0, sw = Math.round(bmp.width*sc), sh = Math.round(bmp.height*sc);
+  const c = document.createElement("canvas");
+  c.width = rot % 180 ? sh : sw; c.height = rot % 180 ? sw : sh;
+  const g = c.getContext("2d");
+  // Desenfoque leve: borra las rayas (moiré) de las fotos tomadas a otra pantalla y el grano de fotos comprimidas.
+  if(opt.blur) g.filter = "blur(" + opt.blur + "px)";
+  if(rot){ g.translate(c.width/2, c.height/2); g.rotate(rot*Math.PI/180); g.drawImage(bmp, -sw/2, -sh/2, sw, sh); g.setTransform(1,0,0,1,0,0); }
+  else g.drawImage(bmp,0,0,c.width,c.height);
+  g.filter = "none";
   const im = g.getImageData(0,0,c.width,c.height), d = im.data;
   for(let i=0;i<d.length;i+=4){ let v = 0.299*d[i]+0.587*d[i+1]+0.114*d[i+2]; v = Math.max(0,Math.min(255,(v-128)*1.5+128)); d[i]=d[i+1]=d[i+2]=v; }
   g.putImageData(im,0,0);
   return c;
 }
 // Lee el texto de una imagen (archivo o cuadro de la cámara) y extrae dirección, teléfono, zona y guía.
-async function ocrSource(src){
-  const img = await prepImage(src);
+// Para fotos (galería, WhatsApp, captura de pantalla) se hacen varios intentos hasta encontrar la dirección:
+// normal, texto disperso, con desenfoque (fotos de una pantalla) y girada (foto tomada de lado).
+async function ocrSource(src, thorough){
+  const bmp = src instanceof ImageBitmap ? src : await createImageBitmap(src);
   const w = await getWorker();
-  await w.setParameters({tessedit_pageseg_mode:"3"});
-  let { data } = await w.recognize(img);
-  let d = extractLabel(data.text);
-  if(!parseAddress(d.addr)){
-    // Segundo intento: modo "texto disperso", útil cuando la etiqueta está torcida o arrugada.
-    $("ocrMsg").textContent = "Segundo intento…";
-    await w.setParameters({tessedit_pageseg_mode:"11"});
-    const r2 = await w.recognize(img); const d2 = extractLabel(r2.data.text);
-    if(parseAddress(d2.addr) || (!d.phone && d2.phone)) d = d2;
+  const tries = [
+    {psm:"3", msg:"Leyendo la etiqueta…"},
+    {psm:"11", msg:"Segundo intento (texto disperso)…"},
+    {psm:"6", blur:1.2, msg:"Tercer intento (quitando rayas y grano)…"}
+  ];
+  if(thorough) tries.push({psm:"3", rotate:90, msg:"Probando la foto girada…"}, {psm:"3", rotate:270, msg:"Probando la foto girada…"});
+  let d = null;
+  for(const t of tries){
+    $("ocrMsg").textContent = t.msg;
+    await w.setParameters({tessedit_pageseg_mode:t.psm});
+    const { data } = await w.recognize(await prepImage(bmp, t));
+    const di = extractLabel(data.text);
+    if(!d) d = di;
+    else for(const k of ["phone","name","zone","barrio","guia","type","unit"]) if(!d[k] && di[k]) d[k] = di[k];
+    if(parseAddress(di.addr)){ d.addr = di.addr; if(!d.raw || !parseAddress(d.addr)) d.raw = di.raw; break; }
   }
   return d;
+}
+// Busca códigos (barras/QR) en una imagen fija y devuelve la mejor guía o una dirección si el código la trae.
+async function codesFromImage(src){
+  try{
+    scanDet = scanDet || await makeDetector();
+    if(!scanDet) return {};
+    const bmp = src instanceof ImageBitmap ? src : await createImageBitmap(src);
+    let codes = await detectCodes(bmp, true);
+    if(!codes.some(c=>/^\d{8,}$/.test(String(c).trim()))){
+      // Foto tomada de lado: el código de barras queda vertical y no se lee; se prueba girándola.
+      const c = document.createElement("canvas"); c.width = bmp.height; c.height = bmp.width;
+      const g = c.getContext("2d"); g.translate(c.width/2, c.height/2); g.rotate(Math.PI/2); g.drawImage(bmp, -bmp.width/2, -bmp.height/2);
+      codes = codes.concat(await detectCodes(c, true));
+    }
+    let guia = "", addr = null;
+    for(const c of codes){
+      const raw = String(c), dd = extractLabel(raw.replace(/[|;]/g,"\n"));
+      if(parseAddress(dd.addr)){ addr = dd; continue; }
+      const g = guiaFromCode(raw);
+      if(!g || g.length < 6 || !/\d{3,}/.test(g)) continue;
+      if(!guia || codeScore(g) > codeScore(guia)) guia = g;
+    }
+    return {guia, addr};
+  }catch(e){ return {}; }
 }
 
 /* ============ Escáner de código de barras / QR ============ */
@@ -2081,8 +2121,13 @@ $("photo").addEventListener("change", async e=>{
   }
   $("ocrBox").hidden = false; $("ocrBar").style.width="0%"; $("ocrMsg").textContent = "Preparando lector…";
   try{
-    const d = await ocrSource(f);
+    const bmp = await createImageBitmap(f);
+    $("ocrMsg").textContent = "Buscando el código de barras…";
+    const codes = await codesFromImage(bmp);
+    const d = codes.addr ? {...codes.addr} : await ocrSource(bmp, true);
+    if(codes.guia) d.guia = codes.guia;
     $("ocrBox").hidden = true;
+    if(d.guia && hasGuia(d.guia)){ toast("Esa guía ya está cargada."); return; }
     openEdit(d, true);
     if(!parseAddress(d.addr)) toast("No pude leer bien la dirección. Corrígela a mano.");
   }catch(err){
@@ -2349,7 +2394,7 @@ $("restoreFile").addEventListener("change", async e=>{
 });
 
 /* ============ App instalable y sin conexión ============ */
-const APP_VERSION = "1.16.1";
+const APP_VERSION = "1.17.0";
 $("ver").textContent = "Versión " + APP_VERSION + ". Funciona sin internet una vez abierta la primera vez.";
 if(navigator.storage && navigator.storage.estimate){
   navigator.storage.estimate().then(e=>{ if(e && e.usage) $("ver").textContent += ` Espacio usado en este celular: ${(e.usage/1048576).toFixed(1).replace(".",",")} MB (la mayor parte es el lector de etiquetas).`; }).catch(()=>{});
