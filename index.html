@@ -24,6 +24,7 @@
       <div style="display:flex;gap:6px">
         <button type="button" class="small" id="btnInstall" hidden>Instalar</button>
         <button type="button" class="small" id="btnUser" aria-label="Usuarios">Usuario</button>
+        <button type="button" class="small" id="btnTeam" hidden>Equipo</button>
         <button type="button" class="small" id="btnLock">Bloquear</button>
         <button type="button" class="primary small" id="btnNew">Nueva jornada</button>
       </div>
@@ -158,6 +159,7 @@
           </label>
           <p class="hint" style="margin:0">Por defecto: Suba de la Av. Ciudad de Cali (Av. Carrera 104) hacia el río Bogotá, entre el río Juan Amarillo (≈ Calle 125) y la Calle 175. Puedes ajustar los números.</p>
         </fieldset>
+        <button type="button" id="btnTeamCfg">Equipo en la nube (sincronizar entre celulares)</button>
         <fieldset style="border:1px solid var(--line);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:8px">
           <legend style="font-weight:600;padding:0 4px">Ubicaciones aprendidas</legend>
           <label style="flex-direction:row;align-items:center;gap:8px;color:var(--ink);font-size:15px">
@@ -297,6 +299,29 @@
     <button type="button" class="small" id="dvNextBtn">Siguiente ▶</button>
   </div>
 </div>
+
+<dialog id="dlgTeam" aria-labelledby="tmTitle">
+  <div style="padding:16px;display:flex;flex-direction:column;gap:12px">
+    <div class="dlgHead"><h2 id="tmTitle">Equipo</h2><button type="button" class="small" onclick="this.closest('dialog').close()">Cerrar</button></div>
+    <p class="hint" id="tmState" style="margin:0" aria-live="polite"></p>
+    <form id="tmConnect" style="padding:0;display:flex;flex-direction:column;gap:10px">
+      <label for="tmEmail">Correo del equipo<input id="tmEmail" type="email" autocomplete="username" required></label>
+      <label for="tmPass">Contraseña<input id="tmPass" type="password" autocomplete="current-password" required></label>
+      <p class="uerr" id="tmErr" role="alert"></p>
+      <button type="submit" class="primary" id="tmGo">Conectar</button>
+      <p class="hint" style="margin:0">Al conectar, tus paradas (dirección, guía, apto, nombre, teléfono y notas, sin el texto completo de la etiqueta) se guardan en Supabase, en servidores de Estados Unidos. Solo las ve tu equipo: tú las tuyas y el administrador las de todos. Son datos personales de clientes (Ley 1581 de 2012): úsalos solo para la entrega.</p>
+    </form>
+    <div id="tmOn" hidden style="display:flex;flex-direction:column;gap:10px">
+      <div class="row">
+        <button type="button" id="tmSync">Sincronizar ahora</button>
+        <button type="button" class="danger" id="tmOff">Desconectar</button>
+      </div>
+      <button type="button" class="dark" id="tmAdminBtn" hidden>Actualizar avance del equipo</button>
+      <div id="tmList" style="display:flex;flex-direction:column;gap:8px"></div>
+      <p class="hint" id="tmWhen" style="margin:0"></p>
+    </div>
+  </div>
+</dialog>
 
 <dialog id="dlgFound" aria-labelledby="fdTitle">
   <form method="dialog">

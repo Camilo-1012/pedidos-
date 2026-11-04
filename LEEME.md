@@ -59,6 +59,9 @@ Los celulares descargan la versión nueva en segundo plano y muestran «Hay una 
 | `js/07-cargue.js` | Buscar por guía, repetidos, revisión y orden de cargue. |
 | `js/08-voz.js` | Dictado por voz. |
 | `js/09-arranque.js` | Botones generales, respaldo, actualizaciones y arranque. |
+| `js/10-conduccion.js` | Modo conducción. |
+| `js/11-equipo.js` | Equipo en la nube (Supabase). |
+| `supabase/equipo.sql` | Tablas y reglas de seguridad de Supabase. |
 | `sw.js` | Service worker: uso sin señal, actualizaciones y mapas guardados. |
 | `tests/` | Pruebas automáticas (no se publican). |
 
@@ -196,3 +199,26 @@ Con internet, la app hace tres cosas:
   - El archivo nuevo lleva la jornada, los ajustes y el historial.
   - Al restaurar, el historial se junta con el que ya hay sin duplicar días; si un día está en ambos, queda la versión más completa.
   - Los respaldos viejos se siguen pudiendo restaurar.
+
+## Equipo en la nube con Supabase (v2.2)
+
+Cada persona sincroniza **su** ruta. El administrador ve la ruta y el avance de las demás y puede reasignar paradas.
+
+**Configuración, una sola vez, en Supabase:**
+1. Authentication → Users → Add user: crear un usuario por persona, con «Auto confirm».
+2. Authentication → Sign In / Providers (o Settings): **desactivar «Allow new users to sign up»**, para que nadie más cree cuentas.
+3. SQL Editor → pegar `supabase/equipo.sql`, cambiar los correos y nombres del final y correrlo (**Run**). Crea las tablas, las reglas de seguridad (RLS) y el equipo.
+
+**En cada celular:** Más opciones → «Equipo en la nube» → correo y contraseña de esa persona.
+
+**Cómo funciona:**
+- Sincroniza cada 30 s mientras la app está abierta, al volver a ella, 4 s después de cada cambio y al volver la señal. Sin señal, los cambios esperan.
+- Sube dirección, guía, apto, nombre, teléfono, notas y estado. **No sube** el texto completo leído de la etiqueta.
+- **Reglas RLS:**
+  - cada persona ve y cambia solo sus paradas;
+  - el administrador ve las de todos y reasigna;
+  - una cuenta que no esté en `equipo_miembros` no ve nada, aunque tenga la clave pública.
+- La clave pública (`sb_publishable_…`) va en `js/11-equipo.js` y está hecha para ser pública. La clave **secret** o **service_role** nunca debe ir en la app.
+- Si dos celulares cambian la misma parada a la vez, gana el último en sincronizar.
+- Las paradas borradas se marcan como `deleted` para que el otro celular se entere. El script trae una consulta opcional para limpiarlas después de 30 días.
+- **Ley 1581:** son datos personales de clientes guardados por un tercero (Supabase, servidores en EE. UU.). Úsalos solo para la entrega y confirma que la empresa o plataforma lo permite.

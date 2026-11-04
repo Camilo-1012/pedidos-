@@ -17,7 +17,11 @@ function mkStop(d){
     zone:d.zone||"", barrio:d.barrio||"", guia:d.guia||"", qty:Math.max(1,Math.min(99,parseInt(d.qty,10)||1)), type:d.type||"casa", unit:d.unit||"", notes:d.notes||"", raw:d.raw||"", example:!!d.example,
     x:p?p.x:null, y:p?p.y:null, label:p?p.label:"", status:"pend", created: Date.now() + (mkStop.seq = (mkStop.seq||0)+1)/1000};
 }
-function save(){ store.set(KEY,state); }
+function save(){
+  store.set(KEY,state);
+  // Equipo en la nube: programa la subida de los cambios (ver js/11-equipo.js).
+  if(typeof onStateSaved === "function") onStateSaved();
+}
 
 /* ============ Optimización de ruta ============ */
 // Distancia en "cuadras": la ciudad es una cuadrícula, así que se suma lo recorrido en calles y en carreras
