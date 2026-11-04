@@ -82,3 +82,14 @@ Con internet, la app hace tres cosas:
 - tesseract.js: Apache-2.0.
 - Modelo de español `tessdata`: Apache-2.0.
 - Fuentes Barlow: SIL OFL 1.1 (ver `fonts/OFL-Barlow.txt`).
+
+## Usuarios y PIN (v1.19)
+
+- Al abrir por primera vez se crea un usuario con nombre y PIN de 4 a 6 números. Ese primer usuario es **administrador** y hereda los pedidos e historial que ya había en el celular.
+- El administrador agrega usuarios, les pone un PIN nuevo si lo olvidan, los vuelve administradores o los elimina (botón con el nombre, arriba).
+- Cada usuario ve solo sus pedidos, su historial y sus respaldos. La caché de ubicaciones de direcciones se comparte para que la ruta salga más rápido.
+- **Bloquear** cierra la cámara y las ventanas abiertas. Al volver a la app se pide el PIN según lo configurado (por defecto, si estuvo fuera más de 15 minutos).
+- El PIN no se guarda: se guarda PBKDF2-SHA256 con 150 000 vueltas y sal aleatoria. Tras 5 fallos la app espera 30 s, y la espera se duplica hasta 15 minutos.
+- Limitaciones:
+  - Los usuarios existen solo en ese celular, porque no hay servidor.
+  - El PIN bloquea la app, pero los datos guardados no van cifrados. Alguien con el celular desbloqueado y herramientas de desarrollador podría leerlos. Por eso conviene que el celular tenga su propio bloqueo de pantalla.
