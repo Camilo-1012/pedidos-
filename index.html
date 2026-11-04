@@ -1824,7 +1824,8 @@ async function detectCodes(src, thorough){
     [0,H*0.5,W,H*0.5, Math.min(1,1920/W)],   // mitad de abajo
     [0,0,W,H*0.5, Math.min(1,1920/W)]        // mitad de arriba
   ];
-  const list = thorough ? regions : [regions[0], regions[1 + (zxTry++ % 3)]];
+  // En vivo se prueba una zona por vez (rotando) para no quitarle procesador a la lectura del texto.
+  const list = thorough ? regions : [regions[zxTry++ % 4]];
   const c = scanDet.c, out = [];
   for(const [x,y,w,h,sc] of list){
     c.width = Math.round(w*sc); c.height = Math.round(h*sc);
@@ -1846,7 +1847,9 @@ function takeCodes(codes){
     const dd = extractLabel(raw.replace(/[|;]/g,"\n"));
     if(parseAddress(dd.addr)){ live.codeAddr = {...dd, raw:"Código: "+raw}; continue; }
     const g = guiaFromCode(raw);
-    if(g && (!live.codeGuia || codeScore(g) > codeScore(live.codeGuia))) live.codeGuia = g;
+    // Filtro contra lecturas falsas (texto o ruido confundido con código): una guía tiene 6+ caracteres y al menos 3 dígitos.
+    if(!g || g.length < 6 || !/\d{3,}/.test(g.replace(/\D+/g, m=>m.length>2?"|":""))) continue;
+    if(!live.codeGuia || codeScore(g) > codeScore(live.codeGuia)) live.codeGuia = g;
   }
 }
 function grabFrame(v){
@@ -1905,7 +1908,7 @@ async function startScan(mode){
   }
   $("scanMsg").textContent = "Apunta a la etiqueta de cerca, con buena luz y que se vea completa. Se guarda sola cuando lee la dirección; si tarda, toca «Capturar».";
   if(!scanDet) setStat("stCode", null, "Código: este celular no lee códigos");
-  scanTimer = setInterval(scanTick, 250);
+  scanTimer = setInterval(scanTick, scanDet && scanDet.kind==="nativo" ? 250 : 400);
   getWorker().catch(()=>{});   // prepara el lector de texto mientras tanto
   liveLoop();
 }
@@ -1983,11 +1986,13 @@ async function finishScan(extra){
   live.finishing = true;
   // Dirección lista pero aún sin código de barras: se insiste hasta 2,5 s más (en alta resolución) antes de cerrar.
   if(scanDet && codeScore(live.codeGuia||"") < 3 && !live.codeAddr && scanStream){
-    $("scanMsg").textContent = "Dirección lista. Buscando el código de barras… mantén la cámara quieta.";
+    $("scanMsg").textContent = "Dirección lista. Buscando el código de barras un momento… mantén la cámara quieta.";
     const v = $("scanVideo"), t = Date.now();
-    while(Date.now() - t < 2500 && codeScore(live.codeGuia||"") < 3 && scanStream){
-      if(!scanBusy){ scanBusy = true; try{ takeCodes(await detectCodes(v, true)); }catch(e){} scanBusy = false; }
-      await new Promise(r=>setTimeout(r,120));
+    // Con el lector propio del celular (rápido) se insiste 2 s; con ZXing, 1,5 s y por zonas, para no demorar etiquetas sin código.
+    const limit = scanDet.kind==="nativo" ? 2000 : 1500;
+    while(Date.now() - t < limit && codeScore(live.codeGuia||"") < 3 && scanStream){
+      if(!scanBusy){ scanBusy = true; try{ takeCodes(await detectCodes(v, scanDet.kind==="nativo")); }catch(e){} scanBusy = false; }
+      await new Promise(r=>setTimeout(r,100));
     }
     setStat("stCode", !!live.codeGuia, live.codeGuia ? "Código: " + live.codeGuia : "Código: no se encontró");
   }
@@ -2344,7 +2349,7 @@ $("restoreFile").addEventListener("change", async e=>{
 });
 
 /* ============ App instalable y sin conexión ============ */
-const APP_VERSION = "1.16.0";
+const APP_VERSION = "1.16.1";
 $("ver").textContent = "Versión " + APP_VERSION + ". Funciona sin internet una vez abierta la primera vez.";
 if(navigator.storage && navigator.storage.estimate){
   navigator.storage.estimate().then(e=>{ if(e && e.usage) $("ver").textContent += ` Espacio usado en este celular: ${(e.usage/1048576).toFixed(1).replace(".",",")} MB (la mayor parte es el lector de etiquetas).`; }).catch(()=>{});
