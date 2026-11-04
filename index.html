@@ -2526,6 +2526,8 @@ async function startScan(mode){
   try{
     scanStream = await navigator.mediaDevices.getUserMedia({audio:false, video:{facingMode:{ideal:"environment"}, width:{ideal:1920}, height:{ideal:1080}}});
   }catch(e){
+    // Buscar o verificar: se puede seguir escribiendo la guía aunque la cámara no abra.
+    if(scanMode==="find" || scanMode==="verify"){ scanStream = null; $("scanMsg").textContent = "No se pudo abrir la cámara (revisa el permiso de cámara). Escribe la guía o sus últimos 4 números."; $("scanFindIn").focus(); return; }
     $("dlgScan").close();
     toast("No se pudo abrir la cámara. Revisa que la app tenga permiso de cámara en los ajustes del celular.");
     return;

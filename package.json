@@ -1,0 +1,11 @@
+{
+  "name": "ruta-entregas",
+  "private": true,
+  "description": "Pruebas automáticas de la app Ruta de Entregas (no hace falta para usar la app).",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0"
+  }
+}

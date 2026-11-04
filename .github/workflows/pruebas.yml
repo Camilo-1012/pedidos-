@@ -1,0 +1,70 @@
+# Pruebas automáticas y publicación.
+# En cada cambio a main: corre las pruebas en un celular simulado y, solo si TODAS pasan, publica la app en GitHub Pages.
+# Requisito (una vez): Settings → Pages → Build and deployment → Source: «GitHub Actions».
+name: Pruebas y publicación
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pruebas-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pruebas:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Navegador de pruebas (Chromium)
+        run: npx playwright install --with-deps chromium
+      - name: ffmpeg para la cámara simulada
+        run: command -v ffmpeg || (sudo apt-get update && sudo apt-get install -y ffmpeg)
+      - name: Correr las pruebas
+        run: npx playwright test
+        env:
+          CI: "true"
+          PW_EXPERIMENTAL_SERVICE_WORKER_NETWORK_EVENTS: "1"
+      - name: Guardar el reporte si algo falla
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: reporte-de-pruebas
+          path: playwright-report
+          retention-days: 14
+
+  publicar:
+    needs: pruebas
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Armar el sitio (solo los archivos de la app, sin pruebas)
+        run: |
+          mkdir _site
+          rsync -a --exclude '.git' --exclude '.github' --exclude 'tests' --exclude 'node_modules' \
+            --exclude 'package.json' --exclude 'package-lock.json' --exclude 'playwright.config.js' \
+            --exclude 'test-results' --exclude 'playwright-report' --exclude '_site' ./ _site/
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: _site
+      - id: deploy
+        uses: actions/deploy-pages@v5
