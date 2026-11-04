@@ -222,3 +222,11 @@ Cada persona sincroniza **su** ruta. El administrador ve la ruta y el avance de 
 - Si dos celulares cambian la misma parada a la vez, gana el último en sincronizar.
 - Las paradas borradas se marcan como `deleted` para que el otro celular se entere. El script trae una consulta opcional para limpiarlas después de 30 días.
 - **Ley 1581:** son datos personales de clientes guardados por un tercero (Supabase, servidores en EE. UU.). Úsalos solo para la entrega y confirma que la empresa o plataforma lo permite.
+
+## Supabase siempre activo (v2.2)
+
+El plan gratis de Supabase pausa el proyecto tras unos 7 días sin uso. Para evitarlo, GitHub corre cada 3 días la tarea **«Supabase activo»** (`.github/workflows/supabase-activo.yml`), que llama a la función `ping()`. Esa función solo devuelve la hora del servidor y no toca datos.
+
+- **Una vez:** pegar `supabase/ping.sql` en Supabase → SQL Editor → Run.
+- Si la tarea sale en rojo en **Actions**, el proyecto probablemente está pausado: en supabase.com toca **Restore project**.
+- GitHub desactiva las tareas programadas si el repositorio pasa 60 días sin cambios. Avisa por correo; se reactiva en Actions → «Supabase activo» → **Enable workflow**.

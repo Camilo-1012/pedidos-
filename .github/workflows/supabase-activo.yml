@@ -1,0 +1,36 @@
+# Mantiene activo el proyecto gratis de Supabase: el plan Free se pausa tras ~7 días sin uso.
+# Cada 3 días llama a la función public.ping() (supabase/ping.sql), que solo devuelve la hora del servidor.
+# Usa la URL y la clave PÚBLICA que ya están en js/11-equipo.js (no se necesita ningún secreto).
+# Nota: GitHub desactiva las tareas programadas si el repositorio pasa 60 días sin cambios; avisa por correo y
+# se reactivan en Actions → «Supabase activo» → Enable workflow.
+name: Supabase activo
+
+on:
+  schedule:
+    - cron: "23 13 */3 * *"   # 8:23 a. m. hora de Bogotá, cada 3 días
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: [".github/workflows/supabase-activo.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - name: Llamar a ping() en Supabase
+        run: |
+          URL=$(grep -oP 'SB_URL = "\K[^"]+' js/11-equipo.js)
+          KEY=$(grep -oP 'SB_KEY = "\K[^"]+' js/11-equipo.js)
+          for intento in 1 2 3; do
+            if RESP=$(curl -fsS -m 30 -X POST "$URL/rest/v1/rpc/ping" -H "apikey: $KEY" -H "Content-Type: application/json" -d '{}'); then
+              echo "Supabase respondió: $RESP"; exit 0
+            fi
+            echo "Intento $intento falló; reintento en 30 s"; sleep 30
+          done
+          echo "::error::Supabase no respondió. Si el proyecto está pausado, entra a supabase.com y toca «Restore project»."
+          exit 1
