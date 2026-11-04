@@ -115,6 +115,11 @@ dialog.scan{width:min(640px,calc(100% - 16px))}
 .scanbox video{width:100%;height:100%;object-fit:cover;display:block}
 .scanframe{position:absolute;inset:18% 8%;border:3px solid var(--accent);border-radius:12px;box-shadow:0 0 0 999px rgba(0,0,0,.35)}
 .btn.waze{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.addrRow{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center}
+.mic{min-width:56px}
+.mic.on{background:var(--bad);color:#fff;border-color:var(--bad);animation:pulse 1.2s infinite}
+@keyframes pulse{50%{opacity:.6}}
+@media (prefers-reduced-motion: reduce){.mic.on{animation:none}}
 .toast{position:fixed;left:50%;bottom:84px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 14px;border-radius:10px;font-size:14px;z-index:20;max-width:calc(100% - 32px);display:none}
 .toast.show{display:block}
 details summary{cursor:pointer;font-weight:600}
@@ -151,6 +156,7 @@ details summary{cursor:pointer;font-weight:600}
       <input id="photo" type="file" accept="image/*" capture="environment" hidden>
       <button type="button" id="btnPaste">Pegar texto</button>
       <button type="button" id="btnManual">Escribir</button>
+      <button type="button" id="btnVoice">Dictar</button>
     </div>
     <div id="ocrBox" hidden>
       <p class="hint" id="ocrMsg">Leyendo etiqueta…</p>
@@ -231,9 +237,12 @@ details summary{cursor:pointer;font-weight:600}
 <dialog id="dlgEdit">
   <form id="frmEdit">
     <h2 id="dlgTitle">Paquete</h2>
-    <label for="fAddr">Dirección
-      <input id="fAddr" required autocomplete="off">
-    </label>
+    <label for="fAddr">Dirección</label>
+    <div class="addrRow">
+      <input id="fAddr" required autocomplete="off" aria-describedby="fParsed">
+      <button type="button" class="mic" id="micAddr" aria-label="Dictar la dirección">Dictar</button>
+    </div>
+    <p class="hint" id="micMsg" hidden aria-live="polite"></p>
     <div id="fParsed" class="preview"></div>
     <div>
       <label for="fQty">Cantidad de paquetes para esta dirección</label>
@@ -1343,10 +1352,107 @@ $("photo").addEventListener("change", async e=>{
   }
 });
 
+/* ============ Dictado por voz ============ */
+// Usa el reconocimiento de voz del navegador (en Chrome Android lo procesa Google: necesita internet).
+// Convierte lo dictado al formato de dirección: "calle ciento cuarenta y tres número ciento cincuenta y uno be guion veintitrés" → "calle 143 # 151 B - 23".
+const NUM_UNI = {cero:0,un:1,uno:1,una:1,dos:2,tres:3,cuatro:4,cinco:5,seis:6,siete:7,ocho:8,nueve:9,diez:10,once:11,doce:12,trece:13,catorce:14,quince:15,
+  dieciseis:16,diecisiete:17,dieciocho:18,diecinueve:19,veinte:20,veintiun:21,veintiuno:21,veintidos:22,veintitres:23,veinticuatro:24,veinticinco:25,
+  veintiseis:26,veintisiete:27,veintiocho:28,veintinueve:29};
+const NUM_DEC = {treinta:30,cuarenta:40,cincuenta:50,sesenta:60,setenta:70,ochenta:80,noventa:90};
+const NUM_CEN = {cien:100,ciento:100,doscientos:200,doscientas:200,trescientos:300,cuatrocientos:400,quinientos:500,seiscientos:600,setecientos:700,ochocientos:800,novecientos:900};
+const SPOKEN_LETTER = {a:"A",be:"B",b:"B",ce:"C",c:"C",de:"D",d:"D",e:"E",efe:"F",f:"F",ge:"G",g:"G",hache:"H",h:"H"};
+function spokenToAddress(text){
+  const toks = (text||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"")
+    .replace(/(\d)([a-h])\b/g,"$1 $2").replace(/[#]/g," # ").replace(/[-–—]/g," - ").replace(/[,.;:]/g," ")
+    .split(/\s+/).filter(Boolean);
+  const out = []; let cur = null, last = "";
+  const flush = ()=>{ if(cur!==null){ out.push(String(cur)); cur = null; last = ""; } };
+  for(let i=0;i<toks.length;i++){
+    const t = toks[i];
+    if(/^\d+$/.test(t)){ flush(); out.push(t); continue; }
+    if(t in NUM_CEN){ if(cur!==null && last!=="") flush(); cur = (cur||0) + NUM_CEN[t]; last = "cen"; continue; }
+    if(t in NUM_DEC){ if(cur!==null && (last==="dec"||last==="uni")) flush(); cur = (cur||0) + NUM_DEC[t]; last = "dec"; continue; }
+    if(t in NUM_UNI){ if(cur!==null && (last==="uni" || (last==="dec" && toks[i-1]!=="y") || (last==="cen" && cur%100!==0))) flush(); cur = (cur||0) + NUM_UNI[t]; last = "uni"; continue; }
+    if(t==="y" && cur!==null && last==="dec" && (toks[i+1] in NUM_UNI)) continue;
+    flush();
+    if(["numero","numeral","no","nro","n","con","#"].includes(t)){ out.push("#"); continue; }
+    if(["guion","raya","menos","-"].includes(t)){ out.push("-"); continue; }
+    if(t==="letra" && SPOKEN_LETTER[toks[i+1]]){ out.push(SPOKEN_LETTER[toks[++i]]); continue; }
+    out.push(t);
+  }
+  flush();
+  // Letras habladas ("be", "a") solo cuentan como letra si van justo después de un número.
+  for(let i=1;i<out.length;i++){
+    const L = SPOKEN_LETTER[out[i]];
+    const nxt = out[i+1];
+    if(L && /^\d+$/.test(out[i-1]) && (nxt===undefined || /^\d+$/.test(nxt) || ["#","-","bis","sur","este"].includes(nxt))) out[i] = L;
+  }
+  // "guion cero ocho" → "-08"
+  return out.join(" ").replace(/- 0 (\d)\b/g,"- 0$1").replace(/\s+/g," ").trim();
+}
+let rec = null, recOn = false;
+function micUI(on, msg){
+  recOn = on;
+  $("micAddr").classList.toggle("on", on);
+  $("micAddr").textContent = on ? "Parar" : "Dictar";
+  $("micMsg").hidden = !msg; $("micMsg").textContent = msg || "";
+}
+function startDictation(){
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if(!SR){ micUI(false, "Este navegador no permite dictar aquí. Usa el micrófono del teclado del celular."); $("fAddr").focus(); return; }
+  if(!navigator.onLine){ micUI(false, "El dictado necesita internet. Usa el micrófono del teclado o escribe la dirección."); return; }
+  if(recOn){ try{ rec.stop(); }catch(e){} return; }
+  rec = new SR();
+  rec.lang = "es-CO"; rec.interimResults = true; rec.maxAlternatives = 3; rec.continuous = false;
+  let finalTxt = "";
+  rec.onstart = ()=>micUI(true, "Escuchando… di la dirección, por ejemplo: «calle ciento cuarenta y tres número ciento cincuenta y uno be guion veintitrés».");
+  rec.onresult = ev=>{
+    let interim = "";
+    for(let i=ev.resultIndex;i<ev.results.length;i++){
+      const r = ev.results[i];
+      if(r.isFinal){
+        // De las alternativas, se prefiere la que se entiende como dirección válida.
+        let best = r[0].transcript;
+        for(let k=0;k<r.length;k++){ if(parseAddress(spokenToAddress(r[k].transcript))){ best = r[k].transcript; break; } }
+        finalTxt += " " + best;
+      } else interim += r[0].transcript;
+    }
+    const conv = spokenToAddress((finalTxt + " " + interim).trim());
+    const pa = parseAddress(conv);
+    // La dirección va al campo Dirección; lo que se dijo después (apto, torre…) va a Notas.
+    $("fAddr").value = pa ? pa.label : conv;
+    const tail = pa ? rest(conv).trim() : "";
+    if(tail) $("fNotes").value = tail.charAt(0).toUpperCase() + tail.slice(1);
+    updParsed();
+  };
+  rec.onerror = ev=>{
+    const m = {"not-allowed":"No hay permiso de micrófono. Actívalo en los ajustes del celular para esta app.",
+      "no-speech":"No se escuchó nada. Toca «Dictar» e intenta de nuevo.", "network":"El dictado necesita internet.",
+      "audio-capture":"No se encontró micrófono."}[ev.error] || ("No se pudo dictar ("+ev.error+").");
+    micUI(false, m);
+  };
+  rec.onend = ()=>{
+    const ok = !!parseAddress($("fAddr").value);
+    micUI(false, ok ? "" : ($("fAddr").value ? "No entendí la dirección completa. Corrígela o dicta de nuevo." : $("micMsg").textContent));
+    if(ok && navigator.vibrate) navigator.vibrate(40);
+  };
+  try{ rec.start(); }catch(e){ micUI(false, "No se pudo iniciar el dictado."); }
+}
+// Lo que se dice después de la placa (apto, torre, barrio) se conserva al final.
+function rest(conv){
+  const n = norm(conv), m = n.match(ADDR_RE);
+  if(!m) return "";
+  const tail = conv.slice(Math.min(conv.length, m.index + m[0].length)).trim();
+  return tail ? " " + tail : "";
+}
+$("micAddr").onclick = startDictation;
+$("dlgEdit").addEventListener("close", ()=>{ if(recOn){ try{ rec.abort(); }catch(e){} micUI(false,""); } });
+
 /* ============ Botones generales ============ */
 $("btnPaste").onclick = ()=>openText("one");
 $("btnBulk").onclick = ()=>openText("bulk");
 $("btnManual").onclick = ()=>openEdit({addr:""}, true);
+$("btnVoice").onclick = ()=>{ openEdit({addr:""}, true); startDictation(); };
 $("btnSort").onclick = optimize;
 $("start").addEventListener("change", e=>{ state.start = e.target.value.trim(); save(); optimize(true); });
 $("byZone").addEventListener("change", e=>{ state.byZone = e.target.checked; save(); optimize(true); });
@@ -1404,7 +1510,7 @@ $("restoreFile").addEventListener("change", async e=>{
 });
 
 /* ============ App instalable y sin conexión ============ */
-const APP_VERSION = "1.4.0";
+const APP_VERSION = "1.5.0";
 $("ver").textContent = "Versión " + APP_VERSION + ". Funciona sin internet una vez abierta la primera vez.";
 function netState(){ if(SERVED) $("net").hidden = navigator.onLine; }
 addEventListener("online", ()=>{ netState(); if(state.stops.some(s=>s.status!=="done")) optimize(true); }); addEventListener("offline", netState); netState();
