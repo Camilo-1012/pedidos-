@@ -153,9 +153,23 @@ details summary{cursor:pointer;font-weight:600}
     <label style="flex-direction:row;align-items:center;gap:8px;color:var(--ink);font-size:15px">
       <input type="checkbox" id="byZone" style="width:auto"> Terminar una zona (ST) antes de pasar a otra
     </label>
+    <label style="flex-direction:row;align-items:center;gap:8px;color:var(--ink);font-size:15px">
+      <input type="checkbox" id="roundTrip" style="width:auto"> Volver al punto de partida al terminar
+    </label>
     <div class="row">
       <button type="button" class="dark" id="btnSort">Ordenar ruta</button>
       <button type="button" id="btnMaps">Abrir siguientes en Maps</button>
+    </div>
+  </section>
+
+  <section class="card" aria-labelledby="hMap">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+      <h2 id="hMap">Mapa del recorrido</h2>
+      <button type="button" class="small" id="btnMap">Ver</button>
+    </div>
+    <div id="mapWrap" hidden>
+      <canvas id="map" style="width:100%;display:block;border-radius:8px;background:var(--bg)" aria-label="Mapa esquemático de la ruta"></canvas>
+      <p class="hint" style="margin-top:8px">Norte arriba, occidente a la izquierda. El cuadro verde es desde donde arrancas. Es un esquema de calles y carreras, no un mapa real: no muestra humedales ni avenidas cerradas.</p>
     </div>
   </section>
 
@@ -294,7 +308,7 @@ function parseAddress(text){
   if(sur) y = -y;
   if(este) x = -x;
   const fmtN = o => o.n + (o.l1||"") + (o.bis?" Bis":"") + (o.l2?" "+o.l2:"");
-  const label = `${v.name} ${fmtN(p)}${m[6]?" "+m[6][0]+m[6].slice(1).toLowerCase():""} # ${fmtN(g)}-${placa}${sur&&m[6]!=="SUR"?" Sur":""}${este&&m[6]!=="ESTE"?" Este":""}`;
+  const label = `${v.name} ${fmtN(p)}${m[6]?" "+m[6][0]+m[6].slice(1).toLowerCase():""} # ${fmtN(g)}-${m[11].padStart(2,"0")}${sur&&m[6]!=="SUR"?" Sur":""}${este&&m[6]!=="ESTE"?" Este":""}`;
   return {x,y,label,via:v.code};
 }
 
@@ -360,10 +374,19 @@ function mkStop(d){
 function save(){ store.set(KEY,state); }
 
 /* ============ Optimización de ruta ============ */
-// Distancia tipo "cuadras": la ciudad es una cuadrícula, así que Manhattan aproxima mejor que línea recta.
+// Distancia en "cuadras": la ciudad es una cuadrícula, así que se suma lo recorrido en calles y en carreras
+// (distancia Manhattan), que se parece más a lo que anda un carro o una moto que la línea recta.
 const dist = (a,b) => Math.abs(a.x-b.x) + Math.abs(a.y-b.y);
 const KM_PER_UNIT = 0.1; // ~100 m por número de calle/carrera (aproximado)
 
+// Costo total de un recorrido: desde el inicio (si hay), por todas las paradas y, si se pide, de vuelta al inicio.
+function pathLen(start, path, back){
+  if(!path.length) return 0;
+  let L = 0, prev = start || path[0];
+  for(const p of path){ L += dist(prev,p); prev = p; }
+  if(back && start) L += dist(prev,start);
+  return L;
+}
 function nearest(start, pts){
   const rest = pts.slice(), path = [];
   let cur = start;
@@ -375,21 +398,17 @@ function nearest(start, pts){
   }
   return path;
 }
-function pathLen(start, path){
-  let L=0, prev=start||path[0];
-  for(const p of path){ L += dist(prev,p); prev=p; }
-  return L;
-}
-function twoOpt(start, path){
-  // Ruta abierta: inicio fijo (si existe), final libre.
+// 2-opt: invierte tramos de la ruta cuando eso elimina un cruce o una vuelta innecesaria.
+function twoOpt(start, path, back){
   const P = start ? [start, ...path] : path.slice();
   const n = P.length; if(n<4) return path;
+  const end = back && start ? start : null;
   let improved = true, guard = 0;
-  while(improved && guard++<200){
+  while(improved && guard++<300){
     improved = false;
     for(let i=1;i<n-1;i++){
       for(let k=i+1;k<n;k++){
-        const a=P[i-1], b=P[i], c=P[k], d=P[k+1];
+        const a=P[i-1], b=P[i], c=P[k], d=(k+1<n)?P[k+1]:end;
         const before = dist(a,b) + (d?dist(c,d):0);
         const after  = dist(a,c) + (d?dist(b,d):0);
         if(after < before - 1e-9){
@@ -401,20 +420,90 @@ function twoOpt(start, path){
   }
   return start ? P.slice(1) : P;
 }
-function solve(start, pts){
-  if(pts.length===0) return [];
-  if(start) return twoOpt(start, nearest(start, pts));
-  // Sin punto de partida: probar arrancar desde cada parada y quedarse con la más corta.
-  let best=null, bl=Infinity;
-  const tries = pts.length>150 ? pts.slice(0,150) : pts;
-  for(const s of tries){
-    const p = nearest(s, pts.filter(q=>q!==s)); const path=[s,...p];
-    const l = pathLen(null,path); if(l<bl){bl=l;best=path;}
+// Or-opt: saca tramos de 1 a 3 paradas y los reubica donde menos desvío causen (en ambos sentidos).
+function orOpt(start, path, back){
+  let P = path.slice(), best = pathLen(start,P,back), improved = true, guard = 0;
+  while(improved && guard++<60){
+    improved = false;
+    for(let len=1; len<=3 && !improved; len++){
+      for(let i=0; i+len<=P.length && !improved; i++){
+        const seg = P.slice(i,i+len), rest = P.slice(0,i).concat(P.slice(i+len));
+        for(let j=0; j<=rest.length && !improved; j++){
+          if(j===i) continue;
+          for(const sg of len>1 ? [seg, seg.slice().reverse()] : [seg]){
+            const cand = rest.slice(0,j).concat(sg, rest.slice(j));
+            const L = pathLen(start,cand,back);
+            if(L < best - 1e-9){ P = cand; best = L; improved = true; break; }
+          }
+        }
+      }
+    }
   }
-  return twoOpt(null,best);
+  return P;
 }
-function optimize(){
-  const startP = parseAddress(state.start);
+function polish(start, path, back){
+  let P = twoOpt(start, path, back);
+  for(let r=0;r<3;r++){
+    const before = pathLen(start,P,back);
+    P = twoOpt(start, orOpt(start, P, back), back);
+    if(pathLen(start,P,back) >= before - 1e-9) break;
+  }
+  return P;
+}
+// Barrido por franjas: recorre la zona en franjas de calles (o de carreras) yendo y viniendo, como se reparte a mano.
+function sweeps(start, pts){
+  const out = [];
+  for(const axis of ["y","x"]){
+    const other = axis==="y" ? "x" : "y";
+    for(const w of [2,3,4,6,8,12]){
+      for(const dir of [1,-1]){
+        const bands = new Map();
+        for(const p of pts){ const k = Math.floor(p[axis]/w); if(!bands.has(k)) bands.set(k,[]); bands.get(k).push(p); }
+        const keys = [...bands.keys()].sort((a,b)=>(a-b)*dir);
+        for(const firstAsc of [true,false]){
+          const path = []; let asc = firstAsc;
+          for(const k of keys){
+            const arr = bands.get(k).slice().sort((a,b)=> asc ? a[other]-b[other] : b[other]-a[other]);
+            path.push(...arr); asc = !asc;
+          }
+          out.push(path);
+        }
+      }
+    }
+  }
+  return out;
+}
+function solve(start, pts, back){
+  if(pts.length===0) return [];
+  if(pts.length===1) return pts.slice();
+  const cands = [];
+  // Vecino más cercano desde el inicio o, sin inicio, desde varias paradas posibles.
+  if(start) cands.push(nearest(start, pts));
+  else {
+    const tries = pts.length>60 ? pts.filter((_,i)=>i%Math.ceil(pts.length/60)===0) : pts;
+    for(const s0 of tries) cands.push([s0, ...nearest(s0, pts.filter(q=>q!==s0))]);
+  }
+  cands.push(...sweeps(start, pts));
+  // Se pulen los mejores candidatos y se queda el más corto.
+  cands.sort((a,b)=>pathLen(start,a,back)-pathLen(start,b,back));
+  let best = null, bl = Infinity;
+  for(const c of cands.slice(0, pts.length>80 ? 4 : 10)){
+    const P = polish(start, c, back), L = pathLen(start,P,back);
+    if(L < bl){ bl = L; best = P; }
+  }
+  return best;
+}
+// Punto desde donde se calcula: si ya hay entregas hechas, la última entregada (ahí está el repartidor); si no, el punto de partida.
+function currentOrigin(){
+  const done = state.stops.filter(s=>s.status==="done" && s.x!==null);
+  if(done.length && state.lastDoneId){
+    const ld = done.find(s=>s.id===state.lastDoneId); if(ld) return {x:ld.x,y:ld.y,label:ld.label};
+  }
+  return parseAddress(state.start);
+}
+function optimize(silent){
+  const origin = currentOrigin();
+  const back = !!state.roundTrip && !!parseAddress(state.start);
   const pend = state.stops.filter(s=>s.status!=="done");
   const done = state.stops.filter(s=>s.status==="done");
   const geo = pend.filter(s=>s.x!==null), unk = pend.filter(s=>s.x===null);
@@ -423,15 +512,57 @@ function optimize(){
     const groups = {};
     geo.forEach(s=>{ (groups[s.zone||"—"] ||= []).push(s); });
     const zs = Object.entries(groups).map(([z,arr])=>({z,arr,x:arr.reduce((a,s)=>a+s.x,0)/arr.length,y:arr.reduce((a,s)=>a+s.y,0)/arr.length}));
-    const zOrder = solve(startP, zs);
-    ordered = []; let cur = startP;
-    for(const zg of zOrder){ const part = solve(cur, zg.arr); ordered.push(...part); cur = part[part.length-1]; }
+    const zOrder = solve(origin, zs, false);
+    ordered = []; let cur = origin;
+    zOrder.forEach((zg,i)=>{ const last = i===zOrder.length-1; const part = solve(cur, zg.arr, last && back); ordered.push(...part); cur = part[part.length-1]; });
   } else {
-    ordered = solve(startP, geo);
+    ordered = solve(origin, geo, back);
   }
+  const before = pathLen(origin, geo, back), after = pathLen(origin, ordered, back);
   state.stops = [...ordered, ...unk, ...done];
   save(); render();
-  toast(unk.length ? `Ruta ordenada. ${unk.length} dirección(es) para revisar al final.` : "Ruta ordenada.");
+  if(!silent){
+    const ahorro = before - after > 0.5 ? ` Ahorro estimado: ${((before-after)*KM_PER_UNIT).toFixed(1)} km.` : "";
+    toast((unk.length ? `Ruta ordenada. ${unk.length} dirección(es) para revisar al final.` : "Ruta ordenada.") + ahorro);
+  }
+}
+
+/* ============ Mapa esquemático del recorrido ============ */
+// Dibuja las paradas en la cuadrícula de Bogotá (norte arriba, occidente a la izquierda) para ver si la ruta da vueltas.
+function drawMap(){
+  const cv = $("map"); if(!cv || $("mapWrap").hidden) return;
+  const css = getComputedStyle(document.documentElement);
+  const C = k => css.getPropertyValue(k).trim();
+  const W = cv.clientWidth || 320, H = Math.round(W*0.85), dpr = window.devicePixelRatio || 1;
+  cv.width = W*dpr; cv.height = H*dpr; cv.style.height = H+"px";
+  const g = cv.getContext("2d"); g.setTransform(dpr,0,0,dpr,0,0); g.clearRect(0,0,W,H);
+  const origin = currentOrigin();
+  const pend = state.stops.filter(s=>s.status!=="done" && s.x!==null);
+  const pts = origin ? [origin, ...pend] : pend;
+  if(!pend.length){ g.fillStyle=C("--muted"); g.font="14px "+C("--body"); g.fillText("Sin paradas ubicadas para dibujar.",12,24); return; }
+  let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
+  for(const p of pts){ minX=Math.min(minX,p.x); maxX=Math.max(maxX,p.x); minY=Math.min(minY,p.y); maxY=Math.max(maxY,p.y); }
+  const pad = 28, spanX = Math.max(2,maxX-minX), spanY = Math.max(2,maxY-minY);
+  const sc = Math.min((W-2*pad)/spanX, (H-2*pad)/spanY);
+  const ox = (W - spanX*sc)/2, oy = (H - spanY*sc)/2;
+  // Carrera crece hacia el occidente (izquierda); calle crece hacia el norte (arriba).
+  const X = p => ox + (maxX - p.x)*sc, Y = p => oy + (maxY - p.y)*sc;
+  // Cuadrícula de referencia cada 5 calles/carreras.
+  g.strokeStyle = C("--line"); g.lineWidth = 1; g.fillStyle = C("--muted"); g.font = "10px "+C("--body");
+  const step = spanX+spanY > 80 ? 10 : 5;
+  for(let v=Math.ceil(minX/step)*step; v<=maxX; v+=step){ const xx=X({x:v}); g.beginPath(); g.moveTo(xx,0); g.lineTo(xx,H); g.stroke(); g.fillText("Kr "+v, xx+2, H-4); }
+  for(let v=Math.ceil(minY/step)*step; v<=maxY; v+=step){ const yy=Y({y:v}); g.beginPath(); g.moveTo(0,yy); g.lineTo(W,yy); g.stroke(); g.fillText("Cl "+v, 2, yy-2); }
+  // Recorrido en escalera (como se anda por cuadras).
+  g.strokeStyle = C("--accent"); g.lineWidth = 3; g.lineJoin = "round"; g.beginPath();
+  g.moveTo(X(pts[0]),Y(pts[0]));
+  for(let i=1;i<pts.length;i++){ g.lineTo(X(pts[i]),Y(pts[i-1])); g.lineTo(X(pts[i]),Y(pts[i])); }
+  if(state.roundTrip && origin && parseAddress(state.start)){ const o=pts[0], l=pts[pts.length-1]; g.lineTo(X(o),Y(l)); g.lineTo(X(o),Y(o)); }
+  g.stroke();
+  // Paradas numeradas.
+  g.textAlign="center"; g.textBaseline="middle"; g.font = "600 11px "+C("--body");
+  pend.forEach((p,i)=>{ g.fillStyle=C("--ink"); g.beginPath(); g.arc(X(p),Y(p),10,0,7); g.fill(); g.fillStyle=C("--bg"); g.fillText(String(i+1),X(p),Y(p)+.5); });
+  if(origin){ g.fillStyle=C("--ok"); g.fillRect(X(origin)-7,Y(origin)-7,14,14); }
+  g.textAlign="start"; g.textBaseline="alphabetic";
 }
 
 /* ============ Navegación ============ */
@@ -453,7 +584,9 @@ function render(){
   $("stDone").textContent = state.stops.filter(s=>s.status==="done").length;
   const sp = parseAddress(state.start);
   const geo = pend.filter(s=>s.x!==null);
-  $("stKm").textContent = geo.length ? (pathLen(sp,geo)*KM_PER_UNIT).toFixed(1) : "0";
+  $("stKm").textContent = geo.length ? (pathLen(currentOrigin(),geo,!!state.roundTrip && !!sp)*KM_PER_UNIT).toFixed(1) : "0";
+  $("roundTrip").checked = !!state.roundTrip;
+  drawMap();
   $("start").value = state.start;
   $("byZone").checked = !!state.byZone;
   $("startInfo").textContent = state.start ? (sp ? "Ubicado: " + sp.label : "No reconozco esa dirección; se ordenará sin punto de partida.") : "Opcional. Sin punto de partida, la app elige el recorrido más corto.";
@@ -505,7 +638,8 @@ $("list").addEventListener("click", e=>{
   const s = state.stops[i];
   switch(b.dataset.act){
     case "done": s.status = s.status==="done" ? "pend" : "done";
-      if(s.status==="done"){ state.stops.splice(i,1); state.stops.push(s); toast("Entregado. Sigue con la parada 1."); }
+      if(s.status==="done"){ state.stops.splice(i,1); state.stops.push(s); if(s.x!==null) state.lastDoneId = s.id; toast("Entregado. Sigue con la parada 1."); }
+      else if(state.lastDoneId===s.id){ state.lastDoneId = null; }
       break;
     case "fail": s.status = s.status==="fail" ? "pend" : "fail";
       if(s.status==="fail"){ state.stops.splice(i,1); const firstDone = state.stops.findIndex(q=>q.status==="done"); state.stops.splice(firstDone<0?state.stops.length:firstDone,0,s); toast("Marcado como no estaba. Se movió al final de los pendientes."); }
@@ -547,11 +681,12 @@ $("frmEdit").addEventListener("submit", e=>{
     state.stops = state.stops.filter(s=>!s.example);
     const ns = mkStop(d); const firstDone = state.stops.findIndex(q=>q.status==="done");
     state.stops.splice(firstDone<0?state.stops.length:firstDone,0,ns);
-    toast(p ? "Paquete agregado. Pulsa «Ordenar ruta» cuando termines de cargar." : "Agregado, pero la dirección quedó para revisar.");
+    toast(p ? "Paquete agregado y ruta reordenada." : "Agregado, pero la dirección quedó para revisar.");
   } else {
     Object.assign(editing.s, d, {x:p?p.x:null, y:p?p.y:null, label:p?p.label:"", example:false});
   }
-  save(); render(); $("dlgEdit").close();
+  $("dlgEdit").close();
+  optimize(true);
 });
 
 let textMode = "one";
@@ -659,8 +794,11 @@ $("btnPaste").onclick = ()=>openText("one");
 $("btnBulk").onclick = ()=>openText("bulk");
 $("btnManual").onclick = ()=>openEdit({addr:""}, true);
 $("btnSort").onclick = optimize;
-$("start").addEventListener("change", e=>{ state.start = e.target.value.trim(); save(); render(); });
-$("byZone").addEventListener("change", e=>{ state.byZone = e.target.checked; save(); });
+$("start").addEventListener("change", e=>{ state.start = e.target.value.trim(); save(); optimize(true); });
+$("byZone").addEventListener("change", e=>{ state.byZone = e.target.checked; save(); optimize(true); });
+$("roundTrip").addEventListener("change", e=>{ state.roundTrip = e.target.checked; save(); optimize(true); });
+$("btnMap").onclick = ()=>{ const w=$("mapWrap"); w.hidden=!w.hidden; $("btnMap").textContent = w.hidden?"Ver":"Ocultar"; drawMap(); };
+addEventListener("resize", ()=>drawMap());
 $("btnNext").onclick = ()=>{
   const s = state.stops.find(q=>q.status==="pend") || state.stops.find(q=>q.status==="fail");
   if(!s){ toast("No quedan entregas pendientes."); return; }
@@ -683,9 +821,9 @@ $("btnNew").onclick = ()=>{
   const pend = state.stops.filter(s=>s.status!=="done").length;
   confirmBox("Empezar jornada nueva",
     (pend ? `Quedan ${pend} paquete(s) sin entregar. ` : "") + "Se borran todos los paquetes de este celular y la lista queda en cero. El punto de partida se conserva.",
-    ()=>{ state.stops=[]; state.seeded=true; save(); render(); window.scrollTo(0,0); toast("Jornada nueva lista. Toma la primera foto."); });
+    ()=>{ state.stops=[]; state.seeded=true; state.lastDoneId=null; save(); render(); window.scrollTo(0,0); toast("Jornada nueva lista. Toma la primera foto."); });
 };
-$("btnClearAll").onclick = ()=>confirmBox("Borrar toda la jornada","Se eliminan todos los paquetes y sus datos de este celular.",()=>{ state.stops=[]; save(); render(); toast("Jornada borrada."); });
+$("btnClearAll").onclick = ()=>confirmBox("Borrar toda la jornada","Se eliminan todos los paquetes y sus datos de este celular.",()=>{ state.stops=[]; state.lastDoneId=null; save(); render(); toast("Jornada borrada."); });
 
 /* ============ Respaldo (archivo en el celular) ============ */
 $("btnBackup").onclick = ()=>{
@@ -708,7 +846,7 @@ $("restoreFile").addEventListener("change", async e=>{
 });
 
 /* ============ App instalable y sin conexión ============ */
-const APP_VERSION = "1.0.0";
+const APP_VERSION = "1.1.0";
 $("ver").textContent = "Versión " + APP_VERSION + ". Funciona sin internet una vez abierta la primera vez.";
 function netState(){ if(SERVED) $("net").hidden = navigator.onLine; }
 addEventListener("online", netState); addEventListener("offline", netState); netState();
