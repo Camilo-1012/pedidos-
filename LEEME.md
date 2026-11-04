@@ -63,6 +63,12 @@ Con internet, la app hace tres cosas:
 - Si una dirección no aparece en el mapa, su ubicación se estima a partir de puntos de referencia y se marca con borde punteado.
 - OSRM no tiene un perfil especial para moto: los tiempos son de carro y no incluyen el trancón.
 
+## Escáner y Waze (v1.4)
+
+- **Escanear:** abre la cámara en vivo y lee el código de barras o el QR de la guía. En Chrome Android usa el lector propio del sistema; si no está, usa ZXing, incluido en la app. Del mismo cuadro lee el texto de la etiqueta para sacar la dirección. Tiene linterna y la opción «Seguir escaneando» para cargar varios paquetes seguidos.
+- **Waze:** al marcar **Entregado** se abre Waze con la siguiente parada (se puede apagar). Si la dirección quedó ubicada en su esquina, Waze recibe las coordenadas exactas.
+- **Rutas:** se prueba primero el servidor OSRM de FOSSGIS (`routing.openstreetmap.de`) y después el de demostración. Si hay clave, al final se usa openrouteservice (gratis, 59 puntos como máximo). Cada servidor tiene un reintento.
+
 ## Limitaciones conocidas
 
 - **El orden es aproximado.** Se calcula con la cuadrícula de calles y carreras, no con el mapa vial: no tiene en cuenta sentidos de las vías, humedales ni cierres.

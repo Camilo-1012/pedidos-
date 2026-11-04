@@ -1,6 +1,6 @@
 /* Service worker: guarda la app en el celular para que abra sin internet.
    Al publicar cambios, sube el número de CACHE para que los celulares descarguen la versión nueva. */
-const CACHE = "ruta-v1.3.0";
+const CACHE = "ruta-v1.4.0";
 const CORE = [
   "./", "index.html", "manifest.webmanifest",
   "icons/icon-192.png", "icons/icon-512.png", "icons/maskable-512.png", "icons/apple-touch-icon.png",
@@ -8,7 +8,7 @@ const CORE = [
   "fonts/barlow-condensed-latin-600-normal.woff2", "fonts/barlow-condensed-latin-700-normal.woff2",
   "ocr/tesseract.min.js", "ocr/worker.min.js", "ocr/spa-traineddata.wasm",
   "ocr/tesseract-core-simd-lstm.wasm.js", "ocr/tesseract-core-lstm.wasm.js",
-  "map/leaflet.js", "map/leaflet.css", "map/images/marker-icon.png", "map/images/marker-shadow.png"
+  "scan/zxing.min.js", "map/leaflet.js", "map/leaflet.css", "map/images/marker-icon.png", "map/images/marker-shadow.png"
 ];
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(CORE)));

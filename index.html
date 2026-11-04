@@ -110,6 +110,11 @@ dialog form{padding:16px;display:flex;flex-direction:column;gap:12px}
 .qty{display:block;margin-top:4px;font:700 15px/1 var(--display);color:var(--accent-ink);background:var(--accent);border-radius:6px;padding:3px 0}
 .stepper{display:grid;grid-template-columns:48px 1fr 48px;gap:6px;align-items:center}
 .stepper input{text-align:center;font-weight:700;font-size:18px}
+dialog.scan{width:min(640px,calc(100% - 16px))}
+.scanbox{position:relative;background:#000;border-radius:10px;overflow:hidden;aspect-ratio:3/4;max-height:62vh}
+.scanbox video{width:100%;height:100%;object-fit:cover;display:block}
+.scanframe{position:absolute;inset:18% 8%;border:3px solid var(--accent);border-radius:12px;box-shadow:0 0 0 999px rgba(0,0,0,.35)}
+.btn.waze{background:var(--ink);color:var(--bg);border-color:var(--ink)}
 .toast{position:fixed;left:50%;bottom:84px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 14px;border-radius:10px;font-size:14px;z-index:20;max-width:calc(100% - 32px);display:none}
 .toast.show{display:block}
 details summary{cursor:pointer;font-weight:600}
@@ -141,7 +146,8 @@ details summary{cursor:pointer;font-weight:600}
   <section class="card" aria-labelledby="hAdd">
     <h2 id="hAdd">Agregar paquete</h2>
     <div class="row">
-      <label class="btn primary" for="photo" style="flex-direction:row;color:var(--accent-ink);font-size:15px">Foto de la etiqueta</label>
+      <button type="button" class="primary" id="btnScan" style="flex-basis:100%">Escanear etiqueta (código o QR)</button>
+      <label class="btn" for="photo" style="flex-direction:row;color:var(--ink);font-size:15px">Foto</label>
       <input id="photo" type="file" accept="image/*" capture="environment" hidden>
       <button type="button" id="btnPaste">Pegar texto</button>
       <button type="button" id="btnManual">Escribir</button>
@@ -150,7 +156,7 @@ details summary{cursor:pointer;font-weight:600}
       <p class="hint" id="ocrMsg">Leyendo etiqueta…</p>
       <div class="progress"><i id="ocrBar"></i></div>
     </div>
-    <p class="hint">La foto se lee en el celular, no se envía a ningún servidor. Si la etiqueta está arrugada o no la lee bien, usa «Copiar texto» de Google Lens o de la galería y pégalo con «Pegar texto».</p>
+    <p class="hint">«Escanear» lee el código de la guía y la dirección en un solo paso. Todo se procesa en el celular. Si la etiqueta está muy arrugada, usa «Copiar texto» de Google Lens y «Pegar texto».</p>
   </section>
 
   <section class="card" aria-labelledby="hRoute">
@@ -167,6 +173,9 @@ details summary{cursor:pointer;font-weight:600}
     </label>
     <label style="flex-direction:row;align-items:center;gap:8px;color:var(--ink);font-size:15px">
       <input type="checkbox" id="realRoads" style="width:auto" checked> Calcular con las calles reales (necesita internet)
+    </label>
+    <label style="flex-direction:row;align-items:center;gap:8px;color:var(--ink);font-size:15px">
+      <input type="checkbox" id="autoWaze" style="width:auto" checked> Al marcar Entregado, abrir Waze con la siguiente parada
     </label>
     <p class="hint" id="routeInfo" aria-live="polite"></p>
     <div class="row">
@@ -201,6 +210,10 @@ details summary{cursor:pointer;font-weight:600}
           <label class="btn" for="restoreFile" style="flex-direction:row;color:var(--ink);font-size:15px">Restaurar respaldo</label>
           <input id="restoreFile" type="file" accept="application/json,.json" hidden>
         </div>
+        <label for="orsKey">Clave de openrouteservice (opcional, gratis): respaldo si fallan los servidores de rutas gratuitos
+          <input id="orsKey" autocomplete="off" spellcheck="false" placeholder="Pega aquí la clave">
+        </label>
+        <p class="hint">Se crea en openrouteservice.org (registro gratis con correo). La clave queda solo en este celular.</p>
         <p class="hint" id="ver"></p>
         <button type="button" class="danger" id="btnClearAll">Borrar toda la jornada</button>
         <p class="hint">Los datos quedan solo en este navegador del celular. Al terminar el día usa «Borrar toda la jornada»: las etiquetas tienen nombres y teléfonos de clientes.</p>
@@ -211,8 +224,8 @@ details summary{cursor:pointer;font-weight:600}
 </main>
 
 <div class="toolbar"><div class="wrap">
-  <button type="button" class="primary" id="btnNext">Ir a la siguiente</button>
-  <label class="btn" for="photo" style="flex-direction:row;color:var(--ink);font-size:15px">Otra foto</label>
+  <button type="button" class="primary" id="btnNext">Waze: siguiente</button>
+  <button type="button" id="btnScan2">Escanear</button>
 </div></div>
 
 <dialog id="dlgEdit">
@@ -248,6 +261,22 @@ details summary{cursor:pointer;font-weight:600}
   </form>
 </dialog>
 
+<dialog id="dlgScan" class="scan" aria-labelledby="scanTitle">
+  <form id="frmScan" style="padding:12px;display:flex;flex-direction:column;gap:10px">
+    <h2 id="scanTitle">Escanear etiqueta</h2>
+    <div class="scanbox"><video id="scanVideo" playsinline muted></video><div class="scanframe"></div></div>
+    <p class="hint" id="scanMsg" aria-live="polite">Abriendo cámara…</p>
+    <div class="row">
+      <button type="button" id="scanTorch" hidden>Linterna</button>
+      <button type="button" id="scanShot">Leer sin código</button>
+      <button type="button" id="scanClose">Cerrar</button>
+    </div>
+    <label style="flex-direction:row;align-items:center;gap:8px;color:var(--ink);font-size:15px">
+      <input type="checkbox" id="scanLoop" style="width:auto"> Seguir escaneando después de guardar cada paquete
+    </label>
+  </form>
+</dialog>
+
 <dialog id="dlgText">
   <form id="frmText">
     <h2 id="txtTitle">Pegar texto</h2>
@@ -275,6 +304,7 @@ details summary{cursor:pointer;font-weight:600}
 
 <script src="ocr/tesseract.min.js"></script>
 <script src="map/leaflet.js"></script>
+<script src="scan/zxing.min.js"></script>
 <script>
 "use strict";
 /* ============ Almacenamiento (solo en este navegador) ============ */
@@ -644,7 +674,7 @@ function nameRe(axis, o, sur, este, strict){
   const suf = axis==="calle" ? (sur ? " sur" : "") : (este ? " este" : "");
   return r + suf + "$";
 }
-const OVERPASS = ["https://overpass-api.de/api/interpreter", "https://overpass.kumi.systems/api/interpreter"];
+const OVERPASS = ["https://overpass-api.de/api/interpreter", "https://overpass.kumi.systems/api/interpreter", "https://overpass.private.coffee/api/interpreter"];
 async function fetchT(url, opts, ms){
   const ctl = new AbortController(); const t = setTimeout(()=>ctl.abort(), ms||20000);
   try{ return await fetch(url, {...(opts||{}), signal: ctl.signal}); } finally { clearTimeout(t); }
@@ -712,26 +742,64 @@ async function locateAll(list, onProgress){
   }
 }
 
-/* ============ Rutas con calles reales (OSRM) ============ */
-const OSRM = "https://router.project-osrm.org";
+/* ============ Rutas con calles reales ============ */
+// Se prueban varios servidores en orden; si uno falla o está saturado se pasa al siguiente.
+// Al final, si hay clave, openrouteservice. Si todo falla, la app usa el orden aproximado.
+const OSRM_SERVERS = [
+  {name:"OSRM (servidor de OpenStreetMap)", base:"https://routing.openstreetmap.de/routed-car"},
+  {name:"OSRM (servidor de demostración)", base:"https://router.project-osrm.org"}
+];
 let ROUTE_GEOM = null;
 const ll = c => c.lng.toFixed(6)+","+c.lat.toFixed(6);
-async function osrmTable(coords){
-  const r = await fetchT(OSRM + "/table/v1/driving/" + coords.map(ll).join(";") + "?annotations=duration,distance", {}, 25000);
-  if(!r.ok) throw new Error("rutas " + r.status);
-  const j = await r.json(); if(j.code!=="Ok") throw new Error("rutas " + j.code);
-  return j;
-}
-async function osrmRoute(coords){
-  const parts = [];
-  for(let i=0;i<coords.length-1;i+=49){
-    const chunk = coords.slice(i, i+50);
-    const r = await fetchT(OSRM + "/route/v1/driving/" + chunk.map(ll).join(";") + "?overview=full&geometries=geojson", {}, 25000);
-    if(!r.ok) throw new Error("trazado " + r.status);
-    const j = await r.json(); if(j.code!=="Ok" || !j.routes || !j.routes[0]) throw new Error("trazado " + j.code);
-    parts.push(...j.routes[0].geometry.coordinates.map(([lng,lat])=>[lat,lng]));
+const sleep = ms => new Promise(r=>setTimeout(r,ms));
+async function getJSON(url, opts, ms){
+  // Un reintento ante error de red, saturación (429) o falla del servidor (5xx).
+  let last;
+  for(let attempt=0; attempt<2; attempt++){
+    try{
+      const r = await fetchT(url, opts, ms);
+      if(r.status===429 || r.status>=500){ last = new Error("HTTP "+r.status); await sleep(1200); continue; }
+      if(!r.ok) throw new Error("HTTP "+r.status);
+      return await r.json();
+    }catch(e){ last = e; if(e.name==="AbortError") break; await sleep(800); }
   }
-  return parts;
+  throw last || new Error("sin respuesta");
+}
+async function matrix(coords){
+  const errs = [];
+  for(const sv of OSRM_SERVERS){
+    try{
+      const j = await getJSON(sv.base + "/table/v1/driving/" + coords.map(ll).join(";") + "?annotations=duration,distance", {}, 25000);
+      if(j.code!=="Ok" || !j.durations) throw new Error(j.code||"respuesta inválida");
+      return {durations:j.durations, distances:j.distances||null, provider:sv.name};
+    }catch(e){ errs.push(sv.name+": "+e.message); }
+  }
+  const key = (state.orsKey||"").trim();
+  if(key && coords.length <= 59){
+    try{
+      const j = await getJSON("https://api.openrouteservice.org/v2/matrix/driving-car", {method:"POST",
+        headers:{"Authorization":key,"Content-Type":"application/json"},
+        body:JSON.stringify({locations:coords.map(c=>[c.lng,c.lat]), metrics:["duration","distance"], units:"m"})}, 30000);
+      if(!j.durations) throw new Error("respuesta inválida");
+      return {durations:j.durations, distances:j.distances||null, provider:"openrouteservice"};
+    }catch(e){ errs.push("openrouteservice: "+e.message); }
+  }
+  throw new Error(errs.join(" · ") || "sin servidores");
+}
+async function routeGeom(coords){
+  for(const sv of OSRM_SERVERS){
+    try{
+      const parts = [];
+      for(let i=0;i<coords.length-1;i+=49){
+        const chunk = coords.slice(i, i+50);
+        const j = await getJSON(sv.base + "/route/v1/driving/" + chunk.map(ll).join(";") + "?overview=full&geometries=geojson", {}, 25000);
+        if(j.code!=="Ok" || !j.routes || !j.routes[0]) throw new Error(j.code);
+        parts.push(...j.routes[0].geometry.coordinates.map(([lng,lat])=>[lat,lng]));
+      }
+      return parts;
+    }catch(e){ console.warn("trazado", sv.name, e); }
+  }
+  return null;
 }
 async function realOrder(silent){
   overpassDown = false;
@@ -753,7 +821,7 @@ async function realOrder(silent){
   setRouteInfo("Calculando tiempos con las calles reales…");
   const hasO = origin && origin.lat!=null;
   const pts = hasO ? [origin, ...geo] : geo.slice();
-  const j = await osrmTable(pts.map(p=>({lat:p.lat,lng:p.lng})));
+  const j = await matrix(pts.map(p=>({lat:p.lat,lng:p.lng})));
   const n = pts.length, D = j.durations, KM = j.distances || null;
   // Celdas sin dato: se estiman con la cuadrícula (≈ 25 s por cuadra).
   for(let a=0;a<n;a++) for(let b=0;b<n;b++) if(D[a][b]==null) D[a][b] = gridDist(pts[a],pts[b])*25;
@@ -773,13 +841,13 @@ async function realOrder(silent){
   applyOrder(ordered.map(s=>s.id));
   const est = geo.filter(s=>s.geo!=="osm").length;
   state.route = {mode:"real", km: KM ? m/1000 : null, min: sec/60};
-  setRouteInfo(`Ruta con calles reales: ${KM ? (m/1000).toFixed(1)+" km · " : ""}${Math.round(sec/60)} min en carro sin trancón, más el tiempo en cada entrega.` +
+  setRouteInfo(`Ruta con calles reales: ${KM ? (m/1000).toFixed(1)+" km · " : ""}${Math.round(sec/60)} min en carro sin trancón, más el tiempo en cada entrega. Calculada con ${j.provider}.` +
     (est ? ` ${est} dirección(es) ubicadas de forma aproximada (borde punteado en el mapa).` : ""));
   save(); render();
   // Trazado para el mapa (no bloquea el orden si falla).
   try{
     const seq = (o ? [o] : []).concat(ordered).concat(back && o ? [o] : []);
-    if(seq.length>1){ ROUTE_GEOM = await osrmRoute(seq.map(p=>({lat:p.lat,lng:p.lng}))); drawMap(); }
+    if(seq.length>1){ ROUTE_GEOM = await routeGeom(seq.map(p=>({lat:p.lat,lng:p.lng}))); drawMap(); }
   }catch(e){ console.warn("trazado", e); }
 }
 
@@ -808,6 +876,10 @@ function drawLeaflet(pend){
   if(ROUTE_GEOM && ROUTE_GEOM.length){
     L.polyline(ROUTE_GEOM, {color:getComputedStyle(document.documentElement).getPropertyValue("--accent").trim()||"#f2b705", weight:5, opacity:.9}).addTo(LLAYER);
     ROUTE_GEOM.forEach(p=>bounds.push(p));
+  }
+  if(!(ROUTE_GEOM && ROUTE_GEOM.length)){
+    const seq = (o && o.lat!=null ? [[o.lat,o.lng]] : []).concat(pend.map(s=>[s.lat,s.lng]));
+    if(seq.length>1) L.polyline(seq, {color:"#888", weight:3, dashArray:"6 8"}).addTo(LLAYER);
   }
   if(o && o.lat!=null){
     L.marker([o.lat,o.lng], {icon:L.divIcon({className:"", html:'<div class="pin start"></div>', iconSize:[26,26]})}).addTo(LLAYER);
@@ -858,7 +930,13 @@ function drawSchematic(){
 
 /* ============ Navegación ============ */
 function navQuery(s){ return (s.label || s.addr) + ", Bogotá, Colombia"; }
-function wazeUrl(s){ return "https://waze.com/ul?q=" + encodeURIComponent(navQuery(s)) + "&navigate=yes"; }
+// Si la dirección quedó ubicada en su esquina exacta, Waze recibe las coordenadas (no se confunde con direcciones parecidas).
+function wazeUrl(s){
+  if(s.geo==="osm" && s.lat!=null) return `https://waze.com/ul?ll=${s.lat.toFixed(6)},${s.lng.toFixed(6)}&navigate=yes`;
+  return "https://waze.com/ul?q=" + encodeURIComponent(navQuery(s)) + "&navigate=yes";
+}
+function openExternal(url){ const a = document.createElement("a"); a.href = url; a.target = "_blank"; a.rel = "noopener"; document.body.appendChild(a); a.click(); a.remove(); }
+function nextStop(){ return state.stops.find(q=>q.status==="pend" && q.x!==null) || state.stops.find(q=>q.status==="pend") || state.stops.find(q=>q.status==="fail"); }
 function mapsUrl(s){ return "https://www.google.com/maps/dir/?api=1&destination=" + encodeURIComponent(navQuery(s)) + "&travelmode=driving"; }
 function mapsMultiUrl(stops){
   return "https://www.google.com/maps/dir/" + stops.map(s=>encodeURIComponent(navQuery(s))).join("/") ;
@@ -881,6 +959,8 @@ function render(){
   $("stKm").textContent = geo.length ? (real ? state.route.km : pathLen(currentOrigin(),geo,!!state.roundTrip && !!sp)*KM_PER_UNIT).toFixed(1) : "0";
   $("stKmLbl").textContent = real ? "km reales" : "km aprox.";
   $("realRoads").checked = state.realRoads !== false;
+  $("autoWaze").checked = state.autoWaze !== false;
+  if(document.activeElement !== $("orsKey")) $("orsKey").value = state.orsKey || "";
   $("routeInfo").textContent = state.routeNote || "";
   $("roundTrip").checked = !!state.roundTrip;
   drawMap();
@@ -912,7 +992,7 @@ function render(){
         ${s.notes?`<div class="who">${esc(s.notes)}</div>`:""}
       </div>
       <div class="actions">
-        <a class="btn small" href="${wazeUrl(s)}" target="_blank" rel="noopener">Waze</a>
+        <a class="btn small waze" href="${wazeUrl(s)}" target="_blank" rel="noopener">Waze</a>
         <a class="btn small" href="${mapsUrl(s)}" target="_blank" rel="noopener">Maps</a>
         ${s.phone?`<a class="btn small" href="tel:${esc(s.phone)}">Llamar</a>`:`<button class="small" data-act="edit">Tel.</button>`}
         <button class="small ${isDone?"":"primary"}" data-act="done">${isDone?"Deshacer":"Entregado"}</button>
@@ -935,7 +1015,8 @@ $("list").addEventListener("click", e=>{
   const s = state.stops[i];
   switch(b.dataset.act){
     case "done": s.status = s.status==="done" ? "pend" : "done";
-      if(s.status==="done"){ state.stops.splice(i,1); state.stops.push(s); if(s.x!==null) state.lastDoneId = s.id; toast((s.qty||1)>1 ? `Entregados ${s.qty} paquetes. Sigue con la parada 1.` : "Entregado. Sigue con la parada 1."); }
+      if(s.status==="done"){ state.stops.splice(i,1); state.stops.push(s); if(s.x!==null) state.lastDoneId = s.id; toast((s.qty||1)>1 ? `Entregados ${s.qty} paquetes. Sigue con la parada 1.` : "Entregado. Sigue con la parada 1.");
+        if(state.autoWaze !== false){ const nx = nextStop(); if(nx){ save(); render(); openExternal(wazeUrl(nx)); return; } else toast("¡Terminaste! No quedan entregas pendientes."); } }
       else if(state.lastDoneId===s.id){ state.lastDoneId = null; }
       break;
     case "fail": s.status = s.status==="fail" ? "pend" : "fail";
@@ -988,7 +1069,7 @@ function addOrMerge(d){
   state.stops.splice(firstDone<0?state.stops.length:firstDone,0,ns);
   return {merged:false, stop:ns};
 }
-$("dlgCancel").onclick = ()=>$("dlgEdit").close();
+$("dlgCancel").onclick = ()=>{ fromScan = false; $("dlgEdit").close(); };
 $("frmEdit").addEventListener("submit", e=>{
   e.preventDefault();
   const d = {addr:$("fAddr").value.trim(), zone:$("fZone").value.trim(), phone:$("fPhone").value.replace(/\D/g,"").slice(-10),
@@ -1009,6 +1090,8 @@ $("frmEdit").addEventListener("submit", e=>{
   }
   $("dlgEdit").close();
   optimize(true);
+  if(fromScan && state.scanLoop && editing.isNew) setTimeout(startScan, 600);
+  fromScan = false;
 });
 
 let textMode = "one";
@@ -1077,6 +1160,163 @@ async function prepImage(file){
   g.putImageData(im,0,0);
   return c;
 }
+// Lee el texto de una imagen (archivo o cuadro de la cámara) y extrae dirección, teléfono, zona y guía.
+async function ocrSource(src){
+  const img = await prepImage(src);
+  const w = await getWorker();
+  await w.setParameters({tessedit_pageseg_mode:"3"});
+  let { data } = await w.recognize(img);
+  let d = extractLabel(data.text);
+  if(!parseAddress(d.addr)){
+    // Segundo intento: modo "texto disperso", útil cuando la etiqueta está torcida o arrugada.
+    $("ocrMsg").textContent = "Segundo intento…";
+    await w.setParameters({tessedit_pageseg_mode:"11"});
+    const r2 = await w.recognize(img); const d2 = extractLabel(r2.data.text);
+    if(parseAddress(d2.addr) || (!d.phone && d2.phone)) d = d2;
+  }
+  return d;
+}
+
+/* ============ Escáner de código de barras / QR ============ */
+// Con la cámara en vivo se lee el código de la guía (Chrome Android trae lector propio; si no, se usa ZXing).
+// Del mismo cuadro se lee el texto de la etiqueta para sacar la dirección.
+let scanStream = null, scanTimer = null, scanBusy = false, scanDet = null, fromScan = false, torchOn = false;
+const ZX_FORMATS = () => [ZXing.BarcodeFormat.QR_CODE, ZXing.BarcodeFormat.CODE_128, ZXing.BarcodeFormat.CODE_39, ZXing.BarcodeFormat.CODE_93,
+  ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.ITF, ZXing.BarcodeFormat.DATA_MATRIX, ZXing.BarcodeFormat.PDF_417, ZXing.BarcodeFormat.CODABAR];
+async function makeDetector(){
+  if("BarcodeDetector" in window){
+    try{
+      const want = ["qr_code","code_128","code_39","code_93","ean_13","ean_8","itf","data_matrix","pdf417","codabar","upc_a"];
+      const sup = (await BarcodeDetector.getSupportedFormats()).filter(f=>want.includes(f));
+      if(sup.length) return {kind:"nativo", d:new BarcodeDetector({formats:sup})};
+    }catch(e){}
+  }
+  if(window.ZXing){
+    const r = new ZXing.MultiFormatReader(), h = new Map();
+    h.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, ZX_FORMATS()); h.set(ZXing.DecodeHintType.TRY_HARDER, true);
+    r.setHints(h);
+    return {kind:"zxing", r, c:document.createElement("canvas")};
+  }
+  return null;
+}
+async function detectCodes(v){
+  if(!scanDet) return [];
+  if(scanDet.kind==="nativo"){
+    const res = await scanDet.d.detect(v);
+    return res.map(x=>x.rawValue).filter(Boolean);
+  }
+  const c = scanDet.c, sc = Math.min(1, 1280/v.videoWidth);
+  c.width = Math.round(v.videoWidth*sc); c.height = Math.round(v.videoHeight*sc);
+  c.getContext("2d", {willReadFrequently:true}).drawImage(v,0,0,c.width,c.height);
+  try{
+    const lum = new ZXing.HTMLCanvasElementLuminanceSource(c);
+    const out = scanDet.r.decodeWithState(new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(lum)));
+    return out ? [out.getText()] : [];
+  }catch(e){ return []; }
+}
+function grabFrame(v){
+  const c = document.createElement("canvas"); c.width = v.videoWidth; c.height = v.videoHeight;
+  c.getContext("2d").drawImage(v,0,0); return c;
+}
+function stopScan(){
+  clearInterval(scanTimer); scanTimer = null; torchOn = false;
+  if(scanStream){ scanStream.getTracks().forEach(t=>t.stop()); scanStream = null; }
+  const v = $("scanVideo"); v.srcObject = null;
+  if($("dlgScan").open) $("dlgScan").close();
+}
+async function startScan(){
+  if(!SERVED || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){ toast("La cámara en vivo no está disponible aquí. Usa «Foto»."); $("photo").click(); return; }
+  $("scanLoop").checked = !!state.scanLoop;
+  $("scanMsg").textContent = "Abriendo cámara…"; $("scanTorch").hidden = true;
+  $("dlgScan").showModal();
+  try{
+    scanStream = await navigator.mediaDevices.getUserMedia({audio:false, video:{facingMode:{ideal:"environment"}, width:{ideal:1920}, height:{ideal:1080}}});
+  }catch(e){
+    $("dlgScan").close();
+    toast("No se pudo abrir la cámara. Revisa que la app tenga permiso de cámara en los ajustes del celular.");
+    return;
+  }
+  const v = $("scanVideo"); v.srcObject = scanStream;
+  try{ await v.play(); }catch(e){}
+  const track = scanStream.getVideoTracks()[0];
+  const caps = track && track.getCapabilities ? track.getCapabilities() : {};
+  $("scanTorch").hidden = !caps.torch;
+  scanDet = scanDet || await makeDetector();
+  $("scanMsg").textContent = scanDet ? "Apunta al código de barras o al QR de la etiqueta. Si no tiene código, toca «Leer sin código»." :
+    "Este celular no puede leer códigos; toca «Leer sin código» para leer el texto de la etiqueta.";
+  scanTimer = setInterval(scanTick, 250);
+}
+async function scanTick(){
+  const v = $("scanVideo");
+  if(scanBusy || !v.videoWidth || !scanStream) return;
+  scanBusy = true;
+  try{
+    const codes = await detectCodes(v);
+    if(codes.length){
+      if(navigator.vibrate) navigator.vibrate(80);
+      const frame = grabFrame(v);
+      stopScan();
+      await processScan(codes, frame);
+    }
+  }catch(e){ console.warn(e); }
+  finally{ scanBusy = false; }
+}
+// Convierte el contenido del código en número de guía (si es una URL de rastreo, se toma el código que trae).
+function guiaFromCode(t){
+  t = t.trim();
+  if(/^https?:\/\//i.test(t)){
+    try{
+      const u = new URL(t);
+      const cands = [...u.searchParams.values(), ...u.pathname.split("/")].map(x=>x.trim()).filter(x=>/^[A-Za-z0-9-]{6,}$/.test(x));
+      return cands.length ? cands[cands.length-1] : t;
+    }catch(e){ return t; }
+  }
+  return t.replace(/\s+/g,"");
+}
+async function processScan(codes, frame){
+  let fromCode = null, guia = "";
+  for(const c of codes){
+    const dd = extractLabel(String(c).replace(/[|;]/g,"\n"));
+    if(parseAddress(dd.addr)) fromCode = {...dd, raw:"Código: "+c};
+    else if(!guia) guia = guiaFromCode(String(c));
+  }
+  if(guia && hasGuia(guia)){
+    toast("Esa guía ya está cargada.");
+    if(state.scanLoop) setTimeout(startScan, 900);
+    return;
+  }
+  let d = fromCode;
+  if(!d){
+    // El código no trae la dirección: se lee el texto del mismo cuadro.
+    $("ocrBox").hidden = false; $("ocrBar").style.width = "0%"; $("ocrMsg").textContent = "Código leído. Leyendo la dirección…";
+    try{ d = await ocrSource(frame); }
+    catch(e){ console.error(e); d = {addr:"", raw:""}; }
+    $("ocrBox").hidden = true;
+  }
+  if(guia) d.guia = guia;
+  fromScan = true;
+  openEdit(d, true);
+  if(!parseAddress(d.addr)) toast(guia ? "Guía leída. La dirección no se leyó bien: corrígela o toca «Cancelar» y usa «Foto»." : "No pude leer la dirección. Corrígela a mano.");
+}
+$("btnScan").onclick = startScan;
+$("btnScan2").onclick = startScan;
+$("scanClose").onclick = ()=>{ stopScan(); };
+$("dlgScan").addEventListener("cancel", ()=>stopScan());
+$("scanLoop").addEventListener("change", e=>{ state.scanLoop = e.target.checked; save(); });
+$("scanTorch").onclick = async ()=>{
+  const t = scanStream && scanStream.getVideoTracks()[0]; if(!t) return;
+  torchOn = !torchOn;
+  try{ await t.applyConstraints({advanced:[{torch:torchOn}]}); $("scanTorch").textContent = torchOn ? "Apagar linterna" : "Linterna"; }catch(e){ torchOn = false; }
+};
+$("scanShot").onclick = async ()=>{
+  const v = $("scanVideo"); if(!v.videoWidth) return;
+  const frame = grabFrame(v); stopScan();
+  $("ocrBox").hidden = false; $("ocrBar").style.width = "0%"; $("ocrMsg").textContent = "Leyendo la etiqueta…";
+  let d; try{ d = await ocrSource(frame); }catch(e){ d = {addr:"", raw:""}; }
+  $("ocrBox").hidden = true; fromScan = true; openEdit(d, true);
+  if(!parseAddress(d.addr)) toast("No pude leer la dirección. Corrígela a mano.");
+};
+
 const SERVED = /^https?:$/.test(location.protocol);
 if(!SERVED){
   $("net").hidden = false;
@@ -1091,18 +1331,7 @@ $("photo").addEventListener("change", async e=>{
   }
   $("ocrBox").hidden = false; $("ocrBar").style.width="0%"; $("ocrMsg").textContent = "Preparando lector…";
   try{
-    const img = await prepImage(f);
-    const w = await getWorker();
-    await w.setParameters({tessedit_pageseg_mode:"3"});
-    let { data } = await w.recognize(img);
-    let d = extractLabel(data.text);
-    if(!parseAddress(d.addr)){
-      // Segundo intento: modo "texto disperso", útil cuando la etiqueta está torcida o arrugada.
-      $("ocrMsg").textContent = "Segundo intento…";
-      await w.setParameters({tessedit_pageseg_mode:"11"});
-      const r2 = await w.recognize(img); const d2 = extractLabel(r2.data.text);
-      if(parseAddress(d2.addr) || (!d.phone && d2.phone)) d = d2;
-    }
+    const d = await ocrSource(f);
     $("ocrBox").hidden = true;
     openEdit(d, true);
     if(!parseAddress(d.addr)) toast("No pude leer bien la dirección. Corrígela a mano.");
@@ -1126,10 +1355,13 @@ $("realRoads").addEventListener("change", e=>{ state.realRoads = e.target.checke
 $("btnMap").onclick = ()=>{ const w=$("mapWrap"); w.hidden=!w.hidden; $("btnMap").textContent = w.hidden?"Ver":"Ocultar"; drawMap(); };
 addEventListener("resize", ()=>drawMap());
 $("btnNext").onclick = ()=>{
-  const s = state.stops.find(q=>q.status==="pend") || state.stops.find(q=>q.status==="fail");
+  const s = nextStop();
   if(!s){ toast("No quedan entregas pendientes."); return; }
   const li = document.querySelector(`li[data-id="${s.id}"]`); if(li) li.scrollIntoView({behavior:"smooth",block:"center"});
+  openExternal(wazeUrl(s));
 };
+$("autoWaze").addEventListener("change", e=>{ state.autoWaze = e.target.checked; save(); });
+$("orsKey").addEventListener("change", e=>{ state.orsKey = e.target.value.trim(); save(); toast(state.orsKey ? "Clave guardada en este celular." : "Clave borrada."); });
 $("btnMaps").onclick = ()=>{
   const next = state.stops.filter(s=>s.status!=="done" && s.x!==null).slice(0,9);
   if(!next.length){ toast("No hay paradas ubicadas."); return; }
@@ -1172,7 +1404,7 @@ $("restoreFile").addEventListener("change", async e=>{
 });
 
 /* ============ App instalable y sin conexión ============ */
-const APP_VERSION = "1.3.0";
+const APP_VERSION = "1.4.0";
 $("ver").textContent = "Versión " + APP_VERSION + ". Funciona sin internet una vez abierta la primera vez.";
 function netState(){ if(SERVED) $("net").hidden = navigator.onLine; }
 addEventListener("online", ()=>{ netState(); if(state.stops.some(s=>s.status!=="done")) optimize(true); }); addEventListener("offline", netState); netState();
