@@ -1,6 +1,6 @@
 /* Service worker: guarda la app en el celular para que abra sin internet.
    Al publicar cambios, sube el número de CACHE para que los celulares descarguen la versión nueva. */
-const CACHE = "ruta-v1.19";
+const CACHE = "ruta-v1.20";
 const CORE = [
   "./", "index.html", "manifest.webmanifest",
   "icons/icon-192.png", "icons/icon-512.png", "icons/maskable-512.png", "icons/apple-touch-icon.png",
@@ -11,7 +11,14 @@ const CORE = [
   "scan/zxing.min.js", "map/leaflet.js", "map/leaflet.css", "map/images/marker-icon.png", "map/images/marker-shadow.png"
 ];
 self.addEventListener("install", e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(CORE)));
+  // cache:"reload" evita guardar copias viejas que el navegador tenga en su caché HTTP.
+  // No se activa sola: espera a que la persona toque «Actualizar» (mensaje skipWaiting).
+  e.waitUntil(caches.open(CACHE).then(c => c.addAll(CORE.map(u => new Request(u, { cache: "reload" })))));
+});
+self.addEventListener("message", e => {
+  const t = e.data && e.data.type;
+  if (t === "skipWaiting") self.skipWaiting();
+  else if (t === "version" && e.source) e.source.postMessage({ type: "version", version: CACHE.replace(/^ruta-v/, "") });
 });
 self.addEventListener("activate", e => {
   e.waitUntil(

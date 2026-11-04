@@ -93,3 +93,10 @@ Con internet, la app hace tres cosas:
 - Limitaciones:
   - Los usuarios existen solo en ese celular, porque no hay servidor.
   - El PIN bloquea la app, pero los datos guardados no van cifrados. Alguien con el celular desbloqueado y herramientas de desarrollador podría leerlos. Por eso conviene que el celular tenga su propio bloqueo de pantalla.
+
+## Actualizaciones (v1.20)
+
+- La app revisa si hay versión nueva al volver a ella y cada 30 minutos. También se puede revisar a mano en «Más opciones» → «Buscar actualización».
+- Si hay versión nueva, se descarga sola y aparece arriba «Hay una versión nueva (x.y) — Actualizar».
+- La app nunca se recarga sola, así que no se pierde una edición a medias. Al tocar «Actualizar» se recarga sin pedir el PIN y conserva la ruta.
+- Al publicar cambios: subir `CACHE` en `sw.js` y `APP_VERSION` en `index.html` con el mismo número.

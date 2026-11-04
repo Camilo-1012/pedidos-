@@ -167,6 +167,8 @@ details summary{cursor:pointer;font-weight:600}
 }
 @media (prefers-reduced-motion: reduce){*{transition:none!important}}
 
+/* Aviso de versión nueva */
+.upd:not([hidden]){display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;background:rgba(242,183,5,.16);border:1px solid var(--accent);border-radius:8px;padding:6px 6px 6px 10px;font-size:14px;font-weight:600}
 /* Bloqueo con PIN y usuarios */
 .lock:not([hidden]){position:fixed;inset:0;z-index:100;background:var(--ink);color:var(--bg);display:flex;align-items:flex-start;justify-content:center;overflow:auto;padding:calc(24px + env(safe-area-inset-top)) 16px calc(24px + env(safe-area-inset-bottom))}
 .lockBox{width:min(360px,100%);display:flex;flex-direction:column;align-items:center;gap:14px;text-align:center}
@@ -207,6 +209,7 @@ details summary{cursor:pointer;font-weight:600}
         <button type="button" class="primary small" id="btnNew">Nueva jornada</button>
       </div>
     </div>
+    <div class="upd" id="upd" hidden role="status"><span id="updTxt">Hay una versión nueva de la app.</span><button type="button" class="primary small" id="updBtn">Actualizar</button></div>
     <span class="net" id="net" hidden>Sin internet: la app sigue funcionando. Waze y Maps necesitan señal.</span>
     <div class="stats">
       <div class="stat"><b id="stPend">0</b><span id="stPendLbl">pendientes</span></div>
@@ -335,6 +338,7 @@ details summary{cursor:pointer;font-weight:600}
         </label>
         <p class="hint">Se crea en openrouteservice.org (registro gratis con correo). La clave queda solo en este celular.</p>
         <p class="hint" id="ver"></p>
+        <button type="button" id="btnUpdCheck">Buscar actualización</button>
         <button type="button" class="danger" id="btnClearAll">Borrar toda la jornada</button>
         <p class="hint">Los datos quedan solo en este navegador del celular. Al terminar el día usa «Borrar toda la jornada»: las etiquetas tienen nombres y teléfonos de clientes.</p>
         <p class="hint">Cómo se calcula el orden: en Bogotá el número de la calle crece hacia el norte y el de la carrera hacia el occidente, así que la dirección misma da la posición aproximada. Las direcciones con nombre de avenida o rurales no se pueden ubicar y quedan al final marcadas «Revisar».</p>
@@ -2865,7 +2869,7 @@ $("restoreFile").addEventListener("change", async e=>{
 /* ============ App instalable y sin conexión ============ */
 // Al bloquear: apaga la cámara y cierra ventanas abiertas para que no queden datos a la vista.
 window.RUTA_onLock = ()=>{ try{ stopScan(); }catch(e){} };
-const APP_VERSION = "1.19";
+const APP_VERSION = "1.20";
 $("ver").textContent = "Versión " + APP_VERSION + ". Funciona sin internet una vez abierta la primera vez.";
 if(navigator.storage && navigator.storage.estimate){
   navigator.storage.estimate().then(e=>{ if(e && e.usage) $("ver").textContent += ` Espacio usado en este celular: ${(e.usage/1048576).toFixed(1).replace(".",",")} MB (la mayor parte es el lector de etiquetas).`; }).catch(()=>{});
@@ -2881,18 +2885,50 @@ $("btnInstall").onclick = async ()=>{
   deferredInstall.prompt(); await deferredInstall.userChoice.catch(()=>{}); deferredInstall = null; $("btnInstall").hidden = true;
 };
 addEventListener("appinstalled", ()=>{ $("btnInstall").hidden = true; toast("App instalada. Búscala en tu pantalla de inicio como «Ruta»."); });
+/* ---- Actualizaciones ----
+   La versión nueva se descarga sola, pero no reemplaza a la actual hasta que se toca «Actualizar»:
+   así nunca se recarga en medio de una edición. Al recargar no se pide el PIN (la sesión sigue). */
+let swReg = null, wantReload = false;
+function showUpdate(w){
+  if(!w || !navigator.serviceWorker.controller) return;
+  $("upd").hidden = false; $("updBtn").disabled = false; $("updBtn").textContent = "Actualizar";
+  $("updBtn").onclick = ()=>{
+    save(); wantReload = true;
+    $("updBtn").disabled = true; $("updBtn").textContent = "Actualizando…";
+    w.postMessage({type:"skipWaiting"});
+    setTimeout(()=>location.reload(), 5000); // por si el navegador no avisa el cambio
+  };
+  try{ w.postMessage({type:"version"}); }catch(e){}
+}
+function watchInstall(nw){
+  if(!nw) return;
+  nw.addEventListener("statechange", ()=>{ if(nw.state==="installed") showUpdate(nw); });
+}
+async function checkUpdate(manual){
+  if(!swReg){ if(manual) toast("Las actualizaciones necesitan abrir la app desde su dirección https."); return; }
+  if(!navigator.onLine){ if(manual) toast("Sin internet: busca la actualización cuando tengas señal."); return; }
+  try{ await swReg.update(); }catch(e){ if(manual) toast("No se pudo revisar. Intenta de nuevo con buena señal."); return; }
+  if(!manual) return;
+  if(swReg.waiting) showUpdate(swReg.waiting);
+  else if(swReg.installing) toast("Descargando la versión nueva… en un momento aparece el botón Actualizar.");
+  else toast("Ya tienes la última versión (" + APP_VERSION + ").");
+}
 if("serviceWorker" in navigator && location.protocol !== "file:"){
+  navigator.serviceWorker.addEventListener("message", e=>{
+    if(e.data && e.data.type==="version" && e.data.version !== APP_VERSION) $("updTxt").textContent = "Hay una versión nueva (" + e.data.version + ").";
+  });
+  navigator.serviceWorker.addEventListener("controllerchange", ()=>{ if(wantReload){ wantReload = false; location.reload(); } });
   navigator.serviceWorker.register("sw.js").then(reg=>{
-    reg.addEventListener("updatefound", ()=>{
-      const nw = reg.installing; if(!nw) return;
-      nw.addEventListener("statechange", ()=>{
-        if(nw.state==="installed" && navigator.serviceWorker.controller){
-          toast("Hay una versión nueva. Cierra y abre la app para usarla.");
-        }
-      });
-    });
+    swReg = reg;
+    if(reg.waiting) showUpdate(reg.waiting);
+    watchInstall(reg.installing);
+    reg.addEventListener("updatefound", ()=>watchInstall(reg.installing));
+    // Revisa al volver a la app y cada 30 minutos.
+    document.addEventListener("visibilitychange", ()=>{ if(document.visibilityState==="visible") checkUpdate(false); });
+    setInterval(()=>checkUpdate(false), 30*60000);
   }).catch(err=>console.warn("SW", err));
 }
+$("btnUpdCheck").onclick = ()=>checkUpdate(true);
 // Precarga el lector de etiquetas en segundo plano para que la primera foto sea rápida y funcione sin señal.
 if("requestIdleCallback" in window){ requestIdleCallback(()=>{ if(navigator.onLine) getWorker().catch(()=>{}); }, {timeout:8000}); }
 
