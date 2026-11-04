@@ -190,6 +190,10 @@ details summary{cursor:pointer;font-weight:600}
       <input type="checkbox" id="autoWaze" style="width:auto" checked> Al marcar Entregado, abrir Waze con la siguiente parada
     </label>
     <p class="hint" id="routeInfo" aria-live="polite"></p>
+    <div id="cmpBox" class="preview" hidden>
+      <p id="cmpInfo" style="margin:0;color:var(--ink)"></p>
+      <button type="button" class="small" id="btnRestore" hidden style="margin-top:8px">Volver al orden sugerido</button>
+    </div>
     <div class="row">
       <button type="button" class="dark" id="btnSort">Ordenar ruta</button>
       <button type="button" id="btnMaps">Abrir siguientes en Maps</button>
@@ -216,6 +220,7 @@ details summary{cursor:pointer;font-weight:600}
       <div style="display:flex;flex-direction:column;gap:10px;margin-top:12px">
         <button type="button" id="btnBulk">Pegar varias direcciones (una por línea)</button>
         <button type="button" id="btnCopy">Copiar lista en orden (para WhatsApp)</button>
+        <button type="button" id="btnReport">Reporte del día</button>
         <button type="button" id="btnClearDone">Quitar los entregados</button>
         <div class="row">
           <button type="button" id="btnBackup">Guardar respaldo</button>
@@ -310,6 +315,18 @@ details summary{cursor:pointer;font-weight:600}
     <div class="row">
       <button type="button" id="txtCancel">Cancelar</button>
       <button type="submit" class="primary">Continuar</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="dlgReport" aria-labelledby="repTitle">
+  <form id="frmReport">
+    <h2 id="repTitle">Reporte del día</h2>
+    <pre id="repText" style="white-space:pre-wrap;font:14px/1.45 var(--body);margin:0;max-height:55vh;overflow:auto;background:var(--bg);border-radius:8px;padding:10px"></pre>
+    <div class="row">
+      <button type="button" id="repCopy">Copiar</button>
+      <button type="button" id="repShare">Compartir</button>
+      <button type="submit" class="primary">Cerrar</button>
     </div>
   </form>
 </dialog>
@@ -469,7 +486,7 @@ function mkStop(d){
   const p = parseAddress(d.addr);
   return {id:Date.now().toString(36)+Math.random().toString(36).slice(2,7), addr:d.addr||"", name:d.name||"", phone:d.phone||"",
     zone:d.zone||"", barrio:d.barrio||"", guia:d.guia||"", qty:Math.max(1,Math.min(99,parseInt(d.qty,10)||1)), type:d.type||"", unit:d.unit||"", notes:d.notes||"", raw:d.raw||"", example:!!d.example,
-    x:p?p.x:null, y:p?p.y:null, label:p?p.label:"", status:"pend"};
+    x:p?p.x:null, y:p?p.y:null, label:p?p.label:"", status:"pend", created: Date.now() + (mkStop.seq = (mkStop.seq||0)+1)/1000};
 }
 function save(){ store.set(KEY,state); }
 
@@ -601,7 +618,7 @@ function currentOrigin(){
   const done = state.stops.filter(s=>s.status==="done" && s.x!==null);
   if(done.length && state.lastDoneId){
     const ld = done.find(s=>s.id===state.lastDoneId);
-    if(ld) return {x:ld.x,y:ld.y,label:ld.label,lat:ld.lat,lng:ld.lng};
+    if(ld) return {x:ld.x,y:ld.y,label:ld.label,lat:ld.lat,lng:ld.lng,id:ld.id};
   }
   const sp = parseAddress(state.start); if(!sp) return null;
   const c = geoCache[geoKey(sp)] || (state.startGeo && state.startGeo.label===sp.label ? state.startGeo : null);
@@ -647,6 +664,8 @@ async function optimizeNow(silent){
   MATRIX = null;
   const quick = orderStops(origin, geo, back);
   applyOrder(quick.map(s=>s.id));
+  state.suggestedIds = quick.map(s=>s.id);
+  LASTM = null;
   state.route = {mode:"aprox", km: pathLen(origin, quick, back)*KM_PER_UNIT};
   ROUTE_GEOM = null;
   save(); render();
@@ -885,7 +904,9 @@ async function realOrder(silent){
   for(const s of ordered){ sec += D[IDX.get(prev)][IDX.get(s)]; if(KM) m += KM[IDX.get(prev)][IDX.get(s)] || 0; prev = s; }
   if(back && o){ sec += D[IDX.get(prev)][IDX.get(o)]; if(KM) m += KM[IDX.get(prev)][IDX.get(o)] || 0; }
   IDX.clear();
+  LASTM = {idx: new Map(pts.map((p,i)=>[p===o ? "__o" : p.id, i])), D, KM, okey: originKey(o)};
   applyOrder(ordered.map(s=>s.id));
+  state.suggestedIds = ordered.map(s=>s.id);
   const est = geo.filter(s=>s.geo!=="osm").length;
   state.route = {mode:"real", km: KM ? m/1000 : null, min: sec/60};
   setRouteInfo(`Ruta con calles reales: ${KM ? (m/1000).toFixed(1)+" km · " : ""}${Math.round(sec/60)} min en carro sin trancón, más el tiempo en cada entrega. Calculada con ${j.provider}.` +
@@ -896,6 +917,128 @@ async function realOrder(silent){
     const seq = (o ? [o] : []).concat(ordered).concat(back && o ? [o] : []);
     if(seq.length>1){ ROUTE_GEOM = await routeGeom(seq.map(p=>({lat:p.lat,lng:p.lng}))); drawMap(); }
   }catch(e){ console.warn("trazado", e); }
+}
+
+/* ============ Comparación de órdenes ============ */
+// Se guarda la última matriz de tiempos reales para medir cualquier orden de las mismas paradas:
+// el sugerido, el orden en que se cargaron y el que deje el repartidor si mueve paradas a mano.
+let LASTM = null;
+function originKey(o){ return o ? (o.id || o.label || "") + "@" + (o.lat!=null ? o.lat.toFixed(5)+","+o.lng.toFixed(5) : "") : "-"; }
+function orderCost(origin, stops, back){
+  if(LASTM && stops.length && stops.every(s=>LASTM.idx.has(s.id))){
+    let oi = null;
+    if(origin){
+      if(origin.id && LASTM.idx.has(origin.id)) oi = LASTM.idx.get(origin.id);
+      else if(LASTM.okey === originKey(origin)) oi = LASTM.idx.get("__o");
+      else oi = undefined;
+    }
+    if(oi !== undefined){
+      let sec = 0, m = 0, prev = oi;
+      for(const s of stops){ const i = LASTM.idx.get(s.id); if(prev!=null){ sec += LASTM.D[prev][i]; if(LASTM.KM) m += LASTM.KM[prev][i]||0; } prev = i; }
+      if(back && oi!=null){ sec += LASTM.D[prev][oi]; if(LASTM.KM) m += LASTM.KM[prev][oi]||0; }
+      return {km: LASTM.KM ? m/1000 : null, min: sec/60, real: true};
+    }
+  }
+  return {km: pathLen(origin, stops, back)*KM_PER_UNIT, min: null, real: false};
+}
+// Tiempo/distancia estimados de un tramo (para el registro del día).
+function legCost(from, to){
+  if(!LASTM || !to || !LASTM.idx.has(to.id)) return null;
+  let fi = null;
+  if(from && from.id && LASTM.idx.has(from.id)) fi = LASTM.idx.get(from.id);
+  else if(from && LASTM.okey === originKey(from)) fi = LASTM.idx.get("__o");
+  if(fi==null) return null;
+  const ti = LASTM.idx.get(to.id);
+  return {sec: LASTM.D[fi][ti], m: LASTM.KM ? LASTM.KM[fi][ti] : null};
+}
+const fmtKm = v => v==null ? "" : v.toFixed(1).replace(".",",") + " km";
+const fmtMin = v => v==null ? "" : Math.round(v) + " min";
+const fmtCost = c => [fmtKm(c.km), fmtMin(c.min)].filter(Boolean).join(" · ");
+function diffTxt(a, b){ // a - b
+  const parts = [];
+  if(a.km!=null && b.km!=null) parts.push((a.km-b.km>=0?"+":"−") + fmtKm(Math.abs(a.km-b.km)));
+  if(a.min!=null && b.min!=null) parts.push((a.min-b.min>=0?"+":"−") + fmtMin(Math.abs(a.min-b.min)));
+  return parts.join(" · ");
+}
+function updateComparison(){
+  const box = $("cmpBox"); if(!box) return;
+  const origin = currentOrigin();
+  const back = !!state.roundTrip && !!parseAddress(state.start);
+  // Se comparan solo las paradas pendientes (las de «No estaba» quedan al final a propósito y no cuentan como cambio a mano).
+  const pend = state.stops.filter(s=>s.status==="pend" && s.x!==null);
+  if(pend.length < 2 || !state.suggestedIds){ box.hidden = true; return; }
+  const byId = new Map(pend.map(s=>[s.id,s]));
+  const sug = state.suggestedIds.map(id=>byId.get(id)).filter(Boolean);
+  pend.forEach(s=>{ if(!sug.includes(s)) sug.push(s); });
+  const load = pend.slice().sort((a,b)=>(a.created||0)-(b.created||0));
+  const cCur = orderCost(origin, pend, back), cSug = orderCost(origin, sug, back), cLoad = orderCost(origin, load, back);
+  const tag = cSug.real ? "con calles reales" : "aproximado";
+  const same = pend.every((s,i)=>s===sug[i]);
+  let html;
+  if(same){
+    const save = cLoad.km - cSug.km, pct = cLoad.km > 0 ? Math.round(100*save/cLoad.km) : 0;
+    html = pct >= 3
+      ? `<b>Ahorro del orden sugerido:</b> ${diffTxt(cLoad, cSug).replace(/\+/g,"")} (${pct} %) frente a repartir en el orden en que cargaste los paquetes.<br>Sugerido: ${fmtCost(cSug)} · Orden de carga: ${fmtCost(cLoad)} (${tag}).`
+      : `El orden en que cargaste los paquetes ya era casi igual de bueno (${fmtCost(cLoad)} frente a ${fmtCost(cSug)}, ${tag}).`;
+    state.cmpLast = {sugKm:cSug.km, sugMin:cSug.min, loadKm:cLoad.km, loadMin:cLoad.min, real:cSug.real};
+    if(!state.stops.some(s=>s.status==="done")) state.cmpFirst = state.cmpLast;
+  } else {
+    const worse = (cCur.min!=null ? cCur.min - cSug.min : cCur.km - cSug.km) > 0.05;
+    html = worse
+      ? `<b>Moviste paradas a mano:</b> tu orden suma ${diffTxt(cCur, cSug)} frente al sugerido (${tag}).`
+      : `<b>Moviste paradas a mano:</b> tu orden ahorra ${diffTxt(cSug, cCur).replace(/\+/g,"")} frente al sugerido (${tag}). Bien visto.`;
+  }
+  $("cmpInfo").innerHTML = html;
+  $("btnRestore").hidden = same;
+  box.hidden = false;
+}
+
+/* ============ Reporte del día ============ */
+const hhmm = t => new Date(t).toLocaleTimeString("es-CO",{hour:"2-digit",minute:"2-digit"});
+function dayReport(){
+  const done = state.stops.filter(s=>s.status==="done" && s.doneAt).sort((a,b)=>a.doneAt-b.doneAt);
+  const fail = state.stops.filter(s=>s.status==="fail");
+  const pend = state.stops.filter(s=>s.status==="pend");
+  const paq = arr => { const n = arr.reduce((a,s)=>a+(s.qty||1),0); return n + (n===1 ? " paquete" : " paquetes"); };
+  const par = n => n + (n===1 ? " parada" : " paradas");
+  const name = s => (s.label||s.addr) + ((s.type||s.unit) ? " ["+[UNIT_NAME[s.type]||"",s.unit].filter(Boolean).join(" ")+"]" : "");
+  const L = [];
+  L.push("Reporte del día · " + new Date().toLocaleDateString("es-CO",{weekday:"long",day:"numeric",month:"long"}));
+  L.push("");
+  L.push(`Entregadas: ${par(done.length)} (${paq(done)})`);
+  L.push(`No entregadas: ${fail.length}${fail.length?` (${paq(fail)})`:""}`);
+  fail.forEach(s=>L.push("  - " + name(s) + (s.name?" · "+s.name:"")));
+  if(pend.length) L.push(`Pendientes: ${pend.length} (${paq(pend)})`);
+  if(done.length){
+    const t0 = done[0].doneAt, t1 = done[done.length-1].doneAt, durMin = (t1-t0)/60000;
+    L.push("");
+    L.push(`Primera entrega: ${hhmm(t0)} · Última: ${hhmm(t1)}`);
+    if(done.length>1){
+      L.push(`Tiempo entre la primera y la última: ${Math.floor(durMin/60)} h ${Math.round(durMin%60)} min`);
+      L.push(`Promedio entre entregas: ${Math.round(durMin/(done.length-1))} min`);
+    }
+    // Real contra estimado, solo en tramos con estimación del mapa.
+    const legs = done.slice(1).map((s,i)=>({s, real:(s.doneAt-done[i].doneAt)/60000, est:s.legEst!=null ? s.legEst/60 : null, km:s.legKm}))
+      .filter(x=>x.est!=null && x.real>0 && x.real<240);
+    const kmEst = done.reduce((a,s)=>a+(s.legKm||0),0)/1000;
+    if(kmEst>0) L.push(`Km estimados recorridos: ${fmtKm(kmEst)}`);
+    if(legs.length){
+      const sumR = legs.reduce((a,x)=>a+x.real,0), sumE = legs.reduce((a,x)=>a+x.est,0);
+      L.push(`Manejo estimado por el mapa: ${Math.round(sumE)} min · tiempo real: ${Math.round(sumR)} min (${legs.length} tramos)`);
+      L.push(`→ En promedio ${Math.round((sumR-sumE)/legs.length)} min por parada se van en estacionar, entregar y trancón.`);
+      const worst = legs.filter(x=>x.real-x.est>10).sort((a,b)=>(b.real-b.est)-(a.real-a.est)).slice(0,3);
+      if(worst.length){
+        L.push("Tramos que más se demoraron frente a lo estimado:");
+        worst.forEach(x=>L.push(`  - ${x.s.label||x.s.addr}: ${Math.round(x.real)} min reales vs ${Math.round(x.est)} estimados`));
+      }
+    } else L.push("Sin tiempos del mapa para comparar (la ruta se calculó sin internet o con orden aproximado).");
+  }
+  const c = state.cmpFirst;
+  if(c && c.loadKm>c.sugKm){
+    L.push("");
+    L.push(`Ahorro estimado del orden sugerido al iniciar: ${fmtKm(c.loadKm-c.sugKm)}${c.loadMin!=null&&c.sugMin!=null?" · "+fmtMin(c.loadMin-c.sugMin):""} frente al orden de carga (${c.real?"calles reales":"aproximado"}).`);
+  }
+  return L.join("\n");
 }
 
 /* ============ Mapa esquemático del recorrido ============ */
@@ -1011,6 +1154,7 @@ function render(){
   $("routeInfo").textContent = state.routeNote || "";
   $("roundTrip").checked = !!state.roundTrip;
   drawMap();
+  updateComparison();
   $("start").value = state.start;
   $("byZone").checked = !!state.byZone;
   $("startInfo").textContent = state.start ? (sp ? "Ubicado: " + sp.label : "No reconozco esa dirección; se ordenará sin punto de partida.") : "Opcional. Sin punto de partida, la app elige el recorrido más corto.";
@@ -1062,12 +1206,19 @@ $("list").addEventListener("click", e=>{
   const i = state.stops.findIndex(s=>s.id===id); if(i<0) return;
   const s = state.stops[i];
   switch(b.dataset.act){
-    case "done": s.status = s.status==="done" ? "pend" : "done";
+    case "done": {
+      const from = currentOrigin();
+      s.status = s.status==="done" ? "pend" : "done";
+      if(s.status==="done"){
+        s.doneAt = Date.now();
+        const lc = legCost(from, s); s.legEst = lc ? lc.sec : null; s.legKm = lc ? lc.m : null;
+      } else { delete s.doneAt; delete s.legEst; delete s.legKm; }
+    }
       if(s.status==="done"){ state.stops.splice(i,1); state.stops.push(s); if(s.x!==null) state.lastDoneId = s.id; toast((s.qty||1)>1 ? `Entregados ${s.qty} paquetes. Sigue con la parada 1.` : "Entregado. Sigue con la parada 1.");
         if(state.autoWaze !== false){ const nx = nextStop(); if(nx){ save(); render(); openExternal(wazeUrl(nx)); return; } else toast("¡Terminaste! No quedan entregas pendientes."); } }
       else if(state.lastDoneId===s.id){ state.lastDoneId = null; }
       break;
-    case "fail": s.status = s.status==="fail" ? "pend" : "fail";
+    case "fail": s.status = s.status==="fail" ? "pend" : "fail"; if(s.status==="fail"){ s.failAt = Date.now(); s.failCount = (s.failCount||0)+1; }
       if(s.status==="fail"){ state.stops.splice(i,1); const firstDone = state.stops.findIndex(q=>q.status==="done"); state.stops.splice(firstDone<0?state.stops.length:firstDone,0,s); toast("Marcado como no estaba. Se movió al final de los pendientes."); }
       break;
     case "up": if(i>0){ [state.stops[i-1],state.stops[i]]=[state.stops[i],state.stops[i-1]]; } break;
@@ -1525,6 +1676,15 @@ $("btnNext").onclick = ()=>{
   const li = document.querySelector(`li[data-id="${s.id}"]`); if(li) li.scrollIntoView({behavior:"smooth",block:"center"});
   openExternal(wazeUrl(s));
 };
+$("btnRestore").onclick = ()=>{ if(state.suggestedIds){ applyOrder(state.suggestedIds); save(); render(); toast("Se restauró el orden sugerido."); } };
+$("btnReport").onclick = ()=>{ $("repText").textContent = dayReport(); $("dlgReport").showModal(); };
+$("frmReport").addEventListener("submit", e=>{ e.preventDefault(); $("dlgReport").close(); });
+$("repCopy").onclick = async ()=>{ try{ await navigator.clipboard.writeText($("repText").textContent); toast("Reporte copiado."); }catch(e){ toast("No se pudo copiar: mantén presionado el texto para copiarlo."); } };
+$("repShare").onclick = async ()=>{
+  const text = $("repText").textContent;
+  if(navigator.share){ try{ await navigator.share({title:"Reporte del día", text}); return; }catch(e){ if(e.name==="AbortError") return; } }
+  openExternal("https://wa.me/?text=" + encodeURIComponent(text));
+};
 $("autoWaze").addEventListener("change", e=>{ state.autoWaze = e.target.checked; save(); });
 $("orsKey").addEventListener("change", e=>{ state.orsKey = e.target.value.trim(); save(); toast(state.orsKey ? "Clave guardada en este celular." : "Clave borrada."); });
 $("btnMaps").onclick = ()=>{
@@ -1544,7 +1704,7 @@ $("btnNew").onclick = ()=>{
   const pend = state.stops.filter(s=>s.status!=="done").length;
   confirmBox("Empezar jornada nueva",
     (pend ? `Quedan ${pend} paquete(s) sin entregar. ` : "") + "Se borran todos los paquetes de este celular y la lista queda en cero. El punto de partida se conserva.",
-    ()=>{ state.stops=[]; state.seeded=true; state.lastDoneId=null; save(); render(); window.scrollTo(0,0); toast("Jornada nueva lista. Toma la primera foto."); });
+    ()=>{ state.stops=[]; state.seeded=true; state.lastDoneId=null; state.cmpFirst=null; state.cmpLast=null; state.suggestedIds=null; LASTM=null; save(); render(); window.scrollTo(0,0); toast("Jornada nueva lista. Toma la primera foto."); });
 };
 $("btnClearAll").onclick = ()=>confirmBox("Borrar toda la jornada","Se eliminan todos los paquetes y sus datos de este celular.",()=>{ state.stops=[]; state.lastDoneId=null; save(); render(); toast("Jornada borrada."); });
 
@@ -1569,7 +1729,7 @@ $("restoreFile").addEventListener("change", async e=>{
 });
 
 /* ============ App instalable y sin conexión ============ */
-const APP_VERSION = "1.6.0";
+const APP_VERSION = "1.7.0";
 $("ver").textContent = "Versión " + APP_VERSION + ". Funciona sin internet una vez abierta la primera vez.";
 function netState(){ if(SERVED) $("net").hidden = navigator.onLine; }
 addEventListener("online", ()=>{ netState(); if(state.stops.some(s=>s.status!=="done")) optimize(true); }); addEventListener("offline", netState); netState();
