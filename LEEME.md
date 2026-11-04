@@ -108,3 +108,14 @@ Con internet, la app hace tres cosas:
 - **Revisar cargue**:
   - Muestra el total de paradas y paquetes, y las novedades: dirección sin reconocer, ubicada solo por barrio, fuera de zona, sin guía, o más paquetes que guías.
   - «Verificar paquetes escaneando la guía» deja la cámara abierta: pasas cada paquete al subirlo y la app cuenta los verificados. Los que no tienen guía se confirman con «Lo tengo», y las guías que no están en la ruta quedan listadas aparte.
+
+## Ubicaciones aprendidas (v1.22)
+
+- Al marcar «Entregado», la app toma una lectura GPS nueva y la guarda como la ubicación real de esa dirección, si se cumple todo esto:
+  - el permiso de ubicación ya está concedido (no lo pide en ese momento);
+  - la precisión es de ±50 m o mejor;
+  - la lectura es posterior al toque;
+  - queda a menos de 400 m de donde la app ubicaba la dirección, u 800 m si solo era estimada.
+- Cuando esa dirección vuelve a llegar, se ubica exacta, sin consultar el mapa. Waze recibe las coordenadas y la tarjeta muestra «Ubicación exacta». Cada entrega nueva en el mismo sitio afina el punto con un promedio ponderado por precisión.
+- Los usuarios del celular comparten estas ubicaciones. Se guardan solo la dirección y las coordenadas, hasta 3.000 direcciones; las más viejas salen primero.
+- Se apaga o se borra en «Más opciones» → «Ubicaciones aprendidas».

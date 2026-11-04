@@ -354,6 +354,14 @@ details summary{cursor:pointer;font-weight:600}
           </label>
           <p class="hint" style="margin:0">Por defecto: Suba de la Av. Ciudad de Cali (Av. Carrera 104) hacia el río Bogotá, entre el río Juan Amarillo (≈ Calle 125) y la Calle 175. Puedes ajustar los números.</p>
         </fieldset>
+        <fieldset style="border:1px solid var(--line);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:8px">
+          <legend style="font-weight:600;padding:0 4px">Ubicaciones aprendidas</legend>
+          <label style="flex-direction:row;align-items:center;gap:8px;color:var(--ink);font-size:15px">
+            <input type="checkbox" id="learnOn" style="width:auto" checked> Al marcar Entregado, guardar la ubicación GPS real de esa dirección
+          </label>
+          <p class="hint" id="learnInfo" style="margin:0"></p>
+          <button type="button" class="small" id="learnClear">Borrar ubicaciones aprendidas</button>
+        </fieldset>
         <label for="orsKey">Clave de openrouteservice (opcional, gratis): respaldo si fallan los servidores de rutas gratuitos
           <input id="orsKey" autocomplete="off" spellcheck="false" placeholder="Pega aquí la clave">
         </label>
@@ -1317,6 +1325,47 @@ const GEO_KEY = "rutaEntregas.geo.v1";
 let geoCache = store.get(GEO_KEY) || {};
 function geoKey(pa){ return pa.label.toUpperCase(); }
 function saveGeo(){ store.set(GEO_KEY, geoCache); }
+/* ---- Ubicaciones aprendidas ----
+   Al marcar Entregado se toma el GPS (si ya hay permiso) y se guarda como la posición real de esa dirección.
+   Se comparte entre los usuarios del celular y solo guarda dirección → coordenadas (sin nombres ni teléfonos). */
+const LEARN_KEY = "rutaEntregas.learn.v1", LEARN_MAX = 3000, LEARN_ACC = 50;
+let learned = store.get(LEARN_KEY) || {};
+function saveLearned(){
+  const ks = Object.keys(learned);
+  if(ks.length > LEARN_MAX){ ks.sort((a,b)=>learned[a].t-learned[b].t).slice(0, ks.length-LEARN_MAX).forEach(k=>delete learned[k]); }
+  store.set(LEARN_KEY, learned);
+}
+async function geoPermission(){
+  try{ const r = await navigator.permissions.query({name:"geolocation"}); return r.state; }catch(e){ return "unknown"; }
+}
+async function learnSpot(s){
+  if(state.learnOn === false || s.example || !navigator.geolocation) return;
+  const pa = parseAddress(s.label || s.addr); if(!pa) return;
+  // Sin permiso ya concedido no se pregunta aquí: se abriría el aviso del navegador justo cuando sale Waze.
+  if(await geoPermission() !== "granted") return;
+  const doneAt = s.doneAt || Date.now();
+  navigator.geolocation.getCurrentPosition(pos=>{
+    const c = pos.coords, now = {lat:c.latitude, lng:c.longitude};
+    // Lecturas viejas (la app quedó atrás por Waze) o imprecisas no sirven: ya podría ir lejos de la entrega.
+    // Solo una lectura nueva, tomada después de tocar Entregado (no una guardada de la parada anterior).
+    if(c.accuracy > LEARN_ACC || pos.timestamp < doneAt - 3000 || pos.timestamp - doneAt > 60000 || s.status !== "done") return;
+    // Debe quedar cerca de donde la app creía la dirección: evita aprender si se marcó Entregado desde otro lado.
+    const ref = s.lat!=null ? {lat:s.lat, lng:s.lng} : estimate(pa.x, pa.y);
+    if(!ref) return;
+    const maxM = (s.geo==="osm" || s.geo==="gps") ? 400 : 800;
+    if(meters(now, ref) > maxM) return;
+    const k = geoKey(pa), L = learned[k];
+    if(L && meters(L, now) <= 150){
+      // Promedio ponderado por precisión: cada entrega afina la posición.
+      const w1 = (L.n||1) / (L.acc*L.acc), w2 = 1 / (c.accuracy*c.accuracy);
+      learned[k] = {lat:(L.lat*w1 + now.lat*w2)/(w1+w2), lng:(L.lng*w1 + now.lng*w2)/(w1+w2), acc:Math.round(Math.min(L.acc, c.accuracy)), n:(L.n||1)+1, t:Date.now()};
+    } else {
+      learned[k] = {lat:now.lat, lng:now.lng, acc:Math.round(c.accuracy), n:1, t:Date.now()};
+    }
+    saveLearned();
+    s.lat = learned[k].lat; s.lng = learned[k].lng; s.geo = "gps"; save();
+  }, ()=>{}, {enableHighAccuracy:true, maximumAge:0, timeout:20000});
+}
 // Puntos de referencia conocidos (carrera, calle → lat, lng) para estimar la posición cuando no se encuentra la esquina.
 const SEED = [
   [7.5,10.5,4.59806,-74.07583],   // Plaza de Bolívar (Cra 7 con Cl 10-11)
@@ -1396,6 +1445,7 @@ let geoMiss = store.get(MISS_KEY) || {};
 let overpassDown = false;
 async function geocode(pa){
   const k = geoKey(pa);
+  if(learned[k]) return {lat:learned[k].lat, lng:learned[k].lng, src:"gps", x:pa.x, y:pa.y};
   if(geoCache[k]) return geoCache[k];
   const est = estimate(pa.x, pa.y);
   const estRes = est ? {...est, src:"est", x:pa.x, y:pa.y} : null;
@@ -1423,7 +1473,7 @@ async function locateAll(list, onProgress){
   for(const s of list){
     i++;
     const pa = parseAddress(s.label || s.addr); if(!pa) continue;
-    const had = !!geoCache[geoKey(pa)];
+    const had = !!geoCache[geoKey(pa)] || !!learned[geoKey(pa)];
     if(onProgress && !had) onProgress(i, list.length);
     const g = await geocode(pa);
     if(g){ s.lat = g.lat; s.lng = g.lng; s.geo = g.src; }
@@ -1982,7 +2032,7 @@ function drawSchematic(){
 function navQuery(s){ return (s.label || s.addr) + ", Bogotá, Colombia"; }
 // Si la dirección quedó ubicada en su esquina exacta, Waze recibe las coordenadas (no se confunde con direcciones parecidas).
 function wazeUrl(s){
-  if((s.geo==="osm" || s.geo==="barrio") && s.lat!=null) return `https://waze.com/ul?ll=${s.lat.toFixed(6)},${s.lng.toFixed(6)}&navigate=yes`;
+  if((s.geo==="osm" || s.geo==="barrio" || s.geo==="gps") && s.lat!=null) return `https://waze.com/ul?ll=${s.lat.toFixed(6)},${s.lng.toFixed(6)}&navigate=yes`;
   return "https://waze.com/ul?q=" + encodeURIComponent(navQuery(s)) + "&navigate=yes";
 }
 function openExternal(url){ const a = document.createElement("a"); a.href = url; a.target = "_blank"; a.rel = "noopener"; document.body.appendChild(a); a.click(); a.remove(); }
@@ -2025,6 +2075,7 @@ function render(){
   drawMap();
   updateComparison();
   renderZoneSettings();
+  renderLearn();
   const outZ = state.stops.filter(s=>s.status!=="done" && zoneIssue(s)).length;
   $("zoneInfo").hidden = !outZ;
   $("zoneInfo").textContent = outZ ? `${outZ} parada(s) fuera de tu zona de trabajo (${zone().name}). Revisa si la dirección está bien escrita.` : "";
@@ -2061,6 +2112,7 @@ function render(){
           ${s.barrio?`<span class="chip">${esc(s.barrio)}</span>`:""}
           ${unk?'<span class="chip warn">Revisar dirección</span>':""}
           ${s.geo==="barrio"?`<span class="chip warn">Ubicada por barrio (aprox.)</span>`:""}
+          ${s.geo==="gps" && !isDone?`<span class="chip ok">Ubicación exacta</span>`:""}
           ${!isDone && zoneIssue(s)?`<span class="chip warn">Fuera de tu zona: ${esc(zoneIssue(s))}</span>`:""}
           ${s.zoneCheck && s.zoneCheck.bad?`<span class="chip warn">No coincide con ${esc(s.barrio)}: queda a ${s.zoneCheck.km.toFixed(1).replace(".",",")} km</span>`:""}
           ${isFail?'<span class="chip warn">Intento fallido</span>':""}
@@ -2095,6 +2147,7 @@ function toggleDone(s){
       s.status = s.status==="done" ? "pend" : "done";
       if(s.status==="done"){
         s.doneAt = Date.now();
+        learnSpot(s);
         const lc = legCost(from, s); s.legEst = lc ? lc.sec : null; s.legKm = lc ? lc.m : null;
       } else { delete s.doneAt; delete s.legEst; delete s.legKm; }
     }
@@ -3079,6 +3132,23 @@ $("repShare").onclick = async ()=>{
   openExternal("https://wa.me/?text=" + encodeURIComponent(text));
 };
 $("autoWaze").addEventListener("change", e=>{ state.autoWaze = e.target.checked; save(); });
+function renderLearn(){
+  const n = Object.keys(learned).length;
+  $("learnOn").checked = state.learnOn !== false;
+  geoPermission().then(st=>{
+    $("learnInfo").textContent = (n ? (n===1 ? "1 dirección" : `${n} direcciones`) + " con ubicación exacta en este celular. " : "Aún no hay direcciones aprendidas. ")
+      + (st === "granted" ? "La próxima vez que llegue una de esas direcciones se ubica exacta, sin depender del mapa."
+         : "Para aprender, primero toca «Usar mi ubicación actual» y permite la ubicación.")
+      + " Solo se guarda si el GPS tiene buena precisión (±50 m) y estás cerca de la dirección.";
+  });
+  $("learnClear").hidden = !n;
+}
+$("learnOn").addEventListener("change", e=>{ state.learnOn = e.target.checked; save(); renderLearn(); });
+$("learnClear").onclick = ()=>confirmBox("Borrar ubicaciones aprendidas", "Las direcciones se volverán a ubicar con el mapa, como al principio.", ()=>{
+  learned = {}; store.set(LEARN_KEY, learned);
+  for(const st of state.stops) if(st.geo==="gps"){ st.lat = null; st.lng = null; st.geo = null; }
+  save(); render(); renderLearn(); toast("Ubicaciones aprendidas borradas.");
+});
 $("orsKey").addEventListener("change", e=>{ state.orsKey = e.target.value.trim(); save(); toast(state.orsKey ? "Clave guardada en este celular." : "Clave borrada."); });
 $("btnMaps").onclick = ()=>{
   const next = state.stops.filter(s=>s.status!=="done" && s.x!==null).slice(0,9);
@@ -3124,7 +3194,7 @@ $("restoreFile").addEventListener("change", async e=>{
 /* ============ App instalable y sin conexión ============ */
 // Al bloquear: apaga la cámara y cierra ventanas abiertas para que no queden datos a la vista.
 window.RUTA_onLock = ()=>{ try{ stopScan(); }catch(e){} };
-const APP_VERSION = "1.21";
+const APP_VERSION = "1.22";
 $("ver").textContent = "Versión " + APP_VERSION + ". Funciona sin internet una vez abierta la primera vez.";
 if(navigator.storage && navigator.storage.estimate){
   navigator.storage.estimate().then(e=>{ if(e && e.usage) $("ver").textContent += ` Espacio usado en este celular: ${(e.usage/1048576).toFixed(1).replace(".",",")} MB (la mayor parte es el lector de etiquetas).`; }).catch(()=>{});
