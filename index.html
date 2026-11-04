@@ -128,6 +128,8 @@ dialog.scan{width:min(640px,calc(100% - 16px))}
 .seg input:checked + label{background:var(--ink);color:var(--bg);border-color:var(--ink)}
 .seg input:focus-visible + label{outline:3px solid var(--accent);outline-offset:2px}
 .chip.unit{color:var(--ink);border-color:var(--ink);font-weight:700}
+.hrow{border:1px solid var(--line);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:2px;font-size:14px}
+.hrow b{font-family:var(--display);font-size:17px}
 .toast{position:fixed;left:50%;bottom:84px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 14px;border-radius:10px;font-size:14px;z-index:20;max-width:calc(100% - 32px);display:none}
 .toast.show{display:block}
 details summary{cursor:pointer;font-weight:600}
@@ -239,6 +241,7 @@ details summary{cursor:pointer;font-weight:600}
         <button type="button" id="btnBulk">Pegar varias direcciones (una por línea)</button>
         <button type="button" id="btnCopy">Copiar lista en orden (para WhatsApp)</button>
         <button type="button" id="btnReport">Reporte del día</button>
+        <button type="button" id="btnHist">Historial de jornadas</button>
         <button type="button" id="btnClearDone">Quitar los entregados</button>
         <div class="row">
           <button type="button" id="btnBackup">Guardar respaldo</button>
@@ -377,6 +380,20 @@ details summary{cursor:pointer;font-weight:600}
     <div class="row">
       <button type="button" id="repCopy">Copiar</button>
       <button type="button" id="repShare">Compartir</button>
+      <button type="submit" class="primary">Cerrar</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="dlgHist" aria-labelledby="histTitle">
+  <form id="frmHist">
+    <h2 id="histTitle">Historial de jornadas</h2>
+    <div id="histTotals" class="preview" style="color:var(--ink)"></div>
+    <div id="histList" style="display:flex;flex-direction:column;gap:8px;max-height:45vh;overflow:auto"></div>
+    <p class="hint" id="histInfo"></p>
+    <div class="row">
+      <button type="button" id="histCsv">Exportar a Excel</button>
+      <button type="button" class="danger" id="histClear">Borrar historial</button>
       <button type="submit" class="primary">Cerrar</button>
     </div>
   </form>
@@ -1232,6 +1249,83 @@ function updateComparison(){
   box.hidden = false;
 }
 
+/* ============ Historial de jornadas (solo resumen) ============ */
+// Por cada día se guarda un resumen de números: sin nombres, teléfonos, direcciones ni fotos.
+// Ocupa unos pocos KB por día; se conservan los últimos 90 días.
+const HIST_KEY = "rutaEntregas.hist.v1", HIST_DAYS = 90;
+function histLoad(){ return store.get(HIST_KEY) || []; }
+function ymd(t){ const d = new Date(t); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
+function daySummary(){
+  const done = state.stops.filter(s=>s.status==="done" && s.doneAt).sort((a,b)=>a.doneAt-b.doneAt);
+  const fail = state.stops.filter(s=>s.status==="fail");
+  const pend = state.stops.filter(s=>s.status==="pend" && !s.example);
+  if(!done.length && !fail.length) return null;
+  const q = arr => arr.reduce((a,s)=>a+(s.qty||1),0);
+  const t0 = done.length ? done[0].doneAt : (fail[0].failAt||Date.now()), t1 = done.length ? done[done.length-1].doneAt : t0;
+  const legs = done.slice(1).map((s,i)=>({real:(s.doneAt-done[i].doneAt)/60000, est:s.legEst!=null ? s.legEst/60 : null})).filter(x=>x.est!=null && x.real>0 && x.real<240);
+  const sumR = legs.reduce((a,x)=>a+x.real,0), sumE = legs.reduce((a,x)=>a+x.est,0);
+  const c = state.cmpFirst;
+  return {
+    id: state.dayId || ymd(t0), fecha: ymd(t0),
+    entregas: done.length, paquetes: q(done), noEntregadas: fail.length, paqNoEntregados: q(fail), pendientes: pend.length,
+    inicio: t0, fin: t1, minutos: Math.round((t1-t0)/60000),
+    promEntreEntregas: done.length>1 ? Math.round((t1-t0)/60000/(done.length-1)) : null,
+    kmEstimados: +(done.reduce((a,s)=>a+(s.legKm||0),0)/1000).toFixed(1) || null,
+    manejoEstMin: legs.length ? Math.round(sumE) : null, realMin: legs.length ? Math.round(sumR) : null,
+    minPorParada: legs.length ? Math.round((sumR-sumE)/legs.length) : null,
+    ahorroKm: c && c.loadKm>c.sugKm ? +(c.loadKm-c.sugKm).toFixed(1) : null,
+    ahorroMin: c && c.loadMin!=null && c.sugMin!=null && c.loadMin>c.sugMin ? Math.round(c.loadMin-c.sugMin) : null,
+    callesReales: !!(c && c.real)
+  };
+}
+// Guarda (o actualiza) el resumen del día en curso. Se llama al entregar, al marcar «No estaba» y al empezar una jornada nueva.
+function recordDay(){
+  try{
+    const sum = daySummary(); if(!sum) return;
+    if(!state.dayId){ state.dayId = sum.id; }
+    let h = histLoad().filter(x=>x.id!==sum.id);
+    h.push(sum);
+    const limit = Date.now() - HIST_DAYS*864e5;
+    h = h.filter(x=>x.inicio >= limit).sort((a,b)=>a.inicio-b.inicio).slice(-150);
+    store.set(HIST_KEY, h);
+  }catch(e){ console.warn("historial", e); }
+}
+function fmtDate(t){ return new Date(t).toLocaleDateString("es-CO",{weekday:"short", day:"numeric", month:"short"}); }
+function histTotals(h, days){
+  const from = Date.now() - days*864e5, sel = h.filter(x=>x.inicio>=from);
+  const e = sel.reduce((a,x)=>a+x.entregas,0), f = sel.reduce((a,x)=>a+x.noEntregadas,0), pq = sel.reduce((a,x)=>a+x.paquetes,0);
+  const mins = sel.reduce((a,x)=>a+(x.minutos||0),0), ahorro = sel.reduce((a,x)=>a+(x.ahorroKm||0),0);
+  return {n:sel.length, e, f, pq, efect: e+f ? Math.round(100*e/(e+f)) : null, porHora: mins>0 ? (e/(mins/60)).toFixed(1).replace(".",",") : null, ahorro};
+}
+function renderHist(){
+  const h = histLoad().slice().reverse();
+  const t7 = histTotals(h,7), t30 = histTotals(h,30);
+  const line = (lbl,t) => t.n ? `<div><b>${lbl}:</b> ${t.n} jornada(s) · ${t.e} entregas (${t.pq} paquetes)${t.efect!=null?` · efectividad ${t.efect} %`:""}${t.porHora?` · ${t.porHora} entregas por hora`:""}${t.ahorro>0?` · ahorro estimado ${fmtKm(t.ahorro)}`:""}</div>` : `<div><b>${lbl}:</b> sin jornadas</div>`;
+  $("histTotals").innerHTML = line("Últimos 7 días", t7) + line("Últimos 30 días", t30);
+  $("histList").innerHTML = h.length ? h.map(x=>`<div class="hrow">
+      <b>${esc(fmtDate(x.inicio))}</b>
+      <span>${x.entregas} ${x.entregas===1?"entrega":"entregas"} (${x.paquetes} paq.)${x.noEntregadas?` · ${x.noEntregadas} no ${x.noEntregadas===1?"entregada":"entregadas"}`:""}${x.pendientes?` · ${x.pendientes} ${x.pendientes===1?"pendiente":"pendientes"}`:""}</span>
+      <span>${hhmm(x.inicio)} a ${hhmm(x.fin)} · ${Math.floor(x.minutos/60)} h ${x.minutos%60} min${x.promEntreEntregas?` · ${x.promEntreEntregas} min entre entregas`:""}</span>
+      ${x.kmEstimados||x.ahorroKm ? `<span>${x.kmEstimados?`≈ ${fmtKm(x.kmEstimados)} recorridos`:""}${x.ahorroKm?`${x.kmEstimados?" · ":""}ahorro ${fmtKm(x.ahorroKm)}${x.ahorroMin?" / "+x.ahorroMin+" min":""}`:""}</span>` : ""}
+    </div>`).join("") : `<p class="hint">Aún no hay jornadas. El resumen se guarda solo al marcar entregas.</p>`;
+  const kb = (new Blob([JSON.stringify(histLoad())]).size/1024).toFixed(1).replace(".",",");
+  $("histInfo").textContent = `${h.length} día(s) guardados · ocupa ${kb} KB · solo números del día, sin datos de clientes · se conservan los últimos ${HIST_DAYS} días.`;
+}
+function histCsv(){
+  const h = histLoad();
+  const cols = [["fecha","Fecha"],["entregas","Entregas"],["paquetes","Paquetes"],["noEntregadas","No entregadas"],["paqNoEntregados","Paquetes no entregados"],
+    ["pendientes","Pendientes"],["inicio","Primera entrega"],["fin","Última entrega"],["minutos","Minutos"],["promEntreEntregas","Min. entre entregas"],
+    ["kmEstimados","Km estimados"],["manejoEstMin","Manejo estimado (min)"],["realMin","Tiempo real (min)"],["minPorParada","Min. extra por parada"],
+    ["ahorroKm","Ahorro km"],["ahorroMin","Ahorro min"],["callesReales","Calles reales"]];
+  const cell = (k,v) => v==null ? "" : (k==="inicio"||k==="fin") ? hhmm(v) : typeof v==="number" ? String(v).replace(".",",") : typeof v==="boolean" ? (v?"Sí":"No") : String(v);
+  // Separador «;» y coma decimal: así lo abre bien Excel en español (Colombia).
+  const rows = [cols.map(c=>c[1]).join(";")].concat(h.map(x=>cols.map(([k])=>cell(k,x[k])).join(";")));
+  const blob = new Blob(["\ufeff" + rows.join("\r\n")], {type:"text/csv;charset=utf-8"});
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "historial-jornadas-" + ymd(Date.now()) + ".csv";
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href), 2000);
+  toast("Historial descargado. Ábrelo con Excel o Google Sheets.");
+}
+
 /* ============ Reporte del día ============ */
 const hhmm = t => new Date(t).toLocaleTimeString("es-CO",{hour:"2-digit",minute:"2-digit"});
 function dayReport(){
@@ -1470,11 +1564,12 @@ $("list").addEventListener("click", e=>{
       } else { delete s.doneAt; delete s.legEst; delete s.legKm; }
     }
       if(s.status==="done"){ state.stops.splice(i,1); state.stops.push(s); if(s.x!==null) state.lastDoneId = s.id; toast((s.qty||1)>1 ? `Entregados ${s.qty} paquetes. Sigue con la parada 1.` : "Entregado. Sigue con la parada 1.");
+        recordDay();
         if(state.autoWaze !== false){ const nx = nextStop(); if(nx){ save(); render(); openExternal(wazeUrl(nx)); return; } else toast("¡Terminaste! No quedan entregas pendientes."); } }
       else if(state.lastDoneId===s.id){ state.lastDoneId = null; }
       break;
     case "fail": s.status = s.status==="fail" ? "pend" : "fail"; if(s.status==="fail"){ s.failAt = Date.now(); s.failCount = (s.failCount||0)+1; }
-      if(s.status==="fail"){ state.stops.splice(i,1); const firstDone = state.stops.findIndex(q=>q.status==="done"); state.stops.splice(firstDone<0?state.stops.length:firstDone,0,s); toast("Marcado como no estaba. Se movió al final de los pendientes."); }
+      if(s.status==="fail"){ recordDay(); state.stops.splice(i,1); const firstDone = state.stops.findIndex(q=>q.status==="done"); state.stops.splice(firstDone<0?state.stops.length:firstDone,0,s); toast("Marcado como no estaba. Se movió al final de los pendientes."); }
       break;
     case "up": if(i>0){ [state.stops[i-1],state.stops[i]]=[state.stops[i],state.stops[i-1]]; } break;
     case "down": if(i<state.stops.length-1){ [state.stops[i+1],state.stops[i]]=[state.stops[i],state.stops[i+1]]; } break;
@@ -2017,6 +2112,10 @@ for(const [id,k] of [["zMinCra","minCra"],["zMaxCra","maxCra"],["zMinCl","minCl"
   $(id).addEventListener("change", e=>{ const v = parseInt(e.target.value,10); if(!isNaN(v)){ state.zone = {...zone(), [k]:v, name:"Zona personalizada"}; save(); render(); } });
 }
 $("btnRestore").onclick = ()=>{ if(state.suggestedIds){ applyOrder(state.suggestedIds); save(); render(); toast("Se restauró el orden sugerido."); } };
+$("btnHist").onclick = ()=>{ recordDay(); renderHist(); $("dlgHist").showModal(); };
+$("frmHist").addEventListener("submit", e=>{ e.preventDefault(); $("dlgHist").close(); });
+$("histCsv").onclick = ()=>{ if(!histLoad().length){ toast("Aún no hay jornadas para exportar."); return; } histCsv(); };
+$("histClear").onclick = ()=>{ $("dlgHist").close(); confirmBox("Borrar historial", "Se borran los resúmenes de todas las jornadas guardadas en este celular.", ()=>{ store.set(HIST_KEY, []); toast("Historial borrado."); }); };
 $("btnReport").onclick = ()=>{ $("repText").textContent = dayReport(); $("dlgReport").showModal(); };
 $("frmReport").addEventListener("submit", e=>{ e.preventDefault(); $("dlgReport").close(); });
 $("repCopy").onclick = async ()=>{ try{ await navigator.clipboard.writeText($("repText").textContent); toast("Reporte copiado."); }catch(e){ toast("No se pudo copiar: mantén presionado el texto para copiarlo."); } };
@@ -2043,8 +2142,8 @@ $("btnNew").onclick = ()=>{
   if(state.stops.length===0){ toast("Ya estás en una jornada limpia. Toma la primera foto."); return; }
   const pend = state.stops.filter(s=>s.status!=="done").length;
   confirmBox("Empezar jornada nueva",
-    (pend ? `Quedan ${pend} paquete(s) sin entregar. ` : "") + "Se borran todos los paquetes de este celular y la lista queda en cero. El punto de partida se conserva.",
-    ()=>{ state.stops=[]; state.seeded=true; state.lastDoneId=null; state.cmpFirst=null; state.cmpLast=null; state.suggestedIds=null; LASTM=null; state.startGPS=null; save(); render(); window.scrollTo(0,0); toast("Jornada nueva lista. Toma la primera foto."); });
+    (pend ? `Quedan ${pend} paquete(s) sin entregar. ` : "") + "Se guarda el resumen del día en el historial y se borran todos los paquetes de este celular. El punto de partida se conserva.",
+    ()=>{ recordDay(); state.dayId=null; state.stops=[]; state.seeded=true; state.lastDoneId=null; state.cmpFirst=null; state.cmpLast=null; state.suggestedIds=null; LASTM=null; state.startGPS=null; save(); render(); window.scrollTo(0,0); toast("Jornada nueva lista. Toma la primera foto."); });
 };
 $("btnClearAll").onclick = ()=>confirmBox("Borrar toda la jornada","Se eliminan todos los paquetes y sus datos de este celular.",()=>{ state.stops=[]; state.lastDoneId=null; save(); render(); toast("Jornada borrada."); });
 
@@ -2069,8 +2168,11 @@ $("restoreFile").addEventListener("change", async e=>{
 });
 
 /* ============ App instalable y sin conexión ============ */
-const APP_VERSION = "1.12.0";
+const APP_VERSION = "1.13.0";
 $("ver").textContent = "Versión " + APP_VERSION + ". Funciona sin internet una vez abierta la primera vez.";
+if(navigator.storage && navigator.storage.estimate){
+  navigator.storage.estimate().then(e=>{ if(e && e.usage) $("ver").textContent += ` Espacio usado en este celular: ${(e.usage/1048576).toFixed(1).replace(".",",")} MB (la mayor parte es el lector de etiquetas).`; }).catch(()=>{});
+}
 function netState(){ if(SERVED) $("net").hidden = navigator.onLine; }
 addEventListener("online", ()=>{ netState(); if(state.stops.some(s=>s.status!=="done")) optimize(true); }); addEventListener("offline", netState); netState();
 // Pide al navegador no borrar los datos de la app cuando falte espacio.
