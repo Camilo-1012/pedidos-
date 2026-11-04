@@ -100,3 +100,11 @@ Con internet, la app hace tres cosas:
 - Si hay versión nueva, se descarga sola y aparece arriba «Hay una versión nueva (x.y) — Actualizar».
 - La app nunca se recarga sola, así que no se pierde una edición a medias. Al tocar «Actualizar» se recarga sin pedir el PIN y conserva la ruta.
 - Al publicar cambios: subir `CACHE` en `sw.js` y `APP_VERSION` en `index.html` con el mismo número.
+
+## Buscar por guía, repetidos y revisión del cargue (v1.21)
+
+- **Buscar guía** (barra de abajo o sección Ruta): escaneas el código, o escribes los últimos 4 números, y aparece la parada con los botones Entregado, Waze y Ver en la lista. Si la guía no está en la ruta, la app lo avisa.
+- **Paquete repetido**: si se escanea, fotografía o escribe una guía que ya está cargada, la app vibra, muestra en qué parada está y no la agrega otra vez.
+- **Revisar cargue**:
+  - Muestra el total de paradas y paquetes, y las novedades: dirección sin reconocer, ubicada solo por barrio, fuera de zona, sin guía, o más paquetes que guías.
+  - «Verificar paquetes escaneando la guía» deja la cámara abierta: pasas cada paquete al subirlo y la app cuenta los verificados. Los que no tienen guía se confirman con «Lo tengo», y las guías que no están en la ruta quedan listadas aparte.

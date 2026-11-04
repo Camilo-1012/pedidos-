@@ -167,6 +167,23 @@ details summary{cursor:pointer;font-weight:600}
 }
 @media (prefers-reduced-motion: reduce){*{transition:none!important}}
 
+/* Buscar por guía y revisar cargue */
+@keyframes flash{0%,100%{box-shadow:none}30%,70%{box-shadow:0 0 0 4px var(--accent)}}
+.stop.flash{animation:flash 1.6s ease 2}
+.chip.ok{color:var(--ok);border-color:var(--ok)}
+.found{border:1px solid var(--line);border-left:6px solid var(--accent);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:6px}
+.found.done{border-left-color:var(--ok)}
+.found.bad{border-left-color:var(--bad)}
+.found .big{font:700 34px/1 var(--display)}
+.found .addr{font-weight:600;font-size:17px}
+.lrow{display:flex;align-items:center;justify-content:space-between;gap:8px;border:1px solid var(--line);border-radius:10px;padding:8px 10px;font-size:14px}
+.lrow > div{min-width:0;overflow-wrap:anywhere}
+.lrow b{display:block;font-size:15px}
+.lsum{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.lsum div{background:var(--bg);border-radius:8px;padding:8px;text-align:center}
+.lsum b{display:block;font:700 24px/1 var(--display)}
+.lsum span{font-size:12px;color:var(--muted)}
+.toolbar .wrap.three{grid-template-columns:minmax(0,1.4fr) minmax(0,1fr) minmax(0,1fr)}
 /* Aviso de versión nueva */
 .upd:not([hidden]){display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;background:rgba(242,183,5,.16);border:1px solid var(--accent);border-radius:8px;padding:6px 6px 6px 10px;font-size:14px;font-weight:600}
 /* Bloqueo con PIN y usuarios */
@@ -271,6 +288,10 @@ details summary{cursor:pointer;font-weight:600}
       <button type="button" class="small" id="btnRestore" hidden style="margin-top:8px">Volver al orden sugerido</button>
     </div>
     <div class="row">
+      <button type="button" id="btnFind">Buscar paquete por guía</button>
+      <button type="button" id="btnLoad">Revisar cargue</button>
+    </div>
+    <div class="row">
       <button type="button" class="dark" id="btnSort">Ordenar ruta</button>
       <button type="button" id="btnMaps">Abrir siguientes en Maps</button>
     </div>
@@ -347,9 +368,10 @@ details summary{cursor:pointer;font-weight:600}
   </section>
 </main>
 
-<div class="toolbar"><div class="wrap">
+<div class="toolbar"><div class="wrap three">
   <button type="button" class="primary" id="btnNext">Waze: siguiente</button>
   <button type="button" id="btnScan2">Escanear</button>
+  <button type="button" id="btnFind2">Buscar guía</button>
 </div></div>
 
 <dialog id="dlgEdit">
@@ -421,6 +443,10 @@ details summary{cursor:pointer;font-weight:600}
       <span class="chip" id="stTel">Teléfono: buscando…</span>
     </div>
     <p class="hint" id="scanMsg" aria-live="polite">Abriendo cámara…</p>
+    <div class="row" id="scanFind" hidden>
+      <input id="scanFindIn" inputmode="numeric" autocomplete="off" placeholder="O escribe los últimos 4+ números" style="flex:1 1 60%">
+      <button type="button" id="scanFindBtn" style="flex:0 0 auto">Buscar</button>
+    </div>
     <div class="row">
       <button type="button" id="scanTorch" hidden>Linterna</button>
       <button type="button" class="primary" id="scanShot">Capturar</button>
@@ -429,6 +455,25 @@ details summary{cursor:pointer;font-weight:600}
     <label style="flex-direction:row;align-items:center;gap:8px;color:var(--ink);font-size:15px">
       <input type="checkbox" id="scanLoop" style="width:auto"> Seguir escaneando después de guardar cada paquete
     </label>
+  </form>
+</dialog>
+
+<dialog id="dlgFound" aria-labelledby="fdTitle">
+  <form method="dialog">
+    <h2 id="fdTitle">Paquete</h2>
+    <div id="fdBody"></div>
+    <div class="row" id="fdActs"></div>
+  </form>
+</dialog>
+
+<dialog id="dlgLoad" aria-labelledby="ldTitle">
+  <form method="dialog">
+    <div class="dlgHead"><h2 id="ldTitle">Revisar cargue</h2><button type="submit" class="small">Cerrar</button></div>
+    <div class="lsum" id="ldSum"></div>
+    <button type="button" class="primary" id="ldScan">Verificar paquetes escaneando la guía</button>
+    <p class="hint" id="ldHint" style="margin:0"></p>
+    <div id="ldList" style="display:flex;flex-direction:column;gap:8px"></div>
+    <button type="button" class="small" id="ldReset" hidden>Empezar la verificación de nuevo</button>
   </form>
 </dialog>
 
@@ -2019,6 +2064,7 @@ function render(){
           ${!isDone && zoneIssue(s)?`<span class="chip warn">Fuera de tu zona: ${esc(zoneIssue(s))}</span>`:""}
           ${s.zoneCheck && s.zoneCheck.bad?`<span class="chip warn">No coincide con ${esc(s.barrio)}: queda a ${s.zoneCheck.km.toFixed(1).replace(".",",")} km</span>`:""}
           ${isFail?'<span class="chip warn">Intento fallido</span>':""}
+          ${state.loadOn && !isDone ? (loadedOf(s) >= (s.qty||1) ? '<span class="chip ok">Cargado ✓</span>' : `<span class="chip warn">Sin verificar${(s.qty||1)>1?" "+((s.qty||1)-loadedOf(s))+" de "+s.qty:""}</span>`) : ""}
           ${s.example?'<span class="chip ex">Ejemplo</span>':""}
         </div>
         ${(s.name||s.phone)?`<div class="who">${esc(s.name)}${s.name&&s.phone?" · ":""}${s.phone?esc(s.phone.replace(/(\d{3})(\d{3})(\d{4})/,"$1 $2 $3")):""}</div>`:""}
@@ -2042,13 +2088,9 @@ function render(){
   }).join("");
 }
 
-$("list").addEventListener("click", e=>{
-  const b = e.target.closest("button[data-act]"); if(!b) return;
-  const id = b.closest("li").dataset.id;
-  const i = state.stops.findIndex(s=>s.id===id); if(i<0) return;
-  const s = state.stops[i];
-  switch(b.dataset.act){
-    case "done": {
+function toggleDone(s){
+  const i = state.stops.indexOf(s); if(i<0) return;
+  {
       const from = currentOrigin();
       s.status = s.status==="done" ? "pend" : "done";
       if(s.status==="done"){
@@ -2060,7 +2102,15 @@ $("list").addEventListener("click", e=>{
         recordDay();
         if(state.autoWaze !== false){ const nx = nextStop(); if(nx){ save(); render(); openExternal(wazeUrl(nx)); return; } else toast("¡Terminaste! No quedan entregas pendientes."); } }
       else if(state.lastDoneId===s.id){ state.lastDoneId = null; }
-      break;
+        save(); render();
+}
+$("list").addEventListener("click", e=>{
+  const b = e.target.closest("button[data-act]"); if(!b) return;
+  const id = b.closest("li").dataset.id;
+  const i = state.stops.findIndex(s=>s.id===id); if(i<0) return;
+  const s = state.stops[i];
+  switch(b.dataset.act){
+    case "done": toggleDone(s); return;
     case "fail": s.status = s.status==="fail" ? "pend" : "fail"; if(s.status==="fail"){ s.failAt = Date.now(); s.failCount = (s.failCount||0)+1; }
       if(s.status==="fail"){ recordDay(); state.stops.splice(i,1); const firstDone = state.stops.findIndex(q=>q.status==="done"); state.stops.splice(firstDone<0?state.stops.length:firstDone,0,s); toast("Marcado como no estaba. Se movió al final de los pendientes."); }
       break;
@@ -2126,7 +2176,12 @@ $("qtyPlus").onclick  = ()=>{ $("fQty").value = Math.min(99,(parseInt($("fQty").
 // Varios paquetes a la misma dirección van en una sola parada con su cantidad.
 function stopKey(x){ const p = parseAddress(x.label || x.addr); return p ? p.label.toUpperCase() : norm(x.addr); }
 function guias(st){ return (st.guia||"").split(/[,\s]+/).filter(Boolean); }
-function hasGuia(g){ return state.stops.some(st=>guias(st).includes(g)); }
+function hasGuia(g){ return !!findGuia(g); }
+// Busca la parada que tiene esa guía (exacta). «except» deja por fuera la parada que se está editando.
+function findGuia(g, except){ g = String(g||"").trim(); if(!g) return null; return state.stops.find(st=>st!==except && guias(st).includes(g)) || null; }
+// Número de parada como se ve en la lista (solo cuentan las pendientes).
+function stopNum(st){ if(st.status==="done") return 0; let n = 0; for(const x of state.stops){ if(x.status!=="done") n++; if(x===st) return n; } return 0; }
+function placeName(st){ const n = stopNum(st); return (n ? "la parada " + n : "una parada ya entregada") + " (" + (st.label||st.addr) + ")"; }
 function addOrMerge(d){
   const k = stopKey(d);
   const same = state.stops.find(st=>st.status!=="done" && stopKey(st)===k);
@@ -2155,12 +2210,14 @@ $("frmEdit").addEventListener("submit", e=>{
   if(!d.addr) return;
   const p = parseAddress(d.addr);
   if(editing.isNew){
-    if(d.guia && hasGuia(d.guia)){ toast("Esa guía ya estaba en la lista."); $("dlgEdit").close(); return; }
+    if(d.guia){ const dup = guias(d).find(hasGuia); if(dup){ $("dlgEdit").close(); dupAlert(dup); return; } }
     state.stops = state.stops.filter(s=>!s.example);
     const r = addOrMerge(d);
     if(r.merged) toast(`Misma dirección que otra parada: ahora son ${r.stop.qty} paquetes en ${r.stop.label||r.stop.addr}.`);
     else toast(p ? "Paquete agregado y ruta reordenada." : "Agregado, pero la dirección quedó para revisar.");
   } else {
+    const dup = guias(d).find(g=>findGuia(g, editing.s));
+    if(dup){ toast(`La guía ${dup} ya está en ${placeName(findGuia(dup, editing.s))}. Revísala.`); return; }
     const changed = (p?p.label:"") !== editing.s.label;
     Object.assign(editing.s, d, {x:p?p.x:null, y:p?p.y:null, label:p?p.label:"", example:false});
     if(changed || editing.s.geo==="barrio"){ editing.s.lat = null; editing.s.lng = null; editing.s.geo = null; }
@@ -2384,15 +2441,18 @@ function stopScan(){
   if($("dlgScan").open) $("dlgScan").close();
 }
 async function startScan(mode){
-  scanMode = mode === "code" ? "code" : "label";
+  scanMode = ["code","find","verify"].includes(mode) ? mode : "label";
+  const codeOnly = scanMode !== "label";
   if(!SERVED || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+    if(scanMode==="find" || scanMode==="verify"){ askGuiaTyped(); return; }
     if(scanMode==="code"){ toast("La cámara en vivo no está disponible aquí. Escribe la guía."); return; }
     toast("La cámara en vivo no está disponible aquí. Usa «Foto»."); $("photo").click(); return;
   }
   $("scanLoop").checked = !!state.scanLoop;
-  $("scanTitle").textContent = scanMode==="code" ? "Escanear código de la guía" : "Escanear etiqueta";
-  $("stAddr").hidden = $("stTel").hidden = $("scanShot").hidden = scanMode==="code";
-  $("scanLoop").closest("label").hidden = scanMode==="code";
+  $("scanTitle").textContent = {code:"Escanear código de la guía", find:"Buscar paquete", verify:"Verificar cargue", label:"Escanear etiqueta"}[scanMode];
+  $("stAddr").hidden = $("stTel").hidden = $("scanShot").hidden = codeOnly;
+  $("scanLoop").closest("label").hidden = codeOnly;
+  $("scanFind").hidden = !(scanMode==="find" || scanMode==="verify"); $("scanFindIn").value = "";
   $("scanMsg").textContent = "Abriendo cámara…"; $("scanTorch").hidden = true;
   liveReset();
   $("dlgScan").showModal();
@@ -2405,14 +2465,16 @@ async function startScan(mode){
   }
   const v = $("scanVideo"); v.srcObject = scanStream;
   try{ await v.play(); }catch(e){}
+  if(!scanStream) return;   // se cerró mientras abría (p. ej. ya encontró la guía)
   const track = scanStream.getVideoTracks()[0];
   const caps = track && track.getCapabilities ? track.getCapabilities() : {};
   $("scanTorch").hidden = !caps.torch;
   // Enfoque continuo si la cámara lo permite (mejora mucho la lectura de texto).
   if(caps.focusMode && caps.focusMode.includes("continuous")){ try{ await track.applyConstraints({advanced:[{focusMode:"continuous"}]}); }catch(e){} }
   scanDet = scanDet || await makeDetector();
-  if(scanMode==="code"){
-    $("scanMsg").textContent = scanDet ? "Apunta al código de barras o QR de la guía, de cerca y centrado." : "Este celular no puede leer códigos de barras. Escribe la guía a mano.";
+  if(codeOnly){
+    $("scanMsg").textContent = !scanDet ? "Este celular no puede leer códigos de barras. Escribe la guía a mano."
+      : scanMode==="verify" ? verifyMsg() : "Apunta al código de barras o QR de la guía, de cerca y centrado.";
     if(!scanDet) return;
     scanTimer = setInterval(scanTick, 200);
     return;
@@ -2432,11 +2494,15 @@ async function scanTick(){
     const before = live.codeGuia;
     takeCodes(await detectCodes(v));
     if(live.codeAddr) return finishScan();
+    // Verificando: un código ya leído en esta pasada de cámara no se vuelve a anunciar.
+    if(live.mode==="verify" && live.codeGuia && (live.seen||(live.seen=new Set())).has(live.codeGuia)){ live.codeGuia = ""; return; }
     if(live.codeGuia && live.codeGuia !== before){
       if(navigator.vibrate) navigator.vibrate(60);
       setStat("stCode", true, "Código: " + live.codeGuia);
       if(live.mode==="code") return finishCode();
-      if(hasGuia(live.codeGuia)){ stopScan(); toast("Esa guía ya está cargada."); if(state.scanLoop) setTimeout(()=>startScan("label"), 900); return; }
+      if(live.mode==="find"){ const g = live.codeGuia; live.done = true; stopScan(); return showFind(g); }
+      if(live.mode==="verify"){ (live.seen||(live.seen=new Set())).add(live.codeGuia); verifyGuia(live.codeGuia); live.codeGuia = ""; return; }
+      if(hasGuia(live.codeGuia)){ const g = live.codeGuia; stopScan(); dupAlert(g); return; }
     }
   }catch(e){ console.warn(e); }
   finally{ scanBusy = false; }
@@ -2445,7 +2511,8 @@ async function scanTick(){
 function finishCode(){
   const g = live.codeGuia; live.done = true; stopScan();
   if(!g) return;
-  if(hasGuia(g) && $("fGuia").value !== g) toast("Ojo: esa guía ya está cargada en otra parada.");
+  const o = findGuia(g, editing && !editing.isNew ? editing.s : null);
+  if(o && !guias({guia:$("fGuia").value}).includes(g)) toast(`Ojo: esa guía ya está en ${placeName(o)}.`);
   $("fGuia").value = g; toast("Guía leída: " + g);
 }
 // Recorte central del cuadro de video, ampliado y en grises: lo que necesita el lector de texto.
@@ -2515,7 +2582,7 @@ async function finishScan(extra){
   if(extra) for(const k in extra) if(extra[k] && !d[k]) d[k] = extra[k];
   if(live.guia) d.guia = live.guia;
   stopScan();
-  if(d.guia && hasGuia(d.guia)){ toast("Esa guía ya está cargada."); if(state.scanLoop) setTimeout(()=>startScan("label"), 900); return; }
+  if(d.guia && hasGuia(d.guia)){ dupAlert(d.guia); return; }
   fromScan = true;
   openEdit(d, true);
   if(!parseAddress(d.addr)) toast("No pude leer bien la dirección. Corrígela a mano o dicta con «Dictar».");
@@ -2573,7 +2640,7 @@ $("scanShot").onclick = async ()=>{
   if(!parseAddress(d.addr) && keep.best) d.addr = keep.best;
   for(const k of ["phone","name","zone","barrio","type","unit"]) if(!d[k] && keep[k]) d[k] = keep[k];
   if(keep.guia) d.guia = keep.guia;
-  if(d.guia && hasGuia(d.guia)){ toast("Esa guía ya está cargada."); return; }
+  if(d.guia && hasGuia(d.guia)){ dupAlert(d.guia); return; }
   fromScan = true; openEdit(d, true);
   if(!parseAddress(d.addr)) toast("No pude leer la dirección. Corrígela a mano o dicta con «Dictar».");
 };
@@ -2598,7 +2665,7 @@ $("photo").addEventListener("change", async e=>{
     const d = codes.addr ? {...codes.addr} : await ocrSource(bmp, true);
     if(codes.guia) d.guia = codes.guia;
     $("ocrBox").hidden = true;
-    if(d.guia && hasGuia(d.guia)){ toast("Esa guía ya está cargada."); return; }
+    if(d.guia && hasGuia(d.guia)){ dupAlert(d.guia); return; }
     openEdit(d, true);
     if(!parseAddress(d.addr)) toast("No pude leer bien la dirección. Corrígela a mano.");
   }catch(err){
@@ -2608,6 +2675,194 @@ $("photo").addEventListener("change", async e=>{
     openEdit({addr:"",raw:""}, true);
   }
 });
+
+/* ============ Buscar paquete por guía, repetidos y revisión del cargue ============ */
+// Busca por guía completa o, si se escribe a mano, por los últimos números (mínimo 4).
+function searchGuia(q){
+  q = String(q||"").replace(/\s+/g,"");
+  if(!q) return [];
+  const exact = state.stops.filter(st=>guias(st).includes(q));
+  if(exact.length) return exact.map(st=>({st, g:q}));
+  const out = [];
+  for(const st of state.stops) for(const g of guias(st)){
+    // Escrito a mano: últimos 4 a 7 números. Leído con prefijos o sufijos de control: una guía contiene a la otra (8+ caracteres).
+    const tail = /^\d{4,7}$/.test(q) && g.endsWith(q);
+    const inside = q.length >= 8 && g.length >= 8 && (g.includes(q) || q.includes(g));
+    if(tail || inside) out.push({st, g});
+  }
+  return out;
+}
+function stopCard(st, g){
+  const n = stopNum(st), done = st.status==="done";
+  const wrap = document.createElement("div"); wrap.className = "found" + (done ? " done" : "");
+  wrap.innerHTML = `<div class="big"></div><div class="addr"></div><div class="guiaLine"></div><div class="hint" style="margin:0"></div>`;
+  wrap.querySelector(".big").textContent = done ? "Ya entregado" : "Parada " + n + ((st.qty||1)>1 ? " · " + st.qty + " paquetes" : "");
+  wrap.querySelector(".addr").textContent = (st.label || st.addr) + " · " + unitText(st);
+  wrap.querySelector(".guiaLine").innerHTML = guias(st).map(x=>`<span${x===g?' style="text-decoration:underline"':''}>${esc(x)}</span>`).join("");
+  wrap.querySelector(".hint").textContent = [st.barrio, st.name, st.phone && st.phone.replace(/(\d{3})(\d{3})(\d{4})/,"$1 $2 $3"), st.status==="fail" ? "Ya tuvo un intento fallido" : ""].filter(Boolean).join(" · ");
+  return wrap;
+}
+function foundButtons(list){
+  const box = $("fdActs"); box.innerHTML = "";
+  for(const [txt, cls, fn] of list){
+    const b = document.createElement("button"); b.type = "button"; b.textContent = txt; if(cls) b.className = cls;
+    b.onclick = ()=>{ $("dlgFound").close(); if(fn) fn(); };
+    box.appendChild(b);
+  }
+}
+function flashStop(st){
+  render();
+  const li = document.querySelector(`#list li[data-id="${st.id}"]`); if(!li) return;
+  li.scrollIntoView({behavior:"smooth", block:"center"});
+  li.classList.remove("flash"); void li.offsetWidth; li.classList.add("flash");
+  setTimeout(()=>li.classList.remove("flash"), 3400);
+}
+// Resultado de «Buscar paquete»: la parada con botones para entregar, abrir Waze o verla en la lista.
+function showFind(q){
+  const r = searchGuia(q), body = $("fdBody"); body.innerHTML = "";
+  if(r.length && r.every(x=>x.st===r[0].st)){
+    const {st, g} = r[0], done = st.status==="done";
+    $("fdTitle").textContent = "Paquete encontrado";
+    body.appendChild(stopCard(st, g));
+    if(navigator.vibrate) navigator.vibrate(60);
+    foundButtons([
+      [done ? "Deshacer entregado" : "Entregado", done ? "" : "primary", ()=>toggleDone(st)],
+      ...(done ? [] : [["Waze", "dark", ()=>openExternal(wazeUrl(st))]]),
+      ["Ver en la lista", "", ()=>flashStop(st)],
+      ["Buscar otro", "", ()=>startScan("find")]
+    ]);
+  } else if(r.length){
+    $("fdTitle").textContent = "Varias guías terminan así";
+    const p = document.createElement("p"); p.className = "hint"; p.textContent = "Toca el paquete que buscas:"; body.appendChild(p);
+    for(const {st, g} of r){ const c = stopCard(st, g); c.style.cursor = "pointer"; c.onclick = ()=>{ $("dlgFound").close(); showFind(g); }; body.appendChild(c); }
+    foundButtons([["Cerrar", "", null]]);
+  } else {
+    $("fdTitle").textContent = "No está en tu ruta";
+    const w = document.createElement("div"); w.className = "found bad";
+    w.innerHTML = `<div class="addr"></div><div class="hint" style="margin:0">Esa guía no está en los paquetes de hoy. Si es un paquete nuevo, agrégalo escaneando la etiqueta.</div>`;
+    w.querySelector(".addr").textContent = "Guía " + q;
+    body.appendChild(w);
+    if(navigator.vibrate) navigator.vibrate([200,100,200]);
+    foundButtons([["Agregar paquete", "primary", ()=>startScan("label")], ["Buscar otro", "", ()=>startScan("find")], ["Cerrar", "", null]]);
+  }
+  $("dlgFound").showModal();
+}
+// Aviso fuerte cuando se intenta cargar una guía que ya está en la lista.
+function dupAlert(g){
+  const st = findGuia(g); if(!st){ toast("Esa guía ya está cargada."); return; }
+  if(navigator.vibrate) navigator.vibrate([250,100,250]);
+  $("fdTitle").textContent = "Paquete repetido";
+  const body = $("fdBody"); body.innerHTML = "";
+  const p = document.createElement("p"); p.style.margin = "0"; p.textContent = "Esta guía ya está cargada; no se agregó otra vez:"; body.appendChild(p);
+  body.appendChild(stopCard(st, g));
+  foundButtons([
+    ...(state.scanLoop ? [["Seguir escaneando", "primary", ()=>startScan("label")]] : []),
+    ["Ver la parada", state.scanLoop ? "" : "primary", ()=>flashStop(st)],
+    ["Cerrar", "", null]
+  ]);
+  $("dlgFound").showModal();
+}
+// Sin cámara en vivo: se pide la guía escrita.
+function askGuiaTyped(){
+  const v = prompt("Escribe la guía o sus últimos 4 números:"); if(!v) return;
+  if(scanMode==="verify") verifyGuia(v.trim()); else showFind(v.trim());
+}
+$("scanFindBtn").onclick = ()=>{
+  const v = $("scanFindIn").value.trim(); if(!v) return;
+  if(scanMode==="verify"){ verifyGuia(v); $("scanFindIn").value = ""; return; }
+  if(live) live.done = true;
+  stopScan(); showFind(v);
+};
+$("scanFindIn").addEventListener("keydown", e=>{ if(e.key==="Enter"){ e.preventDefault(); $("scanFindBtn").click(); } });
+$("btnFind").onclick = ()=>startScan("find");
+$("btnFind2").onclick = ()=>startScan("find");
+
+// ---- Verificación del cargue ----
+// Cada parada guarda qué guías ya se escanearon (chk) y cuántos paquetes sin guía se confirmaron a mano (chkMan).
+const pendStops = ()=>state.stops.filter(st=>st.status!=="done" && !st.example);
+function loadedOf(st){ return Math.min(st.qty||1, (st.chk||[]).length + (st.chkMan||0)); }
+function loadTotals(){
+  const ps = pendStops();
+  return {paradas: ps.length, paq: ps.reduce((a,st)=>a+(st.qty||1),0), ok: ps.reduce((a,st)=>a+loadedOf(st),0)};
+}
+function verifyMsg(){ const t = loadTotals(); return `Verificados ${t.ok} de ${t.paq} paquetes. Pasa la cámara por cada guía; la cámara sigue abierta.`; }
+function verifyGuia(q){
+  const r = searchGuia(q).filter(x=>x.st.status!=="done");
+  let msg, ok = false;
+  if(r.length && r.every(x=>x.st===r[0].st)){
+    const {st, g} = r[0]; st.chk = st.chk || [];
+    if(st.chk.includes(g)) msg = `Ya estaba verificado: parada ${stopNum(st)}.`;
+    else { st.chk.push(g); ok = true; msg = `✓ Parada ${stopNum(st)} · ${st.label||st.addr}` + ((st.qty||1)>1 ? ` (${loadedOf(st)} de ${st.qty})` : ""); }
+    if(navigator.vibrate) navigator.vibrate(ok ? 60 : [60,60,60]);
+  } else if(r.length){ msg = "Varias guías terminan así: escribe más números."; }
+  else {
+    state.loadExtra = [...new Set([...(state.loadExtra||[]), q])].slice(-30);
+    msg = `✗ ${q} no está en la ruta de hoy.`;
+    if(navigator.vibrate) navigator.vibrate([250,100,250]);
+  }
+  state.loadOn = true; save();
+  if(live && !live.done && $("dlgScan").open){ setStat("stCode", ok, msg); $("scanMsg").textContent = verifyMsg(); }
+  else toast(msg);
+  if($("dlgLoad").open) renderLoad();
+}
+// «Revisar cargue»: totales, lo que falta verificar y las paradas con problemas, antes de salir.
+function renderLoad(){
+  const t = loadTotals(), ps = pendStops();
+  const sinGuia = ps.reduce((a,st)=>a + Math.max(0,(st.qty||1) - guias(st).length), 0);
+  $("ldSum").innerHTML = `<div><b>${t.paradas}</b><span>paradas</span></div><div><b>${t.paq}</b><span>paquetes</span></div><div><b>${state.loadOn ? t.ok : "–"}</b><span>verificados</span></div>`;
+  $("ldHint").textContent = !t.paq ? "No hay paquetes pendientes." :
+    (state.loadOn ? (t.ok >= t.paq ? "Todo el cargue está verificado." : (t.paq - t.ok === 1 ? "Falta 1 paquete por verificar." : `Faltan ${t.paq - t.ok} paquetes por verificar.`)) : "Escanea la guía de cada paquete al subirlo al vehículo: así confirmas que no falta ni sobra ninguno.")
+    + (sinGuia ? (sinGuia === 1 ? " 1 paquete no tiene guía registrada: confírmalo con «Lo tengo»." : ` ${sinGuia} paquetes no tienen guía registrada: confírmalos con «Lo tengo».`) : "");
+  $("ldReset").hidden = !state.loadOn;
+  const box = $("ldList"); box.innerHTML = "";
+  const issues = [];
+  for(const st of ps){
+    const why = [];
+    if(st.x===null) why.push("Dirección sin reconocer");
+    else if(st.geo==="barrio") why.push("Ubicada solo por barrio");
+    if(zoneIssue(st)) why.push("Fuera de tu zona");
+    if(st.zoneCheck && st.zoneCheck.bad) why.push("No coincide con el barrio");
+    if(!guias(st).length) why.push("Sin guía");
+    else if((st.qty||1) > guias(st).length) why.push(`${st.qty} paquetes y ${guias(st).length} guía(s)`);
+    const falta = state.loadOn ? (st.qty||1) - loadedOf(st) : 0;
+    if(falta > 0) why.push(`Falta verificar ${falta}`);
+    if(why.length) issues.push({st, why, falta});
+  }
+  const extra = state.loadExtra || [];
+  if(!issues.length && !extra.length){
+    if(t.paq){ const p = document.createElement("p"); p.className = "hint"; p.style.margin = "0"; p.textContent = "Sin novedades: todas las paradas tienen dirección reconocida y guía."; box.appendChild(p); }
+    return;
+  }
+  for(const {st, why, falta} of issues){
+    const r = document.createElement("div"); r.className = "lrow";
+    r.innerHTML = `<div><b></b><span class="hint"></span></div><div class="row" style="flex:0 0 auto;gap:6px"></div>`;
+    r.querySelector("b").textContent = `${stopNum(st)}. ${st.label||st.addr}`;
+    r.querySelector(".hint").textContent = why.join(" · ");
+    const acts = r.querySelector(".row");
+    if(falta > 0){
+      const b = document.createElement("button"); b.type = "button"; b.className = "small"; b.textContent = "Lo tengo";
+      b.onclick = ()=>{ st.chkMan = (st.qty||1) - (st.chk||[]).length; save(); renderLoad(); render(); };
+      acts.appendChild(b);
+    }
+    const e = document.createElement("button"); e.type = "button"; e.className = "small"; e.textContent = "Editar";
+    e.onclick = ()=>{ $("dlgLoad").close(); openEdit(st); };
+    acts.appendChild(e);
+    box.appendChild(r);
+  }
+  if(extra.length){
+    const r = document.createElement("div"); r.className = "lrow";
+    r.innerHTML = `<div><b>Escaneados que no están en la ruta</b><span class="hint"></span></div>`;
+    r.querySelector(".hint").textContent = extra.join(", ") + ". Agrégalos escaneando la etiqueta o devuélvelos.";
+    box.appendChild(r);
+  }
+}
+$("btnLoad").onclick = ()=>{ renderLoad(); $("dlgLoad").showModal(); };
+$("ldScan").onclick = ()=>{ $("dlgLoad").close(); state.loadOn = true; save(); startScan("verify"); };
+$("ldReset").onclick = ()=>{ $("dlgLoad").close(); confirmBox("Verificar de nuevo", "Se borran las marcas de paquetes verificados de esta jornada.", ()=>{
+  for(const st of state.stops){ delete st.chk; delete st.chkMan; } state.loadOn = false; state.loadExtra = []; save(); render(); toast("Verificación reiniciada.");
+}); };
+// Al cerrar la cámara en modo verificación se vuelve a «Revisar cargue» con el resultado.
+$("dlgScan").addEventListener("close", ()=>{ if(scanMode==="verify"){ scanMode = "label"; render(); renderLoad(); $("dlgLoad").showModal(); } });
 
 /* ============ Dictado por voz ============ */
 // Usa el reconocimiento de voz del navegador (en Chrome Android lo procesa Google: necesita internet).
@@ -2842,7 +3097,7 @@ $("btnNew").onclick = ()=>{
   const pend = state.stops.filter(s=>s.status!=="done").length;
   confirmBox("Empezar jornada nueva",
     (pend ? `Quedan ${pend} paquete(s) sin entregar. ` : "") + "Se guarda el resumen del día en el historial y se borran todos los paquetes de este celular. El punto de partida se conserva.",
-    ()=>{ recordDay(); state.dayId=null; state.stops=[]; state.seeded=true; state.lastDoneId=null; state.cmpFirst=null; state.cmpLast=null; state.suggestedIds=null; LASTM=null; state.startGPS=null; save(); render(); window.scrollTo(0,0); toast("Jornada nueva lista. Toma la primera foto."); });
+    ()=>{ recordDay(); state.dayId=null; state.stops=[]; state.seeded=true; state.lastDoneId=null; state.cmpFirst=null; state.cmpLast=null; state.suggestedIds=null; LASTM=null; state.startGPS=null; state.loadOn=false; state.loadExtra=[]; save(); render(); window.scrollTo(0,0); toast("Jornada nueva lista. Toma la primera foto."); });
 };
 $("btnClearAll").onclick = ()=>confirmBox("Borrar toda la jornada","Se eliminan todos los paquetes y sus datos de este celular.",()=>{ state.stops=[]; state.lastDoneId=null; save(); render(); toast("Jornada borrada."); });
 
@@ -2869,7 +3124,7 @@ $("restoreFile").addEventListener("change", async e=>{
 /* ============ App instalable y sin conexión ============ */
 // Al bloquear: apaga la cámara y cierra ventanas abiertas para que no queden datos a la vista.
 window.RUTA_onLock = ()=>{ try{ stopScan(); }catch(e){} };
-const APP_VERSION = "1.20";
+const APP_VERSION = "1.21";
 $("ver").textContent = "Versión " + APP_VERSION + ". Funciona sin internet una vez abierta la primera vez.";
 if(navigator.storage && navigator.storage.estimate){
   navigator.storage.estimate().then(e=>{ if(e && e.usage) $("ver").textContent += ` Espacio usado en este celular: ${(e.usage/1048576).toFixed(1).replace(".",",")} MB (la mayor parte es el lector de etiquetas).`; }).catch(()=>{});
