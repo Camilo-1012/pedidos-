@@ -136,6 +136,8 @@ dialog.scan{width:min(640px,calc(100% - 16px))}
 .btn.wa{background:#1f8f4e;color:#fff;border-color:#1f8f4e}
 .btn[aria-disabled="true"]{opacity:.35;pointer-events:none}
 @media (max-width:400px){.phoneRow{grid-template-columns:repeat(2,minmax(0,1fr))}.phoneRow input{grid-column:1 / -1}}
+.dlgHead{position:sticky;top:0;z-index:2;margin:-16px -16px 0;padding:12px 16px;background:var(--surface);border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:8px}
+.dlgHead .primary{min-width:110px}
 .toast{position:fixed;left:50%;bottom:84px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 14px;border-radius:10px;font-size:14px;z-index:20;max-width:calc(100% - 32px);display:none}
 .toast.show{display:block}
 details summary{cursor:pointer;font-weight:600}
@@ -303,7 +305,10 @@ details summary{cursor:pointer;font-weight:600}
 
 <dialog id="dlgEdit">
   <form id="frmEdit">
-    <h2 id="dlgTitle">Paquete</h2>
+    <div class="dlgHead">
+      <h2 id="dlgTitle">Paquete</h2>
+      <button type="submit" class="primary small" id="saveTop">Guardar</button>
+    </div>
     <label for="fAddr">Dirección</label>
     <div class="addrRow">
       <input id="fAddr" required autocomplete="off" aria-describedby="fParsed">
@@ -328,14 +333,12 @@ details summary{cursor:pointer;font-weight:600}
     <p class="hint" id="fPhoneHint" hidden></p>
     <label for="fZone">Zona / ST<input id="fZone" inputmode="numeric" autocomplete="off"></label>
     <label for="fName">Destinatario<input id="fName" autocomplete="off"></label>
-    <div class="grid2">
-      <label for="fBarrio">Barrio / localidad<input id="fBarrio" autocomplete="off" list="barriosZona"></label>
-      <div>
-        <label for="fGuia">Guía (TN)</label>
-        <div class="addrRow" style="margin-top:4px">
-          <input id="fGuia" inputmode="numeric" autocomplete="off">
-          <button type="button" class="small" id="btnGuiaScan" aria-label="Escanear el código de barras de la guía">Código</button>
-        </div>
+    <label for="fBarrio">Barrio / localidad<input id="fBarrio" autocomplete="off" list="barriosZona"></label>
+    <div>
+      <label for="fGuia">Guía (código de barras)</label>
+      <div class="addrRow" style="margin-top:4px">
+        <input id="fGuia" inputmode="numeric" autocomplete="off">
+        <button type="button" class="small" id="btnGuiaScan" aria-label="Escanear el código de barras de la guía">Escanear código</button>
       </div>
     </div>
     <fieldset style="border:0;padding:0;margin:0;display:flex;flex-direction:column;gap:6px">
@@ -413,7 +416,8 @@ details summary{cursor:pointer;font-weight:600}
     <div id="histList" style="display:flex;flex-direction:column;gap:8px;max-height:45vh;overflow:auto"></div>
     <p class="hint" id="histInfo"></p>
     <div class="row">
-      <button type="button" id="histCsv">Exportar a Excel</button>
+      <button type="button" id="histCsvPed">Excel por pedido</button>
+      <button type="button" id="histCsv">Excel resumen</button>
       <button type="button" class="danger" id="histClear">Borrar historial</button>
       <button type="submit" class="primary">Cerrar</button>
     </div>
@@ -1271,11 +1275,26 @@ function updateComparison(){
 }
 
 /* ============ Historial de jornadas (solo resumen) ============ */
-// Por cada día se guarda un resumen de números: sin nombres, teléfonos, direcciones ni fotos.
+// Por cada día se guarda un resumen y, por pedido, la guía y la dirección: sin nombres, teléfonos ni fotos.
 // Ocupa unos pocos KB por día; se conservan los últimos 90 días.
 const HIST_KEY = "rutaEntregas.hist.v1", HIST_DAYS = 90;
 function histLoad(){ return store.get(HIST_KEY) || []; }
 function ymd(t){ const d = new Date(t); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
+function pedidosDelDia(){
+  const out = [];
+  const rows = state.stops.filter(s=>!s.example && (s.status==="done" || s.status==="fail" || s.status==="pend"))
+    .sort((a,b)=>(a.doneAt||a.failAt||9e15)-(b.doneAt||b.failAt||9e15));
+  for(const s of rows){
+    const est = s.status==="done" ? "Entregado" : s.status==="fail" ? "No entregado" : "Pendiente";
+    const h = s.status==="done" ? s.doneAt : s.status==="fail" ? s.failAt : null;
+    const gs = guias(s), q = s.qty||1;
+    const d = s.label || s.addr || "", u = unitText(s, " ");
+    if(!gs.length){ out.push({g:"", d, u, e:est, h, q}); continue; }
+    // Varias guías en la misma parada: una fila por guía (los paquetes de más quedan en la última).
+    gs.forEach((g,i)=>out.push({g, d, u, e:est, h, q: i===gs.length-1 ? Math.max(1, q-(gs.length-1)) : 1}));
+  }
+  return out;
+}
 function daySummary(){
   const done = state.stops.filter(s=>s.status==="done" && s.doneAt).sort((a,b)=>a.doneAt-b.doneAt);
   const fail = state.stops.filter(s=>s.status==="fail");
@@ -1296,7 +1315,9 @@ function daySummary(){
     minPorParada: legs.length ? Math.round((sumR-sumE)/legs.length) : null,
     ahorroKm: c && c.loadKm>c.sugKm ? +(c.loadKm-c.sugKm).toFixed(1) : null,
     ahorroMin: c && c.loadMin!=null && c.sugMin!=null && c.loadMin>c.sugMin ? Math.round(c.loadMin-c.sugMin) : null,
-    callesReales: !!(c && c.real)
+    callesReales: !!(c && c.real),
+    // Por pedido: guía (código de barras), dirección, inmueble, estado, hora y paquetes. Sin nombres ni teléfonos.
+    pedidos: pedidosDelDia()
   };
 }
 // Guarda (o actualiza) el resumen del día en curso. Se llama al entregar, al marcar «No estaba» y al empezar una jornada nueva.
@@ -1330,7 +1351,29 @@ function renderHist(){
       ${x.kmEstimados||x.ahorroKm ? `<span>${x.kmEstimados?`≈ ${fmtKm(x.kmEstimados)} recorridos`:""}${x.ahorroKm?`${x.kmEstimados?" · ":""}ahorro ${fmtKm(x.ahorroKm)}${x.ahorroMin?" / "+x.ahorroMin+" min":""}`:""}</span>` : ""}
     </div>`).join("") : `<p class="hint">Aún no hay jornadas. El resumen se guarda solo al marcar entregas.</p>`;
   const kb = (new Blob([JSON.stringify(histLoad())]).size/1024).toFixed(1).replace(".",",");
-  $("histInfo").textContent = `${h.length} día(s) guardados · ocupa ${kb} KB · solo números del día, sin datos de clientes · se conservan los últimos ${HIST_DAYS} días.`;
+  $("histInfo").textContent = `${h.length} día(s) guardados · ocupa ${kb} KB · por pedido se guarda la guía, la dirección, el estado y la hora (sin nombres ni teléfonos) · se conservan los últimos ${HIST_DAYS} días.`;
+}
+function downloadCsv(rows, name){
+  const blob = new Blob(["\ufeff" + rows.join("\r\n")], {type:"text/csv;charset=utf-8"});
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href), 2000);
+}
+// Texto que Excel no debe convertir en número (una guía de 16 dígitos se dañaría: Excel solo guarda 15).
+const xText = v => v ? `="${String(v).replace(/"/g,"")}"` : "";
+const fechaLarga = t => new Date(t).toLocaleDateString("es-CO",{year:"numeric", month:"2-digit", day:"2-digit"});
+// Excel por pedido: Fecha, Primera entrega, Última entrega, Guía (código de barras), Dirección, Inmueble, Estado, Hora, Paquetes.
+const csvCell = v => { v = String(v==null ? "" : v); return /[;"\n]/.test(v) ? '"' + v.replace(/"/g,'""') + '"' : v; };
+function histCsvPedidos(){
+  const h = histLoad();
+  const rows = ["Fecha;Primera entrega;Última entrega;Guía (código de barras);Dirección;Inmueble;Estado;Hora;Paquetes"];
+  for(const x of h){
+    const base = [fechaLarga(x.inicio), hhmm(x.inicio), hhmm(x.fin)];
+    const peds = x.pedidos && x.pedidos.length ? x.pedidos : null;
+    if(!peds){ rows.push(base.concat(["(jornada sin detalle por pedido)","","","","",""]).join(";")); continue; }
+    for(const pd of peds) rows.push(base.concat([pd.g ? xText(pd.g) : "(sin guía)", csvCell(pd.d||""), csvCell(pd.u||""), pd.e, pd.h ? hhmm(pd.h) : "", String(pd.q||1)]).join(";"));
+  }
+  downloadCsv(rows, "pedidos-por-jornada-" + ymd(Date.now()) + ".csv");
+  toast("Excel por pedido descargado. Ábrelo con Excel o Google Sheets.");
 }
 function histCsv(){
   const h = histLoad();
@@ -1338,13 +1381,11 @@ function histCsv(){
     ["pendientes","Pendientes"],["inicio","Primera entrega"],["fin","Última entrega"],["minutos","Minutos"],["promEntreEntregas","Min. entre entregas"],
     ["kmEstimados","Km estimados"],["manejoEstMin","Manejo estimado (min)"],["realMin","Tiempo real (min)"],["minPorParada","Min. extra por parada"],
     ["ahorroKm","Ahorro km"],["ahorroMin","Ahorro min"],["callesReales","Calles reales"]];
-  const cell = (k,v) => v==null ? "" : (k==="inicio"||k==="fin") ? hhmm(v) : typeof v==="number" ? String(v).replace(".",",") : typeof v==="boolean" ? (v?"Sí":"No") : String(v);
+  const cell = (k,v) => v==null ? "" : k==="fecha" ? v : (k==="inicio"||k==="fin") ? hhmm(v) : typeof v==="number" ? String(v).replace(".",",") : typeof v==="boolean" ? (v?"Sí":"No") : String(v);
   // Separador «;» y coma decimal: así lo abre bien Excel en español (Colombia).
-  const rows = [cols.map(c=>c[1]).join(";")].concat(h.map(x=>cols.map(([k])=>cell(k,x[k])).join(";")));
-  const blob = new Blob(["\ufeff" + rows.join("\r\n")], {type:"text/csv;charset=utf-8"});
-  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "historial-jornadas-" + ymd(Date.now()) + ".csv";
-  document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href), 2000);
-  toast("Historial descargado. Ábrelo con Excel o Google Sheets.");
+  const rows = [cols.map(c=>c[1]).join(";")].concat(h.map(x=>cols.map(([k])=>k==="fecha" ? fechaLarga(x.inicio) : cell(k,x[k])).join(";")));
+  downloadCsv(rows, "resumen-jornadas-" + ymd(Date.now()) + ".csv");
+  toast("Resumen por día descargado. Ábrelo con Excel o Google Sheets.");
 }
 
 /* ============ Reporte del día ============ */
@@ -1642,7 +1683,7 @@ $("qtyMinus").onclick = ()=>{ $("fQty").value = Math.max(1,(parseInt($("fQty").v
 function setType(t){
   document.querySelectorAll('input[name="fType"]').forEach(r=>{ r.checked = r.value===t; });
   $("fUnit").placeholder = UNIT_HINT[t||""];
-  $("fUnitLbl").firstChild.textContent = t ? "Detalle del " + (t==="apto"?"apartamento":t==="conjunto"?"conjunto":t) : "Detalle";
+  $("fUnitLbl").firstChild.textContent = t ? ({casa:"Detalle de la casa", apto:"Detalle del apartamento", local:"Detalle del local", conjunto:"Detalle del conjunto"}[t]) : "Detalle";
 }
 document.querySelectorAll('input[name="fType"]').forEach(r=>r.addEventListener("change", ()=>setType(r.value)));
 // Al escribir el detalle, se sugiere el tipo si aún no se eligió.
@@ -2340,6 +2381,7 @@ for(const [id,k] of [["zMinCra","minCra"],["zMaxCra","maxCra"],["zMinCl","minCl"
 $("btnRestore").onclick = ()=>{ if(state.suggestedIds){ applyOrder(state.suggestedIds); save(); render(); toast("Se restauró el orden sugerido."); } };
 $("btnHist").onclick = ()=>{ recordDay(); renderHist(); $("dlgHist").showModal(); };
 $("frmHist").addEventListener("submit", e=>{ e.preventDefault(); $("dlgHist").close(); });
+$("histCsvPed").onclick = ()=>{ if(!histLoad().length){ toast("Aún no hay jornadas para exportar."); return; } histCsvPedidos(); };
 $("histCsv").onclick = ()=>{ if(!histLoad().length){ toast("Aún no hay jornadas para exportar."); return; } histCsv(); };
 $("histClear").onclick = ()=>{ $("dlgHist").close(); confirmBox("Borrar historial", "Se borran los resúmenes de todas las jornadas guardadas en este celular.", ()=>{ store.set(HIST_KEY, []); toast("Historial borrado."); }); };
 $("btnReport").onclick = ()=>{ $("repText").textContent = dayReport(); $("dlgReport").showModal(); };
@@ -2394,7 +2436,7 @@ $("restoreFile").addEventListener("change", async e=>{
 });
 
 /* ============ App instalable y sin conexión ============ */
-const APP_VERSION = "1.17.0";
+const APP_VERSION = "1.18.0";
 $("ver").textContent = "Versión " + APP_VERSION + ". Funciona sin internet una vez abierta la primera vez.";
 if(navigator.storage && navigator.storage.estimate){
   navigator.storage.estimate().then(e=>{ if(e && e.usage) $("ver").textContent += ` Espacio usado en este celular: ${(e.usage/1048576).toFixed(1).replace(".",",")} MB (la mayor parte es el lector de etiquetas).`; }).catch(()=>{});
