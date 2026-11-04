@@ -130,6 +130,7 @@ dialog.scan{width:min(640px,calc(100% - 16px))}
 .chip.unit{color:var(--ink);border-color:var(--ink);font-weight:700}
 .hrow{border:1px solid var(--line);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:2px;font-size:14px}
 .hrow b{font-family:var(--display);font-size:17px}
+.scanStat{display:flex;flex-wrap:wrap;gap:6px}
 .toast{position:fixed;left:50%;bottom:84px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 14px;border-radius:10px;font-size:14px;z-index:20;max-width:calc(100% - 32px);display:none}
 .toast.show{display:block}
 details summary{cursor:pointer;font-weight:600}
@@ -183,7 +184,7 @@ details summary{cursor:pointer;font-weight:600}
       <p class="hint" id="ocrMsg">Leyendo etiqueta…</p>
       <div class="progress"><i id="ocrBar"></i></div>
     </div>
-    <p class="hint">«Escanear» lee el código de la guía y la dirección en un solo paso. Todo se procesa en el celular. Si la etiqueta está muy arrugada, usa «Copiar texto» de Google Lens y «Pegar texto».</p>
+    <p class="hint">«Escanear» lee en vivo el código, la dirección y el teléfono de la etiqueta y guarda solo. Todo se procesa en el celular. Si la etiqueta está muy arrugada, usa «Copiar texto» de Google Lens y «Pegar texto».</p>
   </section>
 
   <section class="card" aria-labelledby="hRoute">
@@ -347,10 +348,15 @@ details summary{cursor:pointer;font-weight:600}
   <form id="frmScan" style="padding:12px;display:flex;flex-direction:column;gap:10px">
     <h2 id="scanTitle">Escanear etiqueta</h2>
     <div class="scanbox"><video id="scanVideo" playsinline muted></video><div class="scanframe"></div></div>
+    <div class="scanStat" aria-live="polite">
+      <span class="chip" id="stCode">Código: buscando…</span>
+      <span class="chip" id="stAddr">Dirección: buscando…</span>
+      <span class="chip" id="stTel">Teléfono: buscando…</span>
+    </div>
     <p class="hint" id="scanMsg" aria-live="polite">Abriendo cámara…</p>
     <div class="row">
       <button type="button" id="scanTorch" hidden>Linterna</button>
-      <button type="button" id="scanShot">Leer sin código</button>
+      <button type="button" class="primary" id="scanShot">Capturar</button>
       <button type="button" id="scanClose">Cerrar</button>
     </div>
     <label style="flex-direction:row;align-items:center;gap:8px;color:var(--ink);font-size:15px">
@@ -1787,8 +1793,18 @@ function grabFrame(v){
   const c = document.createElement("canvas"); c.width = v.videoWidth; c.height = v.videoHeight;
   c.getContext("2d").drawImage(v,0,0); return c;
 }
+// Lectura en vivo: mientras la cámara está abierta se busca el código de barras/QR (cada 0,25 s) y se lee el texto
+// de la etiqueta (cada vez que el lector queda libre). Los datos se van acumulando entre cuadros; cuando la dirección
+// se lee igual en dos cuadros (o una vez junto con el teléfono), se guarda sola.
+let live = null;
+function liveReset(){
+  live = {guia:"", codeAddr:null, hits:{}, best:null, phone:"", name:"", zone:"", barrio:"", type:"", unit:"", raw:"", t0:Date.now(), busy:false, done:false, frames:0};
+  setStat("stCode", null, "Código: buscando…"); setStat("stAddr", null, "Dirección: buscando…"); setStat("stTel", null, "Teléfono: buscando…");
+}
+function setStat(id, ok, txt){ const el = $(id); el.textContent = txt; el.className = "chip" + (ok ? " ok" : ""); }
 function stopScan(){
   clearInterval(scanTimer); scanTimer = null; torchOn = false;
+  if(live) live.done = true;
   if(scanStream){ scanStream.getTracks().forEach(t=>t.stop()); scanStream = null; }
   const v = $("scanVideo"); v.srcObject = null;
   if($("dlgScan").open) $("dlgScan").close();
@@ -1797,6 +1813,7 @@ async function startScan(){
   if(!SERVED || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){ toast("La cámara en vivo no está disponible aquí. Usa «Foto»."); $("photo").click(); return; }
   $("scanLoop").checked = !!state.scanLoop;
   $("scanMsg").textContent = "Abriendo cámara…"; $("scanTorch").hidden = true;
+  liveReset();
   $("dlgScan").showModal();
   try{
     scanStream = await navigator.mediaDevices.getUserMedia({audio:false, video:{facingMode:{ideal:"environment"}, width:{ideal:1920}, height:{ideal:1080}}});
@@ -1810,25 +1827,91 @@ async function startScan(){
   const track = scanStream.getVideoTracks()[0];
   const caps = track && track.getCapabilities ? track.getCapabilities() : {};
   $("scanTorch").hidden = !caps.torch;
+  // Enfoque continuo si la cámara lo permite (mejora mucho la lectura de texto).
+  if(caps.focusMode && caps.focusMode.includes("continuous")){ try{ await track.applyConstraints({advanced:[{focusMode:"continuous"}]}); }catch(e){} }
   scanDet = scanDet || await makeDetector();
-  $("scanMsg").textContent = scanDet ? "Apunta al código de barras o al QR de la etiqueta. Si no tiene código, toca «Leer sin código»." :
-    "Este celular no puede leer códigos; toca «Leer sin código» para leer el texto de la etiqueta.";
+  $("scanMsg").textContent = "Apunta a la etiqueta de cerca, con buena luz y que se vea completa. Se guarda sola cuando lee la dirección; si tarda, toca «Capturar».";
   scanTimer = setInterval(scanTick, 250);
+  getWorker().catch(()=>{});   // prepara el lector de texto mientras tanto
+  liveLoop();
 }
 async function scanTick(){
   const v = $("scanVideo");
-  if(scanBusy || !v.videoWidth || !scanStream) return;
+  if(scanBusy || !v.videoWidth || !scanStream || !scanDet || live.guia || live.codeAddr) return;
   scanBusy = true;
   try{
     const codes = await detectCodes(v);
-    if(codes.length){
-      if(navigator.vibrate) navigator.vibrate(80);
-      const frame = grabFrame(v);
-      stopScan();
-      await processScan(codes, frame);
+    for(const c of codes){
+      const dd = extractLabel(String(c).replace(/[|;]/g,"\n"));
+      if(parseAddress(dd.addr)){ live.codeAddr = {...dd, raw:"Código: "+c}; }
+      else if(!live.guia){ live.guia = guiaFromCode(String(c)); }
+    }
+    if(live.guia || live.codeAddr){
+      if(navigator.vibrate) navigator.vibrate(60);
+      if(live.guia && hasGuia(live.guia)){ stopScan(); toast("Esa guía ya está cargada."); if(state.scanLoop) setTimeout(startScan, 900); return; }
+      setStat("stCode", true, "Código: " + (live.guia || "con dirección"));
+      if(live.codeAddr) return finishScan();
     }
   }catch(e){ console.warn(e); }
   finally{ scanBusy = false; }
+}
+// Recorte central del cuadro de video, ampliado y en grises: lo que necesita el lector de texto.
+function liveCrop(v){
+  const W = v.videoWidth, H = v.videoHeight, cw = Math.round(W*0.92), ch = Math.round(H*0.84);
+  const sc = Math.min(2, 1700/cw), c = document.createElement("canvas");
+  c.width = Math.round(cw*sc); c.height = Math.round(ch*sc);
+  const g = c.getContext("2d", {willReadFrequently:true});
+  g.drawImage(v, (W-cw)/2, (H-ch)/2, cw, ch, 0, 0, c.width, c.height);
+  const im = g.getImageData(0,0,c.width,c.height), d = im.data;
+  for(let i=0;i<d.length;i+=4){ let y = 0.299*d[i]+0.587*d[i+1]+0.114*d[i+2]; y = Math.max(0,Math.min(255,(y-128)*1.6+128)); d[i]=d[i+1]=d[i+2]=y; }
+  g.putImageData(im,0,0);
+  return c;
+}
+function absorb(d){
+  // Junta lo leído en cada cuadro: la dirección por mayoría y el resto con el primer dato que aparezca.
+  for(const k of ["phone","name","zone","barrio","type","unit"]) if(!live[k] && d[k]) live[k] = d[k];
+  if(d.guia && !live.guia) live.guia = d.guia;
+  if(!live.raw && d.raw) live.raw = d.raw;
+  const pa = parseAddress(d.addr);
+  if(pa){ live.hits[pa.label] = (live.hits[pa.label]||0) + 1; if(!live.best || live.hits[pa.label] >= live.hits[live.best]) live.best = pa.label; }
+}
+async function liveLoop(){
+  let w;
+  try{ w = await getWorker(); }catch(e){ $("scanMsg").textContent = "El lector de texto no está disponible: usa el código o «Capturar»."; return; }
+  while(live && !live.done && scanStream){
+    const v = $("scanVideo");
+    if(!v.videoWidth){ await new Promise(r=>setTimeout(r,200)); continue; }
+    live.busy = true;
+    try{
+      await w.setParameters({tessedit_pageseg_mode:"6"});
+      const { data } = await w.recognize(liveCrop(v));
+      if(live.done) break;
+      live.frames++;
+      absorb(extractLabel(data.text));
+      if(live.best) setStat("stAddr", true, "Dirección: " + live.best);
+      if(live.phone) setStat("stTel", true, "Teléfono: " + live.phone.replace(/(\d{3})(\d{3})(\d{4})/,"$1 $2 $3"));
+      if(live.guia && !$("stCode").classList.contains("ok")) setStat("stCode", true, "Guía: " + live.guia);
+      const hits = live.best ? live.hits[live.best] : 0;
+      // Se acepta con 2 lecturas iguales de la dirección, o 1 si también salió el teléfono, o tras 3 cuadros más esperando el teléfono.
+      if(hits >= 2 || (hits >= 1 && live.phone)){ live.busy = false; return finishScan(); }
+      if(Date.now() - live.t0 > 20000 && !live.best) $("scanMsg").textContent = "No logro leer la dirección: acerca más la cámara, usa la linterna o toca «Capturar».";
+    }catch(e){ console.warn("lectura en vivo", e); await new Promise(r=>setTimeout(r,400)); }
+    live.busy = false;
+  }
+}
+async function finishScan(extra){
+  if(!live || live.done) return;
+  live.done = true;
+  if(navigator.vibrate) navigator.vibrate([60,40,60]);
+  const d = live.codeAddr ? {...live.codeAddr} : {addr: live.best || "", raw: live.raw};
+  for(const k of ["phone","name","zone","barrio","type","unit"]) if(!d[k] && live[k]) d[k] = live[k];
+  if(extra) for(const k in extra) if(extra[k] && !d[k]) d[k] = extra[k];
+  if(live.guia) d.guia = live.guia;
+  stopScan();
+  if(d.guia && hasGuia(d.guia)){ toast("Esa guía ya está cargada."); if(state.scanLoop) setTimeout(startScan, 900); return; }
+  fromScan = true;
+  openEdit(d, true);
+  if(!parseAddress(d.addr)) toast("No pude leer bien la dirección. Corrígela a mano o dicta con «Dictar».");
 }
 // Convierte el contenido del código en número de guía (si es una URL de rastreo, se toma el código que trae).
 function guiaFromCode(t){
@@ -1842,30 +1925,14 @@ function guiaFromCode(t){
   }
   return t.replace(/\s+/g,"");
 }
-async function processScan(codes, frame){
-  let fromCode = null, guia = "";
-  for(const c of codes){
-    const dd = extractLabel(String(c).replace(/[|;]/g,"\n"));
-    if(parseAddress(dd.addr)) fromCode = {...dd, raw:"Código: "+c};
-    else if(!guia) guia = guiaFromCode(String(c));
+// «Capturar»: foto de máxima resolución (si la cámara lo permite) y lectura completa en dos pasadas.
+async function captureStill(){
+  const v = $("scanVideo"); if(!v.videoWidth || !scanStream) return null;
+  const track = scanStream.getVideoTracks()[0];
+  if(window.ImageCapture && track){
+    try{ const blob = await new ImageCapture(track).takePhoto(); if(blob && blob.size) return blob; }catch(e){}
   }
-  if(guia && hasGuia(guia)){
-    toast("Esa guía ya está cargada.");
-    if(state.scanLoop) setTimeout(startScan, 900);
-    return;
-  }
-  let d = fromCode;
-  if(!d){
-    // El código no trae la dirección: se lee el texto del mismo cuadro.
-    $("ocrBox").hidden = false; $("ocrBar").style.width = "0%"; $("ocrMsg").textContent = "Código leído. Leyendo la dirección…";
-    try{ d = await ocrSource(frame); }
-    catch(e){ console.error(e); d = {addr:"", raw:""}; }
-    $("ocrBox").hidden = true;
-  }
-  if(guia) d.guia = guia;
-  fromScan = true;
-  openEdit(d, true);
-  if(!parseAddress(d.addr)) toast(guia ? "Guía leída. La dirección no se leyó bien: corrígela o toca «Cancelar» y usa «Foto»." : "No pude leer la dirección. Corrígela a mano.");
+  return grabFrame(v);
 }
 $("btnScan").onclick = startScan;
 $("btnScan2").onclick = startScan;
@@ -1878,12 +1945,23 @@ $("scanTorch").onclick = async ()=>{
   try{ await t.applyConstraints({advanced:[{torch:torchOn}]}); $("scanTorch").textContent = torchOn ? "Apagar linterna" : "Linterna"; }catch(e){ torchOn = false; }
 };
 $("scanShot").onclick = async ()=>{
-  const v = $("scanVideo"); if(!v.videoWidth) return;
-  const frame = grabFrame(v); stopScan();
+  if(!live || live.done) return;
+  $("scanShot").disabled = true; $("scanMsg").textContent = "Tomando foto…";
+  const still = await captureStill();
+  live.done = true;
+  // Espera a que el lector termine el cuadro en curso.
+  for(let i=0;i<40 && live.busy;i++) await new Promise(r=>setTimeout(r,100));
+  const keep = {...live}; stopScan(); $("scanShot").disabled = false;
   $("ocrBox").hidden = false; $("ocrBar").style.width = "0%"; $("ocrMsg").textContent = "Leyendo la etiqueta…";
-  let d; try{ d = await ocrSource(frame); }catch(e){ d = {addr:"", raw:""}; }
-  $("ocrBox").hidden = true; fromScan = true; openEdit(d, true);
-  if(!parseAddress(d.addr)) toast("No pude leer la dirección. Corrígela a mano.");
+  let d; try{ d = still ? await ocrSource(still) : {addr:"",raw:""}; }catch(e){ d = {addr:"", raw:""}; }
+  $("ocrBox").hidden = true;
+  // Si la foto no sacó la dirección pero la lectura en vivo sí, se usa la de en vivo.
+  if(!parseAddress(d.addr) && keep.best) d.addr = keep.best;
+  for(const k of ["phone","name","zone","barrio","type","unit"]) if(!d[k] && keep[k]) d[k] = keep[k];
+  if(keep.guia) d.guia = keep.guia;
+  if(d.guia && hasGuia(d.guia)){ toast("Esa guía ya está cargada."); return; }
+  fromScan = true; openEdit(d, true);
+  if(!parseAddress(d.addr)) toast("No pude leer la dirección. Corrígela a mano o dicta con «Dictar».");
 };
 
 const SERVED = /^https?:$/.test(location.protocol);
@@ -2168,7 +2246,7 @@ $("restoreFile").addEventListener("change", async e=>{
 });
 
 /* ============ App instalable y sin conexión ============ */
-const APP_VERSION = "1.13.0";
+const APP_VERSION = "1.14.0";
 $("ver").textContent = "Versión " + APP_VERSION + ". Funciona sin internet una vez abierta la primera vez.";
 if(navigator.storage && navigator.storage.estimate){
   navigator.storage.estimate().then(e=>{ if(e && e.usage) $("ver").textContent += ` Espacio usado en este celular: ${(e.usage/1048576).toFixed(1).replace(".",",")} MB (la mayor parte es el lector de etiquetas).`; }).catch(()=>{});
