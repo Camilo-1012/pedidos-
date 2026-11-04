@@ -173,18 +173,24 @@ function stopScan(){
   if($("dlgScan").open) $("dlgScan").close();
 }
 async function startScan(mode){
-  scanMode = ["code","find","verify"].includes(mode) ? mode : "label";
+  scanMode = ["code","find","verify","assign"].includes(mode) ? mode : "label";
   const codeOnly = scanMode !== "label";
   if(!SERVED || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
-    if(scanMode==="find" || scanMode==="verify"){ askGuiaTyped(); return; }
+    if(scanMode==="find" || scanMode==="verify" || scanMode==="assign"){ askGuiaTyped(); return; }
     if(scanMode==="code"){ toast("La cámara en vivo no está disponible aquí. Escribe la guía."); return; }
     toast("La cámara en vivo no está disponible aquí. Usa «Foto»."); $("photo").click(); return;
   }
   $("scanLoop").checked = !!state.scanLoop;
-  $("scanTitle").textContent = {code:"Escanear código de la guía", find:"Buscar paquete", verify:"Verificar cargue", label:"Escanear etiqueta"}[scanMode];
+  $("scanTitle").textContent = {code:"Escanear código de la guía", find:"Buscar paquete", verify:"Verificar cargue", assign:"Escanear guías", label:"Escanear etiqueta"}[scanMode];
   $("stAddr").hidden = $("stTel").hidden = $("scanShot").hidden = codeOnly;
   $("scanLoop").closest("label").hidden = codeOnly;
-  $("scanFind").hidden = !(scanMode==="find" || scanMode==="verify"); $("scanFindIn").value = "";
+  $("scanFind").hidden = !(scanMode==="find" || scanMode==="verify" || scanMode==="assign"); $("scanFindIn").value = "";
+  $("scanFindIn").placeholder = scanMode==="assign" ? "O escribe la guía completa" : "O escribe los últimos 4+ números";
+  $("scanFindBtn").textContent = scanMode==="assign" ? "Usar" : "Buscar";
+  $("scanAssign").hidden = scanMode!=="assign";
+  $("scanTargetTxt").hidden = scanMode!=="assign";
+  $("dlgScan").classList.toggle("codeOnly", codeOnly);
+  if(scanMode==="assign") assignShow();
   $("scanMsg").textContent = "Abriendo cámara…"; $("scanTorch").hidden = true;
   liveReset();
   $("dlgScan").showModal();
@@ -192,7 +198,7 @@ async function startScan(mode){
     scanStream = await navigator.mediaDevices.getUserMedia({audio:false, video:{facingMode:{ideal:"environment"}, width:{ideal:1920}, height:{ideal:1080}}});
   }catch(e){
     // Buscar o verificar: se puede seguir escribiendo la guía aunque la cámara no abra.
-    if(scanMode==="find" || scanMode==="verify"){ scanStream = null; $("scanMsg").textContent = "No se pudo abrir la cámara (revisa el permiso de cámara). Escribe la guía o sus últimos 4 números."; $("scanFindIn").focus(); return; }
+    if(scanMode==="find" || scanMode==="verify" || scanMode==="assign"){ scanStream = null; $("scanMsg").textContent = scanMode==="assign" ? "No se pudo abrir la cámara: toma una foto del código o escribe la guía. " + assignMsg() : "No se pudo abrir la cámara (revisa el permiso de cámara). Escribe la guía o sus últimos 4 números."; $("scanFindIn").focus(); return; }
     $("dlgScan").close();
     toast("No se pudo abrir la cámara. Revisa que la app tenga permiso de cámara en los ajustes del celular.");
     return;
@@ -208,7 +214,7 @@ async function startScan(mode){
   scanDet = scanDet || await makeDetector();
   if(codeOnly){
     $("scanMsg").textContent = !scanDet ? "Este celular no puede leer códigos de barras. Escribe la guía a mano."
-      : scanMode==="verify" ? verifyMsg() : "Apunta al código de barras o QR de la guía, de cerca y centrado.";
+      : scanMode==="verify" ? verifyMsg() : scanMode==="assign" ? assignMsg() : "Apunta al código de barras o QR de la guía, de cerca y centrado.";
     if(!scanDet) return;
     scanTimer = setInterval(scanTick, 200);
     return;
@@ -227,15 +233,21 @@ async function scanTick(){
   try{
     const before = live.codeGuia;
     takeCodes(await detectCodes(v));
-    if(live.codeAddr) return finishScan();
-    // Verificando: un código ya leído en esta pasada de cámara no se vuelve a anunciar.
-    if(live.mode==="verify" && live.codeGuia && (live.seen||(live.seen=new Set())).has(live.codeGuia)){ live.codeGuia = ""; return; }
+    if(live.codeAddr){
+      if(live.mode==="label") return finishScan();
+      // En los modos de solo código, un QR que trae la dirección sirve por su guía.
+      if(live.codeAddr.guia && live.codeAddr.guia !== before) live.codeGuia = live.codeAddr.guia;
+      live.codeAddr = null;
+    }
+    // Verificando o asociando guías: un código ya leído en esta pasada de cámara no se vuelve a anunciar.
+    if((live.mode==="verify" || live.mode==="assign") && live.codeGuia && (live.seen||(live.seen=new Set())).has(live.codeGuia)){ live.codeGuia = ""; return; }
     if(live.codeGuia && live.codeGuia !== before){
       if(navigator.vibrate) navigator.vibrate(60);
       setStat("stCode", true, "Código: " + live.codeGuia);
       if(live.mode==="code") return finishCode();
       if(live.mode==="find"){ const g = live.codeGuia; live.done = true; stopScan(); return showFind(g); }
       if(live.mode==="verify"){ (live.seen||(live.seen=new Set())).add(live.codeGuia); verifyGuia(live.codeGuia); live.codeGuia = ""; return; }
+      if(live.mode==="assign"){ (live.seen||(live.seen=new Set())).add(live.codeGuia); const g = live.codeGuia; live.codeGuia = ""; assignGuia(g); return; }
       if(hasGuia(live.codeGuia)){ const g = live.codeGuia; stopScan(); dupAlert(g); return; }
     }
   }catch(e){ console.warn(e); }

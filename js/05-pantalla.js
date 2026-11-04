@@ -185,6 +185,7 @@ function render(){
         <button class="small" data-act="up" aria-label="Subir" ${idx===0?"disabled":""}>▲</button>
         <button class="small" data-act="down" aria-label="Bajar" ${idx===state.stops.length-1?"disabled":""}>▼</button>
         ${s.phone && cleanPhone(s.phone).startsWith("3") ? `<a class="btn small" href="${waUrl(cleanPhone(s.phone), s)}" target="_blank" rel="noopener">WhatsApp</a>` : ""}
+        ${!isDone && !s.example && guias(s).length < (s.qty||1) ? `<button class="small" data-act="guia">+ Guía</button>` : ""}
         <button class="small" data-act="fail">${isFail?"Quitar fallido":"No estaba"}</button>
         <button class="small" data-act="edit">Editar</button>
         <button class="small danger" data-act="del">Borrar</button>
@@ -231,6 +232,7 @@ $("list").addEventListener("click", e=>{
   switch(b.dataset.act){
     case "done": toggleDone(s); return;
     case "fail": toggleFail(s); return;
+    case "guia": startAssign([s.id]); return;
     case "up": if(i>0){ [state.stops[i-1],state.stops[i]]=[state.stops[i],state.stops[i-1]]; } break;
     case "down": if(i<state.stops.length-1){ [state.stops[i+1],state.stops[i]]=[state.stops[i],state.stops[i+1]]; } break;
     case "edit": openEdit(s); return;
@@ -303,6 +305,13 @@ function addOrMerge(d){
   const k = stopKey(d);
   const same = state.stops.find(st=>st.status!=="done" && stopKey(st)===k);
   if(same){
+    // La parada ya estaba (p. ej. dictada) y le faltan guías: esta etiqueta es uno de sus paquetes, no uno más.
+    if(d.guia && !guias(same).includes(d.guia) && guias(same).length < (same.qty||1) && (parseInt(d.qty,10)||1) === 1){
+      same.guia = guias(same).concat(d.guia).join(", ");
+      for(const k of ["phone","name","zone","barrio","unit"]) if(!same[k] && d[k]) same[k] = d[k];
+      if((!same.type || same.type==="casa") && d.type && d.type!=="casa") same.type = d.type;
+      return {merged:true, filled:true, stop:same};
+    }
     same.qty = Math.min(99,(same.qty||1) + Math.max(1,parseInt(d.qty,10)||1));
     if(d.guia && !guias(same).includes(d.guia)) same.guia = guias(same).concat(d.guia).join(", ");
     if(d.name && !(same.name||"").toLowerCase().includes(d.name.toLowerCase())) same.name = same.name ? same.name + " / " + d.name : d.name;
@@ -330,7 +339,8 @@ $("frmEdit").addEventListener("submit", e=>{
     if(d.guia){ const dup = guias(d).find(hasGuia); if(dup){ $("dlgEdit").close(); dupAlert(dup); return; } }
     state.stops = state.stops.filter(s=>!s.example);
     const r = addOrMerge(d);
-    if(r.merged) toast(`Misma dirección que otra parada: ahora son ${r.stop.qty} paquetes en ${r.stop.label||r.stop.addr}.`);
+    if(r.filled) toast(`Guía agregada a la parada que ya tenías: ${r.stop.label||r.stop.addr}.`);
+    else if(r.merged) toast(`Misma dirección que otra parada: ahora son ${r.stop.qty} paquetes en ${r.stop.label||r.stop.addr}.`);
     else toast(p ? "Paquete agregado y ruta reordenada." : "Agregado, pero la dirección quedó para revisar.");
   } else {
     const dup = guias(d).find(g=>findGuia(g, editing.s));
@@ -364,7 +374,7 @@ $("frmText").addEventListener("submit", e=>{
   if(textMode==="one"){ const d = extractLabel(t); openEdit(d, true); }
   else {
     state.stops = state.stops.filter(s=>!s.example);
-    let ok=0, bad=0, merged=0;
+    let ok=0, bad=0, merged=0; const ids = [];
     t.split(/\r?\n/).map(l=>l.trim()).filter(Boolean).forEach(line=>{
       const d = extractLabel(line); if(!d.addr) d.addr = line;
       const q = line.match(/(?:^|\s)[x×]\s*(\d{1,2})\b|\b(\d{1,2})\s*(?:paq|paquetes|unid|und)\b|\b(?:por|cantidad)\s+(\d{1,2})\b/i);
@@ -372,9 +382,15 @@ $("frmText").addEventListener("submit", e=>{
       if(d.barrio) d.barrio = d.barrio.replace(/\b(?:por|cantidad)\s+\d{1,2}\b|(?:^|\s)[x×]\s*\d{1,2}\b|\b\d{1,2}\s*(?:paq\w*|unid\w*|und)\b|\b(?:\+?57)?3\d{9}\b|\bST\s*\d+\b/gi,"").trim();
       const r = addOrMerge(d);
       if(r.merged) merged++; else if(r.stop.x===null) bad++; else ok++;
+      ids.push(r.stop.id);
     });
     save(); render(); optimize(true);
     toast(`${ok} ubicadas${bad?`, ${bad} para revisar`:""}${merged?`, ${merged} sumadas a una dirección repetida`:""}. Ruta ordenada.`);
+    // Lo dictado o pegado no trae guía: se ofrece escanear el código de cada paquete ya mismo.
+    const falt = guiasFaltantes([...new Set(ids)]);
+    if(falt.length) setTimeout(()=>confirmBox("Escanear las guías",
+      `${falt.length} paquete(s) quedaron sin guía. ¿Escaneas ahora el código de barras o QR de cada uno? La app te dice a qué dirección corresponde, y si tienes otro paquete en la mano eliges su dirección en la lista.`,
+      ()=>startAssign([...new Set(ids)])), 400);
   }
 });
 

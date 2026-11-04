@@ -252,6 +252,7 @@
 <dialog id="dlgScan" class="scan" aria-labelledby="scanTitle">
   <form id="frmScan" style="padding:12px;display:flex;flex-direction:column;gap:10px">
     <h2 id="scanTitle">Escanear etiqueta</h2>
+    <div class="scanTarget" id="scanTargetTxt" hidden aria-live="polite"></div>
     <div class="scanbox"><video id="scanVideo" playsinline muted></video><div class="scanframe"></div></div>
     <div class="scanStat" aria-live="polite">
       <span class="chip" id="stCode">Código: buscando…</span>
@@ -259,6 +260,16 @@
       <span class="chip" id="stTel">Teléfono: buscando…</span>
     </div>
     <p class="hint" id="scanMsg" aria-live="polite">Abriendo cámara…</p>
+    <div id="scanAssign" hidden style="display:flex;flex-direction:column;gap:8px">
+      <label for="scanTarget">Paquete que tienes en la mano
+        <select id="scanTarget"></select>
+      </label>
+      <div class="row">
+        <label class="btn" for="scanPhotoIn" style="flex-direction:row;color:var(--ink);font-size:15px">Foto del código</label>
+        <input id="scanPhotoIn" type="file" accept="image/*" capture="environment" hidden>
+        <button type="button" id="scanSkip">Saltar este</button>
+      </div>
+    </div>
     <div class="row" id="scanFind" hidden>
       <input id="scanFindIn" inputmode="numeric" autocomplete="off" placeholder="O escribe los últimos 4+ números" style="flex:1 1 60%">
       <button type="button" id="scanFindBtn" style="flex:0 0 auto">Buscar</button>
@@ -335,6 +346,7 @@
   <form method="dialog">
     <div class="dlgHead"><h2 id="ldTitle">Revisar cargue</h2><button type="submit" class="small">Cerrar</button></div>
     <div class="lsum" id="ldSum"></div>
+    <button type="button" class="dark" id="ldGuias" hidden>Escanear guías faltantes</button>
     <button type="button" class="primary" id="ldScan">Verificar paquetes escaneando la guía</button>
     <p class="hint" id="ldHint" style="margin:0"></p>
     <div id="ldList" style="display:flex;flex-direction:column;gap:8px"></div>

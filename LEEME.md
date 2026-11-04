@@ -230,3 +230,12 @@ El plan gratis de Supabase pausa el proyecto tras unos 7 días sin uso. Para evi
 - **Una vez:** pegar `supabase/ping.sql` en Supabase → SQL Editor → Run.
 - Si la tarea sale en rojo en **Actions**, el proyecto probablemente está pausado: en supabase.com toca **Restore project**.
 - GitHub desactiva las tareas programadas si el repositorio pasa 60 días sin cambios. Avisa por correo; se reactiva en Actions → «Supabase activo» → **Enable workflow**.
+
+## Guías para paradas dictadas o pegadas (v2.3)
+
+- Al terminar de **dictar o pegar varias direcciones**, la app pregunta si quieres escanear las guías. Muestra arriba, en grande, la parada que sigue («Parada 1: Calle 145 # 103B-90 · Paquete 1 de 2»), y al escanear el código de barras o QR de ese paquete pasa sola a la siguiente.
+  - **«Paquete que tienes en la mano»:** si tienes otro paquete, eliges su dirección en la lista.
+  - **Foto del código**, si no lo lee en vivo; **escribir la guía**; o **Saltar este**.
+  - Rechaza una guía que ya esté en otra parada. Una parada con 2 paquetes pide 2 guías.
+- También se llega desde el botón **+ Guía** de cada parada que le falte y desde **Revisar cargue → Escanear guías faltantes**.
+- Si escaneas la **etiqueta completa** de un paquete cuya dirección ya está dictada y sin guía, la guía se **agrega a esa parada**, en vez de sumar un paquete más.
