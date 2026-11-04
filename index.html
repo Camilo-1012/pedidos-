@@ -120,6 +120,12 @@ dialog.scan{width:min(640px,calc(100% - 16px))}
 .mic.on{background:var(--bad);color:#fff;border-color:var(--bad);animation:pulse 1.2s infinite}
 @keyframes pulse{50%{opacity:.6}}
 @media (prefers-reduced-motion: reduce){.mic.on{animation:none}}
+.seg{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.seg input{position:absolute;opacity:0;pointer-events:none}
+.seg label{display:flex;align-items:center;justify-content:center;min-height:44px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--ink);font:600 14px var(--body);cursor:pointer}
+.seg input:checked + label{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.seg input:focus-visible + label{outline:3px solid var(--accent);outline-offset:2px}
+.chip.unit{color:var(--ink);border-color:var(--ink);font-weight:700}
 .toast{position:fixed;left:50%;bottom:84px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 14px;border-radius:10px;font-size:14px;z-index:20;max-width:calc(100% - 32px);display:none}
 .toast.show{display:block}
 details summary{cursor:pointer;font-weight:600}
@@ -261,7 +267,17 @@ details summary{cursor:pointer;font-weight:600}
       <label for="fBarrio">Barrio / localidad<input id="fBarrio" autocomplete="off"></label>
       <label for="fGuia">Guía (TN)<input id="fGuia" inputmode="numeric" autocomplete="off"></label>
     </div>
-    <label for="fNotes">Notas (apto, torre, interior, otro teléfono)<input id="fNotes" autocomplete="off"></label>
+    <fieldset style="border:0;padding:0;margin:0;display:flex;flex-direction:column;gap:6px">
+      <legend style="font-size:13px;font-weight:600;color:var(--muted);padding:0;margin-bottom:4px">Tipo de inmueble</legend>
+      <div class="seg" role="radiogroup">
+        <input type="radio" name="fType" id="tCasa" value="casa"><label for="tCasa">Casa</label>
+        <input type="radio" name="fType" id="tApto" value="apto"><label for="tApto">Apto</label>
+        <input type="radio" name="fType" id="tLocal" value="local"><label for="tLocal">Local</label>
+        <input type="radio" name="fType" id="tConj" value="conjunto"><label for="tConj">Conjunto</label>
+      </div>
+    </fieldset>
+    <label for="fUnit" id="fUnitLbl">Detalle<input id="fUnit" autocomplete="off"></label>
+    <label for="fNotes">Notas (indicaciones, otro teléfono)<input id="fNotes" autocomplete="off"></label>
     <details id="rawWrap"><summary>Texto leído de la etiqueta</summary><p class="preview" id="fRaw" style="white-space:pre-wrap"></p></details>
     <div class="row">
       <button type="button" id="dlgCancel">Cancelar</button>
@@ -412,8 +428,30 @@ function extractLabel(text){
       if(/^[A-ZÁÉÍÓÚÑ ]{5,40}$/.test(l) && l.trim().split(/\s+/).length>=2 && !/OPERADO|ADMITIDO|COURIER|S\.?A\.?S/i.test(l)){ out.name = titleCase(l); break; }
     }
   }
+  // Tipo de inmueble (casa, apto, local, conjunto) si la etiqueta lo menciona.
+  const u = detectUnit(lines.filter((l,i)=>i>=Math.max(0,addrLineIdx)).join(" ") || all);
+  if(u){ out.type = u.type; out.unit = u.detail; }
   return out;
 }
+// Reconoce "Conjunto Los Pinos torre 2 apto 301", "Apto 502 Int 3", "Local 12", "Casa 14"...
+function detectUnit(text){
+  const t = " " + (text||"").replace(/\s+/g," ") + " ";
+  const pick = re => { const m = t.match(re); return m ? m[0].trim().replace(/\s+/g," ") : ""; };
+  const torre = pick(/\b(?:torre|tr|bloque|blq|bl|interior|int|edificio|edif)\.?\s*[a-z0-9]{1,4}\b/i);
+  const apto  = pick(/\b(?:apto|apartamento|apart|apt|ap)\.?\s*(?:no\.?\s*)?[a-z0-9]{1,6}\b/i);
+  const conj  = t.match(/\b(?:conjunto|conj|cjto|condominio|urbanizaci[oó]n|agrupaci[oó]n)\.?\s+(?:residencial\s+)?([a-záéíóúñ0-9 ]{2,30}?)(?=\s+(?:torre|tr|bloque|blq|bl|interior|int|apto|apartamento|apt|ap|casa|local|tel|st|bogota|colombia)\b|[,;]|\s*$)/i);
+  const local = pick(/\b(?:local|loc|lc)\.?\s*(?:no\.?\s*)?[a-z0-9]{1,6}\b/i);
+  const casa  = pick(/\bcasa\s*(?:no\.?\s*)?[a-z0-9]{0,5}\b/i);
+  const cap = x => x ? x.charAt(0).toUpperCase() + x.slice(1) : x;
+  if(conj) return {type:"conjunto", detail:[titleCase(conj[1].trim()), cap(torre), cap(apto), cap(casa)].filter(Boolean).join(", ")};
+  if(apto) return {type:"apto", detail:[cap(torre), cap(apto)].filter(Boolean).join(", ")};
+  if(local) return {type:"local", detail:cap(local)};
+  if(casa) return {type:"casa", detail:/\d/.test(casa) ? cap(casa) : ""};
+  if(torre) return {type:"apto", detail:cap(torre)};
+  return null;
+}
+const UNIT_NAME = {casa:"Casa", apto:"Apto", local:"Local", conjunto:"Conjunto"};
+const UNIT_HINT = {casa:"Ej: Casa 14, puerta verde", apto:"Ej: Torre 2, apto 301", local:"Ej: Local 5, Droguería La 80", conjunto:"Ej: Conjunto Los Pinos, torre 3, apto 502", "":"Torre, apto, local o casa"};
 function titleCase(s){ return s.toLowerCase().replace(/\b\p{L}/gu,c=>c.toUpperCase()); }
 
 /* ============ Estado ============ */
@@ -430,7 +468,7 @@ if(!state.seeded && state.stops.length===0){
 function mkStop(d){
   const p = parseAddress(d.addr);
   return {id:Date.now().toString(36)+Math.random().toString(36).slice(2,7), addr:d.addr||"", name:d.name||"", phone:d.phone||"",
-    zone:d.zone||"", barrio:d.barrio||"", guia:d.guia||"", qty:Math.max(1,Math.min(99,parseInt(d.qty,10)||1)), notes:d.notes||"", raw:d.raw||"", example:!!d.example,
+    zone:d.zone||"", barrio:d.barrio||"", guia:d.guia||"", qty:Math.max(1,Math.min(99,parseInt(d.qty,10)||1)), type:d.type||"", unit:d.unit||"", notes:d.notes||"", raw:d.raw||"", example:!!d.example,
     x:p?p.x:null, y:p?p.y:null, label:p?p.label:"", status:"pend"};
 }
 function save(){ store.set(KEY,state); }
@@ -992,6 +1030,7 @@ function render(){
         <div class="addr">${esc(s.label || s.addr)}</div>
         <div class="meta">
           ${s.zone?`<span class="chip zone">ST ${esc(s.zone)}</span>`:""}
+          ${(s.type||s.unit)?`<span class="chip unit">${esc([UNIT_NAME[s.type]||"", s.unit].filter(Boolean).join(" · "))}</span>`:""}
           ${s.barrio?`<span class="chip">${esc(s.barrio)}</span>`:""}
           ${unk?'<span class="chip warn">Revisar dirección</span>':""}
           ${isFail?'<span class="chip warn">Intento fallido</span>':""}
@@ -1045,6 +1084,7 @@ function openEdit(s, isNew){
   editing = {s, isNew};
   $("dlgTitle").textContent = isNew ? "Revisa y guarda" : "Editar paquete";
   $("fAddr").value = s.addr||""; $("fZone").value = s.zone||""; $("fPhone").value = s.phone||"";
+  setType(s.type||""); $("fUnit").value = s.unit||"";
   $("fQty").value = s.qty||1; $("fName").value = s.name||""; $("fBarrio").value = s.barrio||""; $("fGuia").value = s.guia||""; $("fNotes").value = s.notes||"";
   $("fRaw").textContent = s.raw||""; $("rawWrap").hidden = !s.raw;
   updParsed();
@@ -1057,6 +1097,17 @@ function updParsed(){
 }
 $("fAddr").addEventListener("input", updParsed);
 $("qtyMinus").onclick = ()=>{ $("fQty").value = Math.max(1,(parseInt($("fQty").value,10)||1)-1); };
+function setType(t){
+  document.querySelectorAll('input[name="fType"]').forEach(r=>{ r.checked = r.value===t; });
+  $("fUnit").placeholder = UNIT_HINT[t||""];
+  $("fUnitLbl").firstChild.textContent = t ? "Detalle del " + (t==="apto"?"apartamento":t==="conjunto"?"conjunto":t) : "Detalle";
+}
+document.querySelectorAll('input[name="fType"]').forEach(r=>r.addEventListener("change", ()=>setType(r.value)));
+// Al escribir el detalle, se sugiere el tipo si aún no se eligió.
+$("fUnit").addEventListener("change", ()=>{
+  if(document.querySelector('input[name="fType"]:checked')) return;
+  const u = detectUnit($("fUnit").value); if(u) setType(u.type);
+});
 $("qtyPlus").onclick  = ()=>{ $("fQty").value = Math.min(99,(parseInt($("fQty").value,10)||1)+1); };
 // Varios paquetes a la misma dirección van en una sola parada con su cantidad.
 function stopKey(x){ const p = parseAddress(x.label || x.addr); return p ? p.label.toUpperCase() : norm(x.addr); }
@@ -1070,6 +1121,8 @@ function addOrMerge(d){
     if(d.guia && !guias(same).includes(d.guia)) same.guia = guias(same).concat(d.guia).join(", ");
     if(d.name && !(same.name||"").toLowerCase().includes(d.name.toLowerCase())) same.name = same.name ? same.name + " / " + d.name : d.name;
     if(d.phone && d.phone!==same.phone){ if(!same.phone) same.phone = d.phone; else if(!(same.notes||"").includes(d.phone)) same.notes = (same.notes? same.notes+" · " : "") + "Otro tel: " + d.phone; }
+    if(d.unit && !(same.unit||"").toLowerCase().includes(d.unit.toLowerCase())) same.unit = same.unit ? same.unit + " / " + d.unit : d.unit;
+    if(!same.type && d.type) same.type = d.type;
     if(d.notes && !(same.notes||"").includes(d.notes)) same.notes = (same.notes? same.notes+" · " : "") + d.notes;
     if(!same.zone && d.zone) same.zone = d.zone;
     return {merged:true, stop:same};
@@ -1083,7 +1136,8 @@ $("frmEdit").addEventListener("submit", e=>{
   e.preventDefault();
   const d = {addr:$("fAddr").value.trim(), zone:$("fZone").value.trim(), phone:$("fPhone").value.replace(/\D/g,"").slice(-10),
     name:$("fName").value.trim(), barrio:$("fBarrio").value.trim(), guia:$("fGuia").value.trim(), notes:$("fNotes").value.trim(), raw:editing.s.raw,
-    qty:Math.max(1,Math.min(99,parseInt($("fQty").value,10)||1))};
+    qty:Math.max(1,Math.min(99,parseInt($("fQty").value,10)||1)),
+    type:(document.querySelector('input[name="fType"]:checked')||{}).value||"", unit:$("fUnit").value.trim()};
   if(!d.addr) return;
   const p = parseAddress(d.addr);
   if(editing.isNew){
@@ -1098,6 +1152,7 @@ $("frmEdit").addEventListener("submit", e=>{
     if(changed){ editing.s.lat = null; editing.s.lng = null; editing.s.geo = null; }
   }
   $("dlgEdit").close();
+  save(); render();   // se ve de inmediato aunque haya un cálculo de ruta en curso
   optimize(true);
   if(fromScan && state.scanLoop && editing.isNew) setTimeout(startScan, 600);
   fromScan = false;
@@ -1128,7 +1183,7 @@ $("frmText").addEventListener("submit", e=>{
       const r = addOrMerge(d);
       if(r.merged) merged++; else if(r.stop.x===null) bad++; else ok++;
     });
-    save(); optimize(true);
+    save(); render(); optimize(true);
     toast(`${ok} ubicadas${bad?`, ${bad} para revisar`:""}${merged?`, ${merged} sumadas a una dirección repetida`:""}. Ruta ordenada.`);
   }
 });
@@ -1422,7 +1477,11 @@ function startDictation(){
     // La dirección va al campo Dirección; lo que se dijo después (apto, torre…) va a Notas.
     $("fAddr").value = pa ? pa.label : conv;
     const tail = pa ? rest(conv).trim() : "";
-    if(tail) $("fNotes").value = tail.charAt(0).toUpperCase() + tail.slice(1);
+    if(tail){
+      const u = detectUnit(tail);
+      if(u){ setType(u.type); $("fUnit").value = u.detail || $("fUnit").value; }
+      else $("fNotes").value = tail.charAt(0).toUpperCase() + tail.slice(1);
+    }
     updParsed();
   };
   rec.onerror = ev=>{
@@ -1475,7 +1534,7 @@ $("btnMaps").onclick = ()=>{
 };
 $("btnCopy").onclick = async ()=>{
   let n=0;
-  const txt = state.stops.filter(s=>s.status!=="done").map(s=>`${++n}. ${s.label||s.addr}${(s.qty||1)>1?" x"+s.qty:""}${s.zone?" (ST "+s.zone+")":""}${s.name?" - "+s.name:""}${s.phone?" - "+s.phone:""}`).join("\n");
+  const txt = state.stops.filter(s=>s.status!=="done").map(s=>`${++n}. ${s.label||s.addr}${(s.qty||1)>1?" x"+s.qty:""}${(s.type||s.unit)?" ["+[UNIT_NAME[s.type]||"",s.unit].filter(Boolean).join(" ")+"]":""}${s.zone?" (ST "+s.zone+")":""}${s.name?" - "+s.name:""}${s.phone?" - "+s.phone:""}`).join("\n");
   try{ await navigator.clipboard.writeText(txt); toast("Lista copiada."); }
   catch(e){ openText("bulk"); $("txtTitle").textContent="Copia esta lista"; $("txtHint").textContent="Mantén presionado para seleccionar y copiar."; $("txtArea").value=txt; }
 };
@@ -1510,7 +1569,7 @@ $("restoreFile").addEventListener("change", async e=>{
 });
 
 /* ============ App instalable y sin conexión ============ */
-const APP_VERSION = "1.5.0";
+const APP_VERSION = "1.6.0";
 $("ver").textContent = "Versión " + APP_VERSION + ". Funciona sin internet una vez abierta la primera vez.";
 function netState(){ if(SERVED) $("net").hidden = navigator.onLine; }
 addEventListener("online", ()=>{ netState(); if(state.stops.some(s=>s.status!=="done")) optimize(true); }); addEventListener("offline", netState); netState();
