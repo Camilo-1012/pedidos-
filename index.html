@@ -179,6 +179,9 @@ details summary{cursor:pointer;font-weight:600}
 .lrow{display:flex;align-items:center;justify-content:space-between;gap:8px;border:1px solid var(--line);border-radius:10px;padding:8px 10px;font-size:14px}
 .lrow > div{min-width:0;overflow-wrap:anywhere}
 .lrow b{display:block;font-size:15px}
+.corder{display:grid;grid-template-columns:52px minmax(0,1fr);gap:10px;align-items:center;border:1px solid var(--line);border-radius:10px;padding:6px 10px}
+.corder b{font:700 30px/1 var(--display);text-align:center}
+.corder span{display:block;font-size:13px;color:var(--muted);overflow-wrap:anywhere}
 .lsum{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
 .lsum div{background:var(--bg);border-radius:8px;padding:8px;text-align:center}
 .lsum b{display:block;font:700 24px/1 var(--display)}
@@ -361,6 +364,8 @@ details summary{cursor:pointer;font-weight:600}
           </label>
           <p class="hint" id="learnInfo" style="margin:0"></p>
           <button type="button" class="small" id="learnClear">Borrar ubicaciones aprendidas</button>
+          <p class="hint" id="tileInfo" style="margin:0"></p>
+          <button type="button" class="small" id="tileClear" hidden>Borrar mapas guardados</button>
         </fieldset>
         <label for="orsKey">Clave de openrouteservice (opcional, gratis): respaldo si fallan los servidores de rutas gratuitos
           <input id="orsKey" autocomplete="off" spellcheck="false" placeholder="Pega aquí la clave">
@@ -481,6 +486,13 @@ details summary{cursor:pointer;font-weight:600}
     <button type="button" class="primary" id="ldScan">Verificar paquetes escaneando la guía</button>
     <p class="hint" id="ldHint" style="margin:0"></p>
     <div id="ldList" style="display:flex;flex-direction:column;gap:8px"></div>
+    <details id="ldOrder" class="opts">
+      <summary><span>Orden para acomodar en el vehículo</span><span class="optsSum">Lo último en entregarse va al fondo</span></summary>
+      <div class="optsBody">
+        <p class="hint" style="margin:0">Mete los paquetes en este orden, de arriba hacia abajo: así el de la parada 1 queda de último, a la mano. Escribe el número grande en cada paquete con marcador. Hazlo después de «Ordenar ruta».</p>
+        <ol id="ldOrderList" style="list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:6px"></ol>
+      </div>
+    </details>
     <button type="button" class="small" id="ldReset" hidden>Empezar la verificación de nuevo</button>
   </form>
 </dialog>
@@ -1957,9 +1969,11 @@ let LMAP = null, LLAYER = null;
 function drawMap(){
   if($("mapWrap").hidden) return;
   const pend = state.stops.filter(s=>s.status!=="done" && s.lat!=null);
-  const useReal = typeof L !== "undefined" && navigator.onLine && pend.length > 0;
+  // Sin señal se usa el mapa real si ya hay calles guardadas (las que no se han visto salen en gris).
+  if(navigator.onLine && typeof L !== "undefined" && pend.length && !store.get("rutaEntregas.tilesSeen")) store.set("rutaEntregas.tilesSeen", true);
+  const useReal = typeof L !== "undefined" && (navigator.onLine || !!store.get("rutaEntregas.tilesSeen")) && pend.length > 0;
   $("lmap").hidden = !useReal; $("map").hidden = useReal;
-  $("mapHint").textContent = useReal ? "Mapa de OpenStreetMap. El cuadro verde es desde donde arrancas; los números son el orden de entrega." :
+  $("mapHint").textContent = useReal ? "Mapa de OpenStreetMap. El cuadro verde es desde donde arrancas; los números son el orden de entrega. Las calles que ya viste quedan guardadas para verlas sin señal." :
     "Esquema por números de calle y carrera (norte arriba, occidente a la izquierda). Con internet se muestra el mapa real.";
   if(useReal) return drawLeaflet(pend);
   drawSchematic();
@@ -1967,7 +1981,7 @@ function drawMap(){
 function drawLeaflet(pend){
   if(!LMAP){
     LMAP = L.map("lmap", {zoomControl:true, attributionControl:true});
-    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {maxZoom:19, attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'}).addTo(LMAP);
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {maxZoom:19, crossOrigin:true, attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'}).addTo(LMAP);
     LLAYER = L.layerGroup().addTo(LMAP);
   }
   setTimeout(()=>LMAP.invalidateSize(), 50);
@@ -2867,6 +2881,8 @@ function renderLoad(){
     (state.loadOn ? (t.ok >= t.paq ? "Todo el cargue está verificado." : (t.paq - t.ok === 1 ? "Falta 1 paquete por verificar." : `Faltan ${t.paq - t.ok} paquetes por verificar.`)) : "Escanea la guía de cada paquete al subirlo al vehículo: así confirmas que no falta ni sobra ninguno.")
     + (sinGuia ? (sinGuia === 1 ? " 1 paquete no tiene guía registrada: confírmalo con «Lo tengo»." : ` ${sinGuia} paquetes no tienen guía registrada: confírmalos con «Lo tengo».`) : "");
   $("ldReset").hidden = !state.loadOn;
+  // Orden de cargue: el inverso de la ruta (la última parada entra primero, al fondo).
+  $("ldOrderList").innerHTML = ps.slice().reverse().map((st,i)=>`<li class="corder"><b>${stopNum(st)}</b><div>${esc(st.label||st.addr)}${(st.qty||1)>1?` <strong>×${st.qty}</strong>`:""}<span>${i===0?"Entra primero (al fondo) · ":i===ps.length-1?"Entra de último (a la mano) · ":""}${guias(st).map(g=>"…"+esc(g.slice(-4))).join(" ") || "Sin guía"}</span></div></li>`).join("");
   const box = $("ldList"); box.innerHTML = "";
   const issues = [];
   for(const st of ps){
@@ -3143,6 +3159,17 @@ function renderLearn(){
   });
   $("learnClear").hidden = !n;
 }
+async function renderTiles(){
+  if(!window.caches) return;
+  try{
+    const has = (await caches.keys()).includes("ruta-tiles-v1");
+    const n = has ? (await (await caches.open("ruta-tiles-v1")).keys()).length : 0;
+    $("tileInfo").textContent = n ? `Mapas guardados para usar sin señal: ${n} cuadros (≈ ${Math.max(1,Math.round(n*20/1024))} MB).` : "El mapa guarda las calles que vas viendo para mostrarlas sin señal.";
+    $("tileClear").hidden = !n;
+  }catch(e){}
+}
+$("tileClear").onclick = ()=>confirmBox("Borrar mapas guardados", "El mapa volverá a descargar las calles cuando lo abras con señal.", async ()=>{ await caches.delete("ruta-tiles-v1"); store.set("rutaEntregas.tilesSeen", false); renderTiles(); toast("Mapas guardados borrados."); });
+document.querySelector("#learnOn").closest("details").addEventListener("toggle", e=>{ if(e.target.open) renderTiles(); });
 $("learnOn").addEventListener("change", e=>{ state.learnOn = e.target.checked; save(); renderLearn(); });
 $("learnClear").onclick = ()=>confirmBox("Borrar ubicaciones aprendidas", "Las direcciones se volverán a ubicar con el mapa, como al principio.", ()=>{
   learned = {}; store.set(LEARN_KEY, learned);
@@ -3194,7 +3221,7 @@ $("restoreFile").addEventListener("change", async e=>{
 /* ============ App instalable y sin conexión ============ */
 // Al bloquear: apaga la cámara y cierra ventanas abiertas para que no queden datos a la vista.
 window.RUTA_onLock = ()=>{ try{ stopScan(); }catch(e){} };
-const APP_VERSION = "1.22";
+const APP_VERSION = "1.23";
 $("ver").textContent = "Versión " + APP_VERSION + ". Funciona sin internet una vez abierta la primera vez.";
 if(navigator.storage && navigator.storage.estimate){
   navigator.storage.estimate().then(e=>{ if(e && e.usage) $("ver").textContent += ` Espacio usado en este celular: ${(e.usage/1048576).toFixed(1).replace(".",",")} MB (la mayor parte es el lector de etiquetas).`; }).catch(()=>{});

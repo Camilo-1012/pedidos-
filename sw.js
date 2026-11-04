@@ -1,6 +1,6 @@
 /* Service worker: guarda la app en el celular para que abra sin internet.
    Al publicar cambios, sube el número de CACHE para que los celulares descarguen la versión nueva. */
-const CACHE = "ruta-v1.22";
+const CACHE = "ruta-v1.23";
 const CORE = [
   "./", "index.html", "manifest.webmanifest",
   "icons/icon-192.png", "icons/icon-512.png", "icons/maskable-512.png", "icons/apple-touch-icon.png",
@@ -20,14 +20,44 @@ self.addEventListener("message", e => {
   if (t === "skipWaiting") self.skipWaiting();
   else if (t === "version" && e.source) e.source.postMessage({ type: "version", version: CACHE.replace(/^ruta-v/, "") });
 });
+/* Mapas sin señal: se guardan las teselas de OpenStreetMap que ya se vieron (la política de OSM prohíbe descargar
+   zonas completas por adelantado, pero permite guardar lo visto). Se usan sin pedirlas otra vez durante 7 días y,
+   sin señal, aunque sean más viejas. Máximo ~2 000 teselas (≈ 40 MB); las más antiguas salen primero. */
+const TILES = "ruta-tiles-v1", TILE_MAX = 2000, TILE_FRESH = 7 * 864e5;
+let tilePuts = 0;
+async function trimTiles() {
+  const c = await caches.open(TILES), keys = await c.keys();
+  if (keys.length > TILE_MAX) await Promise.all(keys.slice(0, keys.length - TILE_MAX).map(k => c.delete(k)));
+}
+async function tileFetch(req) {
+  const c = await caches.open(TILES);
+  const hit = await c.match(req.url);
+  const age = hit ? Date.now() - (+hit.headers.get("x-saved") || 0) : Infinity;
+  if (hit && age < TILE_FRESH) return hit;
+  try {
+    const r = await fetch(req.url, { mode: "cors", credentials: "omit" });
+    if (r.ok) {
+      const h = new Headers(r.headers); h.set("x-saved", String(Date.now()));
+      const body = await r.blob();
+      await c.put(req.url, new Response(body, { status: 200, headers: h }));
+      if (++tilePuts % 50 === 0) trimTiles();
+      return new Response(body, { status: 200, headers: h });
+    }
+    return hit || r;
+  } catch (err) {
+    if (hit) return hit;
+    throw err;
+  }
+}
 self.addEventListener("activate", e => {
   e.waitUntil(
-    caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k))))
+    caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE && k !== TILES).map(k => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });
 self.addEventListener("fetch", e => {
   const req = e.request;
+  if (req.method === "GET" && new URL(req.url).hostname === "tile.openstreetmap.org") { e.respondWith(tileFetch(req)); return; }
   if (req.method !== "GET" || new URL(req.url).origin !== self.location.origin) return;
   // Página: red primero (para recibir cambios), caché si no hay señal.
   if (req.mode === "navigate") {
