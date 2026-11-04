@@ -141,6 +141,14 @@ dialog.scan{width:min(640px,calc(100% - 16px))}
 .guiaLine{display:flex;flex-wrap:wrap;gap:4px 10px;margin-top:3px;font:600 14px/1.3 ui-monospace,"Roboto Mono",Menlo,monospace;color:var(--ink);letter-spacing:.02em}
 .guiaLine span{display:inline-flex;align-items:center;gap:6px;overflow-wrap:anywhere}
 .guiaLine span::before{content:"";width:16px;height:12px;flex:none;background:repeating-linear-gradient(90deg,var(--ink) 0 1px,transparent 1px 3px,var(--ink) 3px 5px,transparent 5px 6px)}
+details.opts{border:1px solid var(--line);border-radius:10px;padding:0 12px}
+details.opts > summary{list-style:none;display:flex;flex-direction:column;gap:2px;padding:12px 28px 12px 0;position:relative;font-weight:600}
+details.opts > summary::-webkit-details-marker{display:none}
+details.opts > summary::after{content:"▾";position:absolute;right:2px;top:12px;font-size:18px;transition:transform .15s}
+details.opts[open] > summary::after{transform:rotate(180deg)}
+.optsSum{font-weight:400;font-size:13px;color:var(--muted)}
+details.opts[open] .optsSum{display:none}
+.optsBody{display:flex;flex-direction:column;gap:12px;padding-bottom:12px}
 .toast{position:fixed;left:50%;bottom:84px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 14px;border-radius:10px;font-size:14px;z-index:20;max-width:calc(100% - 32px);display:none}
 .toast.show{display:block}
 details summary{cursor:pointer;font-weight:600}
@@ -206,19 +214,24 @@ details summary{cursor:pointer;font-weight:600}
       <button type="button" class="dark" id="btnGps">Usar mi ubicación actual</button>
       <button type="button" class="small" id="btnGpsClear" hidden>Quitar ubicación</button>
     </div>
-    <p class="hint" id="startInfo"></p>
-    <label style="flex-direction:row;align-items:center;gap:8px;color:var(--ink);font-size:15px">
-      <input type="checkbox" id="byZone" style="width:auto"> Terminar una zona (ST) antes de pasar a otra
-    </label>
-    <label style="flex-direction:row;align-items:center;gap:8px;color:var(--ink);font-size:15px">
-      <input type="checkbox" id="roundTrip" style="width:auto"> Volver al punto de partida al terminar
-    </label>
-    <label style="flex-direction:row;align-items:center;gap:8px;color:var(--ink);font-size:15px">
-      <input type="checkbox" id="realRoads" style="width:auto" checked> Calcular con las calles reales (necesita internet)
-    </label>
-    <label style="flex-direction:row;align-items:center;gap:8px;color:var(--ink);font-size:15px">
-      <input type="checkbox" id="autoWaze" style="width:auto" checked> Al marcar Entregado, abrir Waze con la siguiente parada
-    </label>
+    <details id="routeOpts" class="opts">
+      <summary><span>Opciones de la ruta</span><span class="optsSum" id="optsSum"></span></summary>
+      <div class="optsBody">
+      <p class="hint" id="startInfo"></p>
+      <label style="flex-direction:row;align-items:center;gap:8px;color:var(--ink);font-size:15px">
+        <input type="checkbox" id="byZone" style="width:auto"> Terminar una zona (ST) antes de pasar a otra
+      </label>
+      <label style="flex-direction:row;align-items:center;gap:8px;color:var(--ink);font-size:15px">
+        <input type="checkbox" id="roundTrip" style="width:auto"> Volver al punto de partida al terminar
+      </label>
+      <label style="flex-direction:row;align-items:center;gap:8px;color:var(--ink);font-size:15px">
+        <input type="checkbox" id="realRoads" style="width:auto" checked> Calcular con las calles reales (necesita internet)
+      </label>
+      <label style="flex-direction:row;align-items:center;gap:8px;color:var(--ink);font-size:15px">
+        <input type="checkbox" id="autoWaze" style="width:auto" checked> Al marcar Entregado, abrir Waze con la siguiente parada
+      </label>
+      </div>
+    </details>
     <p class="hint" id="routeInfo" aria-live="polite"></p>
     <p class="hint" id="zoneInfo" hidden style="color:var(--warn);font-weight:600"></p>
     <div id="cmpBox" class="preview" hidden>
@@ -1548,6 +1561,15 @@ function render(){
   $("stKm").textContent = geo.length ? (real ? state.route.km : pathLen(currentOrigin(),geo,!!state.roundTrip && !!sp)*KM_PER_UNIT).toFixed(1) : "0";
   $("stKmLbl").textContent = real ? "km reales" : "km aprox.";
   $("realRoads").checked = state.realRoads !== false;
+  // Resumen de las opciones cuando el bloque está oculto.
+  const parts = [];
+  parts.push(state.startGPS ? "Desde tu ubicación" : state.start ? "Desde " + state.start : (zone().on && zone().entry ? "Entrada por " + (ZONE_ENTRIES[zone().entry]||"la zona").replace(/ \(.*\)$/,"") : "Sin punto de partida"));
+  if(state.byZone) parts.push("por zona ST");
+  if(state.roundTrip) parts.push("con regreso");
+  parts.push(state.realRoads !== false ? "calles reales" : "orden aproximado");
+  if(state.autoWaze !== false) parts.push("Waze automático");
+  $("optsSum").textContent = parts.join(" · ");
+  if($("routeOpts").open !== !!state.optsOpen) $("routeOpts").open = !!state.optsOpen;
   $("autoWaze").checked = state.autoWaze !== false;
   if(document.activeElement !== $("orsKey")) $("orsKey").value = state.orsKey || "";
   $("routeInfo").textContent = state.routeNote || "";
@@ -2367,6 +2389,7 @@ $("btnGps").onclick = ()=>{
 $("btnGpsClear").onclick = ()=>{ state.startGPS = null; save(); $("btnGps").textContent = "Usar mi ubicación actual"; quickOrder(); optimize(true); };
 $("byZone").addEventListener("change", e=>{ state.byZone = e.target.checked; save(); optimize(true); });
 $("roundTrip").addEventListener("change", e=>{ state.roundTrip = e.target.checked; save(); optimize(true); });
+$("routeOpts").addEventListener("toggle", ()=>{ if(!!state.optsOpen !== $("routeOpts").open){ state.optsOpen = $("routeOpts").open; save(); } });
 $("realRoads").addEventListener("change", e=>{ state.realRoads = e.target.checked; save(); optimize(); });
 $("btnMap").onclick = ()=>{ const w=$("mapWrap"); w.hidden=!w.hidden; $("btnMap").textContent = w.hidden?"Ver":"Ocultar"; drawMap(); };
 addEventListener("resize", ()=>drawMap());
@@ -2441,7 +2464,7 @@ $("restoreFile").addEventListener("change", async e=>{
 });
 
 /* ============ App instalable y sin conexión ============ */
-const APP_VERSION = "1.18.1";
+const APP_VERSION = "1.18.2";
 $("ver").textContent = "Versión " + APP_VERSION + ". Funciona sin internet una vez abierta la primera vez.";
 if(navigator.storage && navigator.storage.estimate){
   navigator.storage.estimate().then(e=>{ if(e && e.usage) $("ver").textContent += ` Espacio usado en este celular: ${(e.usage/1048576).toFixed(1).replace(".",",")} MB (la mayor parte es el lector de etiquetas).`; }).catch(()=>{});
