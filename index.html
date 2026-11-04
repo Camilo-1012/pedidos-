@@ -810,6 +810,79 @@ async function locateAll(list, onProgress){
   }
 }
 
+/* ============ Barrios: validar y aproximar ============ */
+// Busca el barrio en OpenStreetMap. Sirve para (1) avisar si una dirección quedó lejos del barrio que dice la etiqueta
+// (casi siempre es un error de lectura o de escritura) y (2) ubicar en el centro del barrio una dirección que no se entendió.
+const BARRIO_KEY = "rutaEntregas.barrios.v1";
+let barrioCache = store.get(BARRIO_KEY) || {};
+const LOCALIDADES = new Set(["USAQUEN","CHAPINERO","SANTA FE","SAN CRISTOBAL","USME","TUNJUELITO","BOSA","KENNEDY","FONTIBON","ENGATIVA","SUBA",
+  "BARRIOS UNIDOS","TEUSAQUILLO","LOS MARTIRES","ANTONIO NARINO","PUENTE ARANDA","LA CANDELARIA","RAFAEL URIBE URIBE","RAFAEL URIBE","CIUDAD BOLIVAR","SUMAPAZ","BOGOTA","BOGOTA DC","BOGOTA D C"]);
+const BARRIO_MAX_M = 1500;   // más lejos que esto del barrio, la dirección se marca para revisar
+function barrioRe(name){
+  const base = name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/^(barrio|urbanizacion|urb)\.?\s+/,"")
+    .replace(/[^a-z0-9 ]/g," ").replace(/\s+/g," ").trim();
+  const map = {a:"[aá]",e:"[eé]",i:"[ií]",o:"[oó]",u:"[uúü]",n:"[nñ]"," ":" +"};
+  const body = [...base].map(ch=>map[ch]||ch).join("");
+  return {key: base, re: "^((barrio|urbanizaci[oó]n|urb[.]?) +)?" + body + "( +(i|ii|iii|iv|v|vi|[0-9]+))?( +(sector|etapa)( +[ivx0-9]+)?)?$"};
+}
+async function findBarrio(name){
+  if(!name) return null;
+  const k0 = norm(name).replace(/[.,]/g,"").trim();
+  if(LOCALIDADES.has(k0)) return {localidad:true};
+  const {key, re} = barrioRe(name);
+  if(key.length < 4) return null;
+  const c = barrioCache[key];
+  if(c && c.list) return c;
+  if(c && c.miss && Date.now()-c.t < 7*864e5) return null;
+  if(overpassDown) return null;
+  const q = `[out:json][timeout:20];area["wikidata"="Q2841"]->.b;(` +
+    `nwr(area.b)["place"~"^(neighbourhood|suburb|quarter|hamlet|village|locality)$"]["name"~"${re}",i];` +
+    `nwr(area.b)["landuse"="residential"]["name"~"${re}",i];` +
+    `nwr(area.b)["boundary"="administrative"]["name"~"${re}",i];);out center 10;`;
+  let j;
+  try{ j = await overpass(q); }catch(e){ overpassDown = true; return null; }
+  const list = (j.elements||[]).map(e=>({lat: e.lat!=null ? e.lat : e.center && e.center.lat, lng: e.lon!=null ? e.lon : e.center && e.center.lon})).filter(x=>x.lat!=null);
+  barrioCache[key] = list.length ? {list, t:Date.now()} : {miss:true, t:Date.now()};
+  store.set(BARRIO_KEY, barrioCache);
+  return list.length ? barrioCache[key] : null;
+}
+// Posición aproximada en la cuadrícula (calle/carrera) a partir de lat/lng, para que el orden aproximado también funcione.
+function inverseEstimate(lat, lng){
+  const pts = SEED.map(r=>({x:r[0],y:r[1],lat:r[2],lng:r[3],w:0.3}));
+  for(const k in geoCache){ const c = geoCache[k]; if(c.src==="osm" && c.x!=null) pts.push({x:c.x,y:c.y,lat:c.lat,lng:c.lng,w:1}); }
+  const AtA=[[0,0,0],[0,0,0],[0,0,0]], bx=[0,0,0], by=[0,0,0];
+  for(const p of pts){
+    const d = meters(p,{lat,lng})/1000, w = p.w/(1+(d/2)*(d/2)), v=[1,p.lat,p.lng];
+    for(let i=0;i<3;i++){ for(let j=0;j<3;j++) AtA[i][j]+=w*v[i]*v[j]; bx[i]+=w*v[i]*p.x; by[i]+=w*v[i]*p.y; }
+  }
+  const a = solve3(AtA,bx), b = solve3(AtA,by);
+  return a && b ? {x:a[0]+a[1]*lat+a[2]*lng, y:b[0]+b[1]*lat+b[2]*lng} : null;
+}
+async function checkBarrios(onProgress){
+  const pend = state.stops.filter(s=>s.status!=="done");
+  // 1) Direcciones que no se entendieron pero traen barrio: se ubican en el centro del barrio.
+  const located = pend.filter(s=>s.lat!=null && s.geo==="osm");
+  const cLat = located.length ? located.reduce((a,s)=>a+s.lat,0)/located.length : 4.70, cLng = located.length ? located.reduce((a,s)=>a+s.lng,0)/located.length : -74.07;
+  // Si solo se escribió el barrio (p. ej. «Villa María»), ese texto se usa como barrio.
+  for(const s of pend.filter(s=>(s.x===null || s.geo==="barrio") && (s.barrio || s.addr) && !parseAddress(s.label||s.addr))){
+    if(!s.barrio) s.barrio = s.addr.replace(/^REVISAR:\s*/i,"").trim();
+    if(onProgress) onProgress(s);
+    const b = await findBarrio(s.barrio);
+    if(!b || !b.list) continue;
+    const best = b.list.slice().sort((p,q)=>meters(p,{lat:cLat,lng:cLng})-meters(q,{lat:cLat,lng:cLng}))[0];
+    const inv = inverseEstimate(best.lat, best.lng);
+    if(!inv) continue;
+    s.lat = best.lat; s.lng = best.lng; s.geo = "barrio"; s.x = inv.x; s.y = inv.y; s.zoneCheck = null;
+  }
+  // 2) Direcciones ubicadas que dicen un barrio: se revisa que queden cerca de él.
+  for(const s of pend.filter(s=>s.barrio && s.lat!=null && s.geo!=="barrio")){
+    const b = await findBarrio(s.barrio);
+    if(!b || !b.list){ s.zoneCheck = null; continue; }
+    const d = Math.min(...b.list.map(p=>meters(p,{lat:s.lat,lng:s.lng})));
+    s.zoneCheck = d > BARRIO_MAX_M ? {bad:true, km:d/1000} : {ok:true};
+  }
+}
+
 /* ============ Rutas con calles reales ============ */
 // Se prueban varios servidores en orden; si uno falla o está saturado se pasa al siguiente.
 // Al final, si hay clave, openrouteservice. Si todo falla, la app usa el orden aproximado.
@@ -872,14 +945,18 @@ async function routeGeom(coords){
 async function realOrder(silent){
   overpassDown = false;
   const sp = parseAddress(state.start);
+  // Primero, las direcciones no entendidas que traen barrio se ubican por barrio (así entran en la ruta).
+  await checkBarrios(s=>setRouteInfo(`Buscando el barrio ${s.barrio}…`)).catch(e=>console.warn("barrios", e));
   const pendNow = state.stops.filter(s=>s.status!=="done" && s.x!==null);
   // Ubicar paradas y punto de partida.
-  const toLocate = pendNow.filter(s=>s.lat==null || s.geo!=="osm");
+  const toLocate = pendNow.filter(s=>(s.lat==null || s.geo!=="osm") && s.geo!=="barrio");
   if(sp && !(state.startGeo && state.startGeo.label===sp.label && state.startGeo.geo==="osm")){
     const ps = {label:sp.label, addr:state.start}; await locateAll([ps]);
     if(ps.lat!=null) state.startGeo = {label:sp.label, lat:ps.lat, lng:ps.lng, geo:ps.geo};
   }
   await locateAll(toLocate, (i,n)=>setRouteInfo(`Ubicando direcciones en el mapa… ${i} de ${n}`));
+  // Con las direcciones ya ubicadas, se valida cada una contra su barrio.
+  await checkBarrios().catch(e=>console.warn("barrios", e));
   save();
   const origin = currentOrigin();
   const back = !!state.roundTrip && !!sp;
@@ -912,7 +989,8 @@ async function realOrder(silent){
   const est = geo.filter(s=>s.geo!=="osm").length;
   state.route = {mode:"real", km: KM ? m/1000 : null, min: sec/60};
   setRouteInfo(`Ruta con calles reales: ${KM ? (m/1000).toFixed(1)+" km · " : ""}${Math.round(sec/60)} min en carro sin trancón, más el tiempo en cada entrega. Calculada con ${j.provider}.` +
-    (est ? ` ${est} dirección(es) ubicadas de forma aproximada (borde punteado en el mapa).` : ""));
+    (est ? ` ${est} dirección(es) ubicadas de forma aproximada (borde punteado en el mapa).` : "") +
+    (geo.filter(s=>s.zoneCheck && s.zoneCheck.bad).length ? ` Atención: ${geo.filter(s=>s.zoneCheck && s.zoneCheck.bad).length} dirección(es) quedaron lejos del barrio que dice la etiqueta; revísalas.` : ""));
   save(); render();
   // Trazado para el mapa (no bloquea el orden si falla).
   try{
@@ -1124,7 +1202,7 @@ function drawSchematic(){
 function navQuery(s){ return (s.label || s.addr) + ", Bogotá, Colombia"; }
 // Si la dirección quedó ubicada en su esquina exacta, Waze recibe las coordenadas (no se confunde con direcciones parecidas).
 function wazeUrl(s){
-  if(s.geo==="osm" && s.lat!=null) return `https://waze.com/ul?ll=${s.lat.toFixed(6)},${s.lng.toFixed(6)}&navigate=yes`;
+  if((s.geo==="osm" || s.geo==="barrio") && s.lat!=null) return `https://waze.com/ul?ll=${s.lat.toFixed(6)},${s.lng.toFixed(6)}&navigate=yes`;
   return "https://waze.com/ul?q=" + encodeURIComponent(navQuery(s)) + "&navigate=yes";
 }
 function openExternal(url){ const a = document.createElement("a"); a.href = url; a.target = "_blank"; a.rel = "noopener"; document.body.appendChild(a); a.click(); a.remove(); }
@@ -1179,6 +1257,8 @@ function render(){
           <span class="chip unit">${esc([UNIT_NAME[s.type||"casa"], s.unit].filter(Boolean).join(" · "))}</span>
           ${s.barrio?`<span class="chip">${esc(s.barrio)}</span>`:""}
           ${unk?'<span class="chip warn">Revisar dirección</span>':""}
+          ${s.geo==="barrio"?`<span class="chip warn">Ubicada por barrio (aprox.)</span>`:""}
+          ${s.zoneCheck && s.zoneCheck.bad?`<span class="chip warn">No coincide con ${esc(s.barrio)}: queda a ${s.zoneCheck.km.toFixed(1).replace(".",",")} km</span>`:""}
           ${isFail?'<span class="chip warn">Intento fallido</span>':""}
           ${s.example?'<span class="chip ex">Ejemplo</span>':""}
         </div>
@@ -1303,7 +1383,8 @@ $("frmEdit").addEventListener("submit", e=>{
   } else {
     const changed = (p?p.label:"") !== editing.s.label;
     Object.assign(editing.s, d, {x:p?p.x:null, y:p?p.y:null, label:p?p.label:"", example:false});
-    if(changed){ editing.s.lat = null; editing.s.lng = null; editing.s.geo = null; }
+    if(changed || editing.s.geo==="barrio"){ editing.s.lat = null; editing.s.lng = null; editing.s.geo = null; }
+    editing.s.zoneCheck = null;
   }
   $("dlgEdit").close();
   save(); render();   // se ve de inmediato aunque haya un cálculo de ruta en curso
@@ -1786,7 +1867,7 @@ $("restoreFile").addEventListener("change", async e=>{
 });
 
 /* ============ App instalable y sin conexión ============ */
-const APP_VERSION = "1.8.1";
+const APP_VERSION = "1.9.0";
 $("ver").textContent = "Versión " + APP_VERSION + ". Funciona sin internet una vez abierta la primera vez.";
 function netState(){ if(SERVED) $("net").hidden = navigator.onLine; }
 addEventListener("online", ()=>{ netState(); if(state.stops.some(s=>s.status!=="done")) optimize(true); }); addEventListener("offline", netState); netState();

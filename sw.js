@@ -1,6 +1,6 @@
 /* Service worker: guarda la app en el celular para que abra sin internet.
    Al publicar cambios, sube el número de CACHE para que los celulares descarguen la versión nueva. */
-const CACHE = "ruta-v1.8.1";
+const CACHE = "ruta-v1.9.0";
 const CORE = [
   "./", "index.html", "manifest.webmanifest",
   "icons/icon-192.png", "icons/icon-512.png", "icons/maskable-512.png", "icons/apple-touch-icon.png",
