@@ -487,7 +487,7 @@ if(!state.seeded && state.stops.length===0){
 function mkStop(d){
   const p = parseAddress(d.addr);
   return {id:Date.now().toString(36)+Math.random().toString(36).slice(2,7), addr:d.addr||"", name:d.name||"", phone:d.phone||"",
-    zone:d.zone||"", barrio:d.barrio||"", guia:d.guia||"", qty:Math.max(1,Math.min(99,parseInt(d.qty,10)||1)), type:d.type||"", unit:d.unit||"", notes:d.notes||"", raw:d.raw||"", example:!!d.example,
+    zone:d.zone||"", barrio:d.barrio||"", guia:d.guia||"", qty:Math.max(1,Math.min(99,parseInt(d.qty,10)||1)), type:d.type||"casa", unit:d.unit||"", notes:d.notes||"", raw:d.raw||"", example:!!d.example,
     x:p?p.x:null, y:p?p.y:null, label:p?p.label:"", status:"pend", created: Date.now() + (mkStop.seq = (mkStop.seq||0)+1)/1000};
 }
 function save(){ store.set(KEY,state); }
@@ -1003,7 +1003,7 @@ function dayReport(){
   const pend = state.stops.filter(s=>s.status==="pend");
   const paq = arr => { const n = arr.reduce((a,s)=>a+(s.qty||1),0); return n + (n===1 ? " paquete" : " paquetes"); };
   const par = n => n + (n===1 ? " parada" : " paradas");
-  const name = s => (s.label||s.addr) + ((s.type||s.unit) ? " ["+[UNIT_NAME[s.type]||"",s.unit].filter(Boolean).join(" ")+"]" : "");
+  const name = s => (s.label||s.addr) + " ["+[UNIT_NAME[s.type||"casa"],s.unit].filter(Boolean).join(" ")+"]";
   const L = [];
   L.push("Reporte del día · " + new Date().toLocaleDateString("es-CO",{weekday:"long",day:"numeric",month:"long"}));
   L.push("");
@@ -1176,7 +1176,7 @@ function render(){
         <div class="addr">${esc(s.label || s.addr)}</div>
         <div class="meta">
           ${s.zone?`<span class="chip zone">ST ${esc(s.zone)}</span>`:""}
-          ${(s.type||s.unit)?`<span class="chip unit">${esc([UNIT_NAME[s.type]||"", s.unit].filter(Boolean).join(" · "))}</span>`:""}
+          <span class="chip unit">${esc([UNIT_NAME[s.type||"casa"], s.unit].filter(Boolean).join(" · "))}</span>
           ${s.barrio?`<span class="chip">${esc(s.barrio)}</span>`:""}
           ${unk?'<span class="chip warn">Revisar dirección</span>':""}
           ${isFail?'<span class="chip warn">Intento fallido</span>':""}
@@ -1237,7 +1237,7 @@ function openEdit(s, isNew){
   editing = {s, isNew};
   $("dlgTitle").textContent = isNew ? "Revisa y guarda" : "Editar paquete";
   $("fAddr").value = s.addr||""; $("fZone").value = s.zone||""; $("fPhone").value = s.phone||"";
-  setType(s.type||""); $("fUnit").value = s.unit||"";
+  setType(s.type||"casa"); $("fUnit").value = s.unit||"";   // por defecto Casa; se cambia si es otro tipo
   $("fQty").value = s.qty||1; $("fName").value = s.name||""; $("fBarrio").value = s.barrio||""; $("fGuia").value = s.guia||""; $("fNotes").value = s.notes||"";
   $("fRaw").textContent = s.raw||""; $("rawWrap").hidden = !s.raw;
   updParsed();
@@ -1258,8 +1258,9 @@ function setType(t){
 document.querySelectorAll('input[name="fType"]').forEach(r=>r.addEventListener("change", ()=>setType(r.value)));
 // Al escribir el detalle, se sugiere el tipo si aún no se eligió.
 $("fUnit").addEventListener("change", ()=>{
-  if(document.querySelector('input[name="fType"]:checked')) return;
-  const u = detectUnit($("fUnit").value); if(u) setType(u.type);
+  const cur = (document.querySelector('input[name="fType"]:checked')||{}).value;
+  if(cur && cur!=="casa") return;   // si ya eligió otro tipo, se respeta
+  const u = detectUnit($("fUnit").value); if(u && u.type!=="casa") setType(u.type);
 });
 $("qtyPlus").onclick  = ()=>{ $("fQty").value = Math.min(99,(parseInt($("fQty").value,10)||1)+1); };
 // Varios paquetes a la misma dirección van en una sola parada con su cantidad.
@@ -1275,7 +1276,7 @@ function addOrMerge(d){
     if(d.name && !(same.name||"").toLowerCase().includes(d.name.toLowerCase())) same.name = same.name ? same.name + " / " + d.name : d.name;
     if(d.phone && d.phone!==same.phone){ if(!same.phone) same.phone = d.phone; else if(!(same.notes||"").includes(d.phone)) same.notes = (same.notes? same.notes+" · " : "") + "Otro tel: " + d.phone; }
     if(d.unit && !(same.unit||"").toLowerCase().includes(d.unit.toLowerCase())) same.unit = same.unit ? same.unit + " / " + d.unit : d.unit;
-    if(!same.type && d.type) same.type = d.type;
+    if((!same.type || same.type==="casa") && d.type && d.type!=="casa") same.type = d.type;
     if(d.notes && !(same.notes||"").includes(d.notes)) same.notes = (same.notes? same.notes+" · " : "") + d.notes;
     if(!same.zone && d.zone) same.zone = d.zone;
     return {merged:true, stop:same};
@@ -1290,7 +1291,7 @@ $("frmEdit").addEventListener("submit", e=>{
   const d = {addr:$("fAddr").value.trim(), zone:$("fZone").value.trim(), phone:$("fPhone").value.replace(/\D/g,"").slice(-10),
     name:$("fName").value.trim(), barrio:$("fBarrio").value.trim(), guia:$("fGuia").value.trim(), notes:$("fNotes").value.trim(), raw:editing.s.raw,
     qty:Math.max(1,Math.min(99,parseInt($("fQty").value,10)||1)),
-    type:(document.querySelector('input[name="fType"]:checked')||{}).value||"", unit:$("fUnit").value.trim()};
+    type:(document.querySelector('input[name="fType"]:checked')||{}).value||"casa", unit:$("fUnit").value.trim()};
   if(!d.addr) return;
   const p = parseAddress(d.addr);
   if(editing.isNew){
@@ -1750,7 +1751,7 @@ $("btnMaps").onclick = ()=>{
 };
 $("btnCopy").onclick = async ()=>{
   let n=0;
-  const txt = state.stops.filter(s=>s.status!=="done").map(s=>`${++n}. ${s.label||s.addr}${(s.qty||1)>1?" x"+s.qty:""}${(s.type||s.unit)?" ["+[UNIT_NAME[s.type]||"",s.unit].filter(Boolean).join(" ")+"]":""}${s.zone?" (ST "+s.zone+")":""}${s.name?" - "+s.name:""}${s.phone?" - "+s.phone:""}`).join("\n");
+  const txt = state.stops.filter(s=>s.status!=="done").map(s=>`${++n}. ${s.label||s.addr}${(s.qty||1)>1?" x"+s.qty:""}${" ["+[UNIT_NAME[s.type||"casa"],s.unit].filter(Boolean).join(" ")+"]"}${s.zone?" (ST "+s.zone+")":""}${s.name?" - "+s.name:""}${s.phone?" - "+s.phone:""}`).join("\n");
   try{ await navigator.clipboard.writeText(txt); toast("Lista copiada."); }
   catch(e){ openText("bulk"); $("txtTitle").textContent="Copia esta lista"; $("txtHint").textContent="Mantén presionado para seleccionar y copiar."; $("txtArea").value=txt; }
 };
@@ -1785,7 +1786,7 @@ $("restoreFile").addEventListener("change", async e=>{
 });
 
 /* ============ App instalable y sin conexión ============ */
-const APP_VERSION = "1.8.0";
+const APP_VERSION = "1.8.1";
 $("ver").textContent = "Versión " + APP_VERSION + ". Funciona sin internet una vez abierta la primera vez.";
 function netState(){ if(SERVED) $("net").hidden = navigator.onLine; }
 addEventListener("online", ()=>{ netState(); if(state.stops.some(s=>s.status!=="done")) optimize(true); }); addEventListener("offline", netState); netState();
