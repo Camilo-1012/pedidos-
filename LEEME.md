@@ -375,3 +375,6 @@ El optimizador ahora arma una tabla de costos una sola vez y calcula cada intent
 - Se puede cargar con dos celulares a la vez: los dos se conectan al Equipo con el mismo correo y contraseña de Supabase y las paradas quedan unificadas (se sincroniza cada 30 s, al volver a la app o con «Sincronizar ahora»).
 - Desconectar un celular cierra solo su sesión (`logout?scope=local`); antes cerraba la sesión en todos.
 - «Empezar jornada nueva» y «Borrar toda la jornada» avisan que también se quitan del otro celular conectado.
+
+### Ajuste v2.11.3: dictado con cifras juntas
+- El reconocimiento de voz a veces omite «número» y «guion» y junta las cifras («carrera 150 B 14345»). Ahora se separa solo en «Carrera 150B # 143-45» (placa de 2 cifras; 3 si la vía quedaría mayor que 250). Si aun así no es una dirección, queda en REVISAR como antes.

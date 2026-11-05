@@ -36,7 +36,31 @@ function spokenToAddress(text){
     if(L && /^\d+$/.test(out[i-1]) && (nxt===undefined || /^\d+$/.test(nxt) || ["#","-","bis","sur","este"].includes(nxt))) out[i] = L;
   }
   // "guion cero ocho" → "-08"
-  return out.join(" ").replace(/- 0 (\d)\b/g,"- 0$1").replace(/\s+/g," ").trim();
+  return repararPlaca(out.join(" ").replace(/- 0 (\d)\b/g,"- 0$1").replace(/\s+/g," ").trim());
+}
+/* El reconocimiento de voz de Google suele omitir «número» y «guion» y juntar las cifras:
+   «carrera 150 B 14345» en vez de «carrera 150 B # 143 - 45». Si así no se entiende como dirección,
+   se separa ese número en calle/carrera + placa: la placa son los 2 últimos dígitos (o 3, o 1, si con 2
+   la calle o carrera quedaría mayor que 250). Solo se usa el arreglo si el resultado sí es una dirección. */
+const PLACA_MAX_VIA = 250;
+function repararPlaca(conv){
+  if(!conv || parseAddress(conv)) return conv;
+  const t = conv.split(" ");
+  const i1 = t.findIndex(x=>/^\d+$/.test(x));          // número de la vía principal
+  if(i1 < 1) return conv;
+  let j = i1 + 1;
+  while(j < t.length && (/^[a-h]$/i.test(t[j]) || /^(bis|sur|este)$/i.test(t[j]))) j++;
+  const conNum = t[j] === "#";
+  if(conNum) j++;
+  const d = t[j];
+  if(!d || !/^\d{3,6}$/.test(d) || t[j+1] === "-") return conv;
+  for(const largo of [2, 3, 1]){
+    const cruce = d.slice(0, -largo), placa = d.slice(-largo);
+    if(!cruce || cruce[0] === "0" || +cruce > PLACA_MAX_VIA) continue;
+    const arreglo = [...t.slice(0, conNum ? j-1 : j), "#", cruce, "-", placa, ...t.slice(j+1)].join(" ");
+    if(parseAddress(arreglo)) return arreglo;
+  }
+  return conv;
 }
 /* Teléfono dictado (opcional): «…teléfono 311 222 3344» (también celular, cel, tel, WhatsApp, contacto).
    Sin la palabra, se toma como teléfono un número del final que forme un celular (3 + 9 dígitos) o un fijo (601…),
