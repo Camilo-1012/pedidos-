@@ -113,6 +113,7 @@ function render(){
   // Resumen de las opciones cuando el bloque está oculto.
   const parts = [];
   parts.push(state.startGPS ? "Desde tu ubicación" : state.start ? "Desde " + state.start : (zone().on && zone().entry ? "Entrada por " + (ZONE_ENTRIES[zone().entry]||"la zona").replace(/ \(.*\)$/,"") : "Sin punto de partida"));
+  parts.push(esMoto() ? "en moto" : "en carro");
   if(state.byZone) parts.push("por zona ST");
   if(state.roundTrip) parts.push("con regreso");
   parts.push(state.realRoads !== false ? "calles reales" : "orden aproximado");
@@ -125,6 +126,10 @@ function render(){
   if($("routeCard").open !== rOpen) $("routeCard").open = rOpen;
   if($("routeOpts").open !== !!state.optsOpen) $("routeOpts").open = !!state.optsOpen;
   $("autoWaze").checked = state.autoWaze !== false;
+  $(esMoto() ? "vehMoto" : "vehCarro").checked = true;
+  $("vehInfo").textContent = esMoto()
+    ? "Moto: el orden aprovecha que devolverse o dar la vuelta en U es fácil, y cruza las avenidas con menos rodeo. Sigue respetando los sentidos de las calles."
+    : "Carro: el orden evita devolverse y dar vueltas a la manzana, respetando los sentidos de las calles.";
   if(document.activeElement !== $("orsKey")) $("orsKey").value = state.orsKey || "";
   $("routeInfo").textContent = state.routeNote || "";
   $("roundTrip").checked = !!state.roundTrip;

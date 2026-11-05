@@ -322,3 +322,5 @@ details.sec[open] > summary::after{transform:rotate(180deg)}
 details.sec[open] > summary .secSum{display:none}
 .secSum{font-size:13px;color:var(--muted);font-weight:500;line-height:1.35}
 .secBody{display:flex;flex-direction:column;gap:12px;margin-top:12px}
+
+.seg.seg2{grid-template-columns:repeat(2,minmax(0,1fr))}

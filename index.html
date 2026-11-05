@@ -74,6 +74,14 @@
     <details id="routeOpts" class="opts">
       <summary><span>Opciones de la ruta</span><span class="optsSum" id="optsSum"></span></summary>
       <div class="optsBody">
+      <div>
+        <span class="hint" style="display:block;margin-bottom:6px;font-weight:600;color:var(--ink)">Vehículo</span>
+        <div class="seg seg2" role="radiogroup" aria-label="Vehículo">
+          <input type="radio" name="veh" id="vehCarro" value="carro"><label for="vehCarro">Carro</label>
+          <input type="radio" name="veh" id="vehMoto" value="moto"><label for="vehMoto">Moto</label>
+        </div>
+        <p class="hint" id="vehInfo" style="margin:6px 0 0"></p>
+      </div>
       <p class="hint" id="startInfo"></p>
       <label style="flex-direction:row;align-items:center;gap:8px;color:var(--ink);font-size:15px">
         <input type="checkbox" id="byZone" style="width:auto"> Terminar una zona (ST) antes de pasar a otra

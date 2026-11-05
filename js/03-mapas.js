@@ -295,6 +295,7 @@ async function routeGeom(coords){
   }
   return null;
 }
+const MOTO_TIEMPO = 0.85;
 async function realOrder(silent){
   overpassDown = false;
   const sp = parseAddress(state.start);
@@ -333,23 +334,30 @@ async function realOrder(silent){
   const SYM = D.map((r,a)=>r.map((v,b)=>(v + D[b][a])/2));
   IDX.clear(); pts.forEach((p,i)=>IDX.set(p,i));
   const o = hasO ? origin : null;
+  // Moto: el servidor gratuito solo tiene perfil de carro. En moto devolverse o dar la vuelta en U cuesta poco, así que
+  // la diferencia entre ida y vuelta (sentidos, rodear la manzana) pesa mucho menos: 25 % el sentido real, 75 % el promedio.
+  // Las calles de una vía se siguen respetando en la navegación (Waze); esto solo cambia el orden.
+  const moto = esMoto();
+  const COST = moto ? D.map((r,a)=>r.map((v,b)=>0.25*v + 0.75*SYM[a][b])) : D;
   let ordered;
   try{
-    MATRIX = SYM; ordered = orderStops(o, geo, back);
-    MATRIX = D;   ordered = orOpt(o, ordered, back);   // ajuste final con sentidos reales (ida ≠ vuelta)
+    MATRIX = SYM;  ordered = orderStops(o, geo, back);
+    MATRIX = COST; ordered = orOpt(o, ordered, back);   // ajuste final con sentidos reales (ida ≠ vuelta; suavizado en moto)
   } finally { MATRIX = null; }
   // Totales reales.
   let sec = 0, m = 0, prev = o || ordered[0];
-  for(const s of ordered){ sec += D[IDX.get(prev)][IDX.get(s)]; if(KM) m += KM[IDX.get(prev)][IDX.get(s)] || 0; prev = s; }
-  if(back && o){ sec += D[IDX.get(prev)][IDX.get(o)]; if(KM) m += KM[IDX.get(prev)][IDX.get(o)] || 0; }
+  for(const s of ordered){ sec += COST[IDX.get(prev)][IDX.get(s)]; if(KM) m += KM[IDX.get(prev)][IDX.get(s)] || 0; prev = s; }
+  if(back && o){ sec += COST[IDX.get(prev)][IDX.get(o)]; if(KM) m += KM[IDX.get(prev)][IDX.get(o)] || 0; }
+  // En moto el tiempo de manejo se estima ≈ 15 % menor (avanza en el trancón y parquea en la puerta).
+  if(moto) sec *= MOTO_TIEMPO;
   IDX.clear();
-  LASTM = {idx: new Map(pts.map((p,i)=>[p===o ? "__o" : p.id, i])), D, KM, okey: originKey(o)};
+  LASTM = {idx: new Map(pts.map((p,i)=>[p===o ? "__o" : p.id, i])), D: moto ? COST.map(r=>r.map(v=>v*MOTO_TIEMPO)) : D, KM, okey: originKey(o)};
   applyOrder(ordered.map(s=>s.id));
   state.suggestedIds = ordered.map(s=>s.id);
   const est = geo.filter(s=>s.geo!=="osm").length;
   state.route = {mode:"real", km: KM ? m/1000 : null, min: sec/60};
   const outN = geo.filter(s=>zoneIssue(s)).length;
-  setRouteInfo(`Ruta con calles reales: ${KM ? (m/1000).toFixed(1)+" km · " : ""}${Math.round(sec/60)} min en carro sin trancón, más el tiempo en cada entrega. Calculada con ${j.provider}. ` +
+  setRouteInfo(`Ruta con calles reales: ${KM ? (m/1000).toFixed(1)+" km · " : ""}${Math.round(sec/60)} min en ${moto ? "moto" : "carro"} sin trancón, más el tiempo en cada entrega. Calculada con ${j.provider}. ` +
     `Orden ${lastStrategy}${o && o.entry ? ", entrando por " + o.label : ""}${outN && zone().outLast ? `; ${outN} fuera de zona al final` : ""}.` +
     (est ? ` ${est} dirección(es) ubicadas de forma aproximada (borde punteado en el mapa).` : "") +
     (geo.filter(s=>s.zoneCheck && s.zoneCheck.bad).length ? ` Atención: ${geo.filter(s=>s.zoneCheck && s.zoneCheck.bad).length} dirección(es) quedaron lejos del barrio que dice la etiqueta; revísalas.` : ""));

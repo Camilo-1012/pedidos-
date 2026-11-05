@@ -28,14 +28,16 @@ function save(){
 // (distancia Manhattan), que se parece más a lo que anda un carro o una moto que la línea recta.
 // Sin calles reales, cruzar una avenida principal de la zona (Calle 132, 139, 145, 153) se penaliza con ≈ 2 cuadras:
 // hay que buscar el semáforo o el puente, no se cruza por cualquier cuadra.
-const CROSS_PENALTY = 2;
+// En moto, cruzar la avenida cuesta menos (≈ 1 cuadra): se filtra mejor hasta el semáforo o el retorno.
+const CROSS_PENALTY = 2, CROSS_PENALTY_MOTO = 1;
+const esMoto = ()=>typeof state !== "undefined" && state && state.vehiculo === "moto";
 function gridDist(a,b){
   let d = Math.abs(a.x-b.x) + Math.abs(a.y-b.y);
   const st = typeof state !== "undefined" ? state : null;
   if(!st || !st.zone || st.zone.on !== false){
     const cuts = (st && st.zone && st.zone.cuts) || [132,139,145,153];
     const lo = Math.min(a.y,b.y), hi = Math.max(a.y,b.y);
-    for(const c of cuts) if(lo < c && hi >= c) d += CROSS_PENALTY;
+    for(const c of cuts) if(lo < c && hi >= c) d += esMoto() ? CROSS_PENALTY_MOTO : CROSS_PENALTY;
   }
   return d;
 }

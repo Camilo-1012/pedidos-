@@ -311,3 +311,15 @@ Hay pruebas a 412×360, 412×300 y 780×360.
 ## Pedidos entregados (v2.8)
 
 Las paradas entregadas salen de la lista principal y pasan a la sección desplegable **«Pedidos entregados (N)»**, que va recogida por defecto. Cerrada muestra cuántas direcciones son y la hora de la última entrega. Abierta deja ver, editar o **Deshacer** cada entrega; al deshacer, la parada vuelve a la lista principal. La app recuerda si la dejaste abierta o cerrada.
+
+## Carro o moto (v2.9)
+
+En **Ruta → Opciones de la ruta → Vehículo** se elige Carro o Moto. Al cambiar, la ruta se reordena.
+
+- **Carro:** el orden evita devolverse y dar vueltas a la manzana. Usa los tiempos de ida y vuelta reales del perfil de carro.
+- **Moto:**
+  - El servidor gratuito de rutas solo tiene perfil de carro. En moto, devolverse o dar la vuelta en U cuesta poco, así que la diferencia entre ida y vuelta pesa menos: el costo es 25 % el sentido real y 75 % el promedio de ida y vuelta.
+  - Cruzar las avenidas grandes cuesta 1 cuadra en vez de 2, también en el orden sin internet.
+  - El tiempo de manejo se estima un 15 % menor.
+  - Los sentidos de las calles se siguen respetando en Waze; esto solo cambia el orden.
+- Es una aproximación, no un perfil oficial de moto. Con el servidor simulado de las pruebas, el orden en moto cambia y su costo en moto queda igual o menor que el del orden de carro.

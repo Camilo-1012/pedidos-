@@ -98,6 +98,12 @@ $("btnMaps").onclick = ()=>{
   if(!next.length){ toast("No hay paradas ubicadas."); return; }
   const a = document.createElement("a"); a.href = mapsMultiUrl(next); a.target="_blank"; a.rel="noopener"; document.body.appendChild(a); a.click(); a.remove();
 };
+for(const id of ["vehCarro","vehMoto"]) $(id).addEventListener("change", e=>{
+  if(!e.target.checked) return;
+  state.vehiculo = e.target.value; save(); render();
+  toast(`Ruta para ${e.target.value === "moto" ? "moto" : "carro"}: reordenando…`);
+  optimize(false);
+});
 $("routeCard").addEventListener("toggle", e=>{ if(state.rutaOpen !== e.target.open){ state.rutaOpen = e.target.open; save(); } });
 $("btnCopy").onclick = async ()=>{
   let n=0;
@@ -162,7 +168,7 @@ $("restoreFile").addEventListener("change", async e=>{
 /* ============ App instalable y sin conexión ============ */
 // Al bloquear: apaga la cámara y cierra ventanas abiertas para que no queden datos a la vista.
 window.RUTA_onLock = ()=>{ try{ stopScan(); }catch(e){} };
-const APP_VERSION = "2.8";
+const APP_VERSION = "2.9";
 $("ver").textContent = "Versión " + APP_VERSION + ". Funciona sin internet una vez abierta la primera vez.";
 if(navigator.storage && navigator.storage.estimate){
   navigator.storage.estimate().then(e=>{ if(e && e.usage) $("ver").textContent += ` Espacio usado en este celular: ${(e.usage/1048576).toFixed(1).replace(".",",")} MB (la mayor parte es el lector de etiquetas).`; }).catch(()=>{});
