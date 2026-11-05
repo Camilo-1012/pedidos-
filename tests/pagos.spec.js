@@ -16,18 +16,18 @@ test("acumulado del día, deshacer, días anteriores, cambio de valor y Excel", 
   await page.click('#list li.stop:has-text("Calle 145") button[data-act=done]');
   await page.click('#list li.stop:has-text("Carrera 110") button[data-act=done]');
   await page.click('#list li.stop:has-text("Calle 139") button[data-act=fail]');
-  await expect(page.locator("#pace")).toContainText("Hoy 4 paq = $ 6.400");
+  await expect(page.locator("#pace")).toContainText("Hoy 4 pedidos = $ 6.400");
   // Deshacer una entrega baja el acumulado
   await page.click('#list li.stop:has-text("Carrera 110") button[data-act=done]');
-  await expect(page.locator("#pace")).toContainText("Hoy 3 paq = $ 4.800");
+  await expect(page.locator("#pace")).toContainText("Hoy 3 pedidos = $ 4.800");
   await page.click('#list li.stop:has-text("Carrera 110") button[data-act=done]');
   // Pantalla de acumulado
   await page.click("#pace");
   await expect(page.locator("#dlgPay")).toHaveAttribute("open", "");
-  await expect(page.locator("#pyFormula")).toContainText("Valor = paquetes entregados × $ 1.600");
+  await expect(page.locator("#pyFormula")).toContainText("Valor = pedidos entregados × $ 1.600");
   const fila = n => page.locator(`#pyTable .pr:has-text("${n}")`);
   await expect(fila("Hoy")).toContainText("$ 6.400");
-  await expect(fila("Hoy")).toContainText("2");                      // 2 domicilios (paradas)
+  await expect(fila("Hoy")).toHaveText(/Hoy\s*4\s*1\s*\$ 6\.400/);   // 4 pedidos entregados (3 en la misma dirección), 1 no entregado
   await expect(fila("Total general")).toContainText("34");           // 30 + 4 paquetes
   await expect(fila("Total general")).toContainText("$ 51.400");     // 30×1.500 + 4×1.600
   // Cambiar el valor: aplica desde hoy; el día viejo conserva su valor
@@ -37,8 +37,8 @@ test("acumulado del día, deshacer, días anteriores, cambio de valor y Excel", 
   // Excel por mes
   const [dl] = await Promise.all([page.waitForEvent("download"), page.click("#pyCsv")]);
   const mes = fs.readFileSync(await dl.path(), "utf8");
-  expect(mes).toContain("Mes;Días trabajados;Domicilios (paradas) entregados;Paquetes entregados;Paquetes no entregados;Valor ($)");
-  expect(mes).toMatch(/TOTAL;2;27;34;3;52200/);
+  expect(mes).toContain("Mes;Días trabajados;Pedidos entregados;Pedidos no entregados;Valor ($)");
+  expect(mes).toMatch(/TOTAL;2;34;3;52200/);
   // Excel por pedido: valor por fila, acumulado y total del día
   await page.click("#dlgPay .dlgHead button");
   await page.click("text=Más opciones"); await page.click("#btnHist");

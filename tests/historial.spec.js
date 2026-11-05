@@ -45,7 +45,7 @@ test("Excel: acumulado de entregados, duración de la ruta y totales", async ({ 
   expect(g("1001")[col("Salida a ruta")]).toMatch(/08:00/);
   expect(g("1001")[col("Duración de la ruta (h:mm)")]).toBe("1:00");    // salida 8:00 → última entrega 9:00
   const tot = filas.find(f => f[col("Guía (número de pedido)")] === "TOTAL DEL DÍA");
-  expect(tot[col("Dirección")]).toBe("3 entregado(s) de 4 · 1 no entregado(s)");
+  expect(tot[col("Dirección")]).toBe("3 pedido(s) entregado(s) de 4 · 1 no entregado(s)");
   expect(tot[col("Acumulado entregados")]).toBe("3");
   // Excel resumen: salida y duración
   const [dl2] = await Promise.all([page.waitForEvent("download"), page.click("#histCsv")]);

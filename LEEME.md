@@ -263,3 +263,11 @@ El plan gratis de Supabase pausa el proyecto tras unos 7 días sin uso. Para evi
 - **El valor por paquete se puede cambiar** y aplica desde hoy: cada día guarda el valor que tenía.
 - **El acumulado no se borra** con los 90 días del historial. Se guarda un resumen por día (fecha, paquetes, paradas, no entregados y valor) que va en el respaldo. Es por usuario de la app.
 - Si se toca «Deshacer» en una entrega, el acumulado baja.
+
+### Ajuste v2.5.1: todo se cuenta por pedido
+
+Cada pedido (guía o paquete) cuenta por separado, aunque vayan varios a la misma dirección.
+- **Acumulado y pagos:** muestra pedidos entregados, no entregados y valor (pedidos entregados × valor por pedido).
+- **Historial:** pedidos entregados, pedidos por hora, y la efectividad sobre pedidos.
+- **Excel resumen:** los pedidos van primero y las direcciones aparte.
+- **Modo conducción:** dice «3 pedidos en esta dirección».

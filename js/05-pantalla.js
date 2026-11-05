@@ -102,7 +102,7 @@ function render(){
   const pend = state.stops.filter(s=>s.status!=="done");
   $("stPend").textContent = pend.length;
   const paq = pend.reduce((a,st)=>a+(st.qty||1),0);
-  $("stPendLbl").textContent = paq !== pend.length ? `paradas · ${paq} paq.` : "pendientes";
+  $("stPendLbl").textContent = paq !== pend.length ? `direcciones · ${paq} pedidos` : "pendientes";
   $("stDone").textContent = state.stops.filter(s=>s.status==="done").length;
   const sp = parseAddress(state.start);
   const geo = pend.filter(s=>s.x!==null);

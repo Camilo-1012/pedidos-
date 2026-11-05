@@ -13,7 +13,7 @@ test("modo conducción de punta a punta", async ({ page }) => {
   await page.click("#btnDrive");
   await expect(page.locator("#drive")).toBeVisible();
   await expect(page.locator("#dvAddr")).toHaveText("Calle 145 # 103B-90");
-  await expect(page.locator("#dvQty")).toContainText("×2 paquetes");
+  await expect(page.locator("#dvQty")).toContainText("2 pedidos en esta dirección");
   // Número de pedido (guía) con etiqueta
   await expect(page.locator("#dvGuia")).toContainText("Pedido");
   await expect(page.locator("#dvGuia .num")).toHaveText("1111222233334444");

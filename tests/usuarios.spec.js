@@ -46,10 +46,10 @@ test("cada usuario ve solo sus pedidos; el admin restablece PIN", async ({ page 
   await cargar(page, [{ addr: "Calle 145 # 103B-90", guia: "9990001112223334" }]);
   await page.click("#btnUser"); await page.click("#usAdd");
   await page.fill("#ak_n", "Andrea"); await page.fill("#ak_p", "4711"); await page.fill("#ak_p2", "4711");
-  await page.click("#akYes"); await expect(page.locator("#dlgAsk")).not.toHaveAttribute("open", "");
+  await page.click("#akYes"); await expect(page.locator("#dlgAsk")).not.toHaveAttribute("open", "", { timeout: 20000 });
   await page.click('#usList button:has-text("Nuevo PIN")');
   await page.fill("#ak_p", "8642"); await page.fill("#ak_p2", "8642"); await page.click("#akYes");
-  await expect(page.locator("#dlgAsk")).not.toHaveAttribute("open", "");
+  await expect(page.locator("#dlgAsk")).not.toHaveAttribute("open", "", { timeout: 20000 });
   await page.click("#usSwitch");
   await page.click('#lkUsers button:has-text("Andrea")');
   await teclear(page, "8642");

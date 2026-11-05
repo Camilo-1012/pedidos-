@@ -150,8 +150,8 @@ function paceText(){
   const p = dayPace();
   if(!p.done && !p.eta) return "";
   const parts = [];
-  if(p.paq) parts.push(`hoy ${p.paq} paq = ${cop(p.paq*tarifa())}`);
-  if(p.perHour!=null) parts.push(`${num1(p.perHour)} paq/hora`);
+  if(p.paq) parts.push(`hoy ${p.paq} ${p.paq===1?"pedido":"pedidos"} = ${cop(p.paq*tarifa())}`);
+  if(p.perHour!=null) parts.push(`${num1(p.perHour)} pedidos/hora`);
   if(p.perStop!=null) parts.push(`${Math.round(p.perStop)} min por parada`);
   if(p.eta) parts.push(`terminas ≈ ${hhmm(p.eta)}${p.aprox ? " (estimado inicial)" : ""}`);
   else if(p.done && !p.rem) parts.push("jornada terminada");
@@ -185,25 +185,26 @@ function histTotals(h, days){
   const from = Date.now() - days*864e5, sel = h.filter(x=>x.inicio>=from);
   const e = sel.reduce((a,x)=>a+x.entregas,0), f = sel.reduce((a,x)=>a+x.noEntregadas,0), pq = sel.reduce((a,x)=>a+x.paquetes,0);
   const mins = sel.reduce((a,x)=>a+(x.minutos||0),0), ahorro = sel.reduce((a,x)=>a+(x.ahorroKm||0),0);
-  return {n:sel.length, e, f, pq, efect: e+f ? Math.round(100*e/(e+f)) : null, porHora: mins>0 ? (e/(mins/60)).toFixed(1).replace(".",",") : null, ahorro};
+  const pf = sel.reduce((a,x)=>a+(x.paqNoEntregados||0),0);
+  return {n:sel.length, e, f, pq, efect: pq+pf ? Math.round(100*pq/(pq+pf)) : null, porHora: mins>0 ? (pq/(mins/60)).toFixed(1).replace(".",",") : null, ahorro};
 }
 function renderHist(){
   const h = histLoad().slice().reverse();
   const t7 = histTotals(h,7), t30 = histTotals(h,30);
-  const line = (lbl,t) => t.n ? `<div><b>${lbl}:</b> ${t.n} jornada(s) · ${t.e} entregas (${t.pq} paquetes)${t.efect!=null?` · efectividad ${t.efect} %`:""}${t.porHora?` · ${t.porHora} entregas por hora`:""}${t.ahorro>0?` · ahorro estimado ${fmtKm(t.ahorro)}`:""}</div>` : `<div><b>${lbl}:</b> sin jornadas</div>`;
+  const line = (lbl,t) => t.n ? `<div><b>${lbl}:</b> ${t.n} jornada(s) · ${t.pq} pedidos entregados${t.efect!=null?` · efectividad ${t.efect} %`:""}${t.porHora?` · ${t.porHora} pedidos por hora`:""}${t.ahorro>0?` · ahorro estimado ${fmtKm(t.ahorro)}`:""}</div>` : `<div><b>${lbl}:</b> sin jornadas</div>`;
   $("histTotals").innerHTML = line("Últimos 7 días", t7) + line("Últimos 30 días", t30);
   // Comparar días: barras de paquetes por hora de las últimas 14 jornadas, con el mejor día y el promedio.
   const rated = h.slice(0,14).reverse().filter(x=>dayRate(x)!=null);
   if(rated.length >= 2){
     const max = Math.max(...rated.map(dayRate)), avg = rated.reduce((a,x)=>a+dayRate(x),0)/rated.length;
     const best = rated.find(x=>dayRate(x)===max);
-    $("histChart").innerHTML = rated.map(x=>`<div title="${esc(fmtDate(x.inicio))}: ${num1(dayRate(x))} paq/hora"><b>${num1(dayRate(x))}</b><i style="height:${Math.round(70*dayRate(x)/max)}%"></i><span>${new Date(x.inicio).getDate()}/${new Date(x.inicio).getMonth()+1}</span></div>`).join("");
-    $("histTotals").innerHTML += `<div><b>Paquetes por hora:</b> promedio ${num1(avg)} · mejor día ${esc(fmtDate(best.inicio))} (${num1(max)})</div>`;
+    $("histChart").innerHTML = rated.map(x=>`<div title="${esc(fmtDate(x.inicio))}: ${num1(dayRate(x))} pedidos/hora"><b>${num1(dayRate(x))}</b><i style="height:${Math.round(70*dayRate(x)/max)}%"></i><span>${new Date(x.inicio).getDate()}/${new Date(x.inicio).getMonth()+1}</span></div>`).join("");
+    $("histTotals").innerHTML += `<div><b>Pedidos por hora:</b> promedio ${num1(avg)} · mejor día ${esc(fmtDate(best.inicio))} (${num1(max)})</div>`;
   } else $("histChart").innerHTML = "";
   $("histList").innerHTML = h.length ? h.map(x=>`<div class="hrow">
       <b>${esc(fmtDate(x.inicio))}</b>
-      <span>${x.entregas} ${x.entregas===1?"entrega":"entregas"} (${x.paquetes} paq.)${x.noEntregadas?` · ${x.noEntregadas} no ${x.noEntregadas===1?"entregada":"entregadas"}`:""}${x.pendientes?` · ${x.pendientes} ${x.pendientes===1?"pendiente":"pendientes"}`:""}</span>
-      <span>${hhmm(x.inicio)} a ${hhmm(x.fin)} · ${Math.floor(x.minutos/60)} h ${x.minutos%60} min${x.promEntreEntregas?` · ${x.promEntreEntregas} min entre entregas`:""}${dayRate(x)!=null?` · ${num1(dayRate(x))} paq/hora`:""}</span>
+      <span>${x.paquetes} ${x.paquetes===1?"pedido entregado":"pedidos entregados"}${x.paqNoEntregados?` · ${x.paqNoEntregados} no ${x.paqNoEntregados===1?"entregado":"entregados"}`:""}${x.pendientes?` · ${x.pendientes} ${x.pendientes===1?"dirección pendiente":"direcciones pendientes"}`:""}</span>
+      <span>${hhmm(x.inicio)} a ${hhmm(x.fin)} · ${Math.floor(x.minutos/60)} h ${x.minutos%60} min${x.promEntreEntregas?` · ${x.promEntreEntregas} min entre entregas`:""}${dayRate(x)!=null?` · ${num1(dayRate(x))} pedidos/hora`:""}</span>
       ${x.kmEstimados||x.ahorroKm ? `<span>${x.kmEstimados?`≈ ${fmtKm(x.kmEstimados)} recorridos`:""}${x.ahorroKm?`${x.kmEstimados?" · ":""}ahorro ${fmtKm(x.ahorroKm)}${x.ahorroMin?" / "+x.ahorroMin+" min":""}`:""}</span>` : ""}
     </div>`).join("") : `<p class="hint">Aún no hay jornadas. El resumen se guarda solo al marcar entregas.</p>`;
   const kb = (new Blob([JSON.stringify(histLoad())]).size/1024).toFixed(1).replace(".",",");
@@ -243,20 +244,20 @@ function histCsvPedidos(){
     }
     // Total del día: pedidos entregados, no entregados, pendientes y cuánto se demoró la ruta.
     rows.push([fechaLarga(x.inicio), x.salida ? hhmm(x.salida) : "", hhmm(x.inicio), hhmm(x.fin), hmm(rutaMin(x)),
-      "TOTAL DEL DÍA", csvCell(`${ent} entregado(s) de ${ent+no+pend}${no?` · ${no} no entregado(s)`:""}${pend?` · ${pend} pendiente(s)`:""}`), "", "", "", String(ent+no+pend), String(ent), hmm(rutaMin(x)), String(ent*vp), String(ent*vp)].join(";"));
+      "TOTAL DEL DÍA", csvCell(`${ent} pedido(s) entregado(s) de ${ent+no+pend}${no?` · ${no} no entregado(s)`:""}${pend?` · ${pend} pendiente(s)`:""}`), "", "", "", String(ent+no+pend), String(ent), hmm(rutaMin(x)), String(ent*vp), String(ent*vp)].join(";"));
     rows.push("");
     totEnt += ent; totNo += no; totPed += ent+no+pend; totMin += rutaMin(x)||0; totVal += ent*vp;
   }
-  if(h.length > 1) rows.push(["TOTAL GENERAL", "", "", "", hmm(totMin), `${h.length} jornada(s)`, csvCell(`${totEnt} entregado(s)${totNo?` · ${totNo} no entregado(s)`:""}`), "", "", "", String(totPed||totEnt), String(totEnt), hmm(totMin), String(totVal), String(totVal)].join(";"));
+  if(h.length > 1) rows.push(["TOTAL GENERAL", "", "", "", hmm(totMin), `${h.length} jornada(s)`, csvCell(`${totEnt} pedido(s) entregado(s)${totNo?` · ${totNo} no entregado(s)`:""}`), "", "", "", String(totPed||totEnt), String(totEnt), hmm(totMin), String(totVal), String(totVal)].join(";"));
   downloadCsv(rows, "pedidos-por-jornada-" + ymd(Date.now()) + ".csv");
   toast("Excel por pedido descargado, con acumulado y total de cada día.");
 }
 function histCsv(){
   const h = histLoad();
-  const cols = [["fecha","Fecha"],["entregas","Entregas"],["paquetes","Paquetes"],["noEntregadas","No entregadas"],["paqNoEntregados","Paquetes no entregados"],
+  const cols = [["fecha","Fecha"],["paquetes","Pedidos entregados"],["paqNoEntregados","Pedidos no entregados"],["entregas","Direcciones entregadas"],["noEntregadas","Direcciones no entregadas"],
     ["pendientes","Pendientes"],["salida","Salida a ruta"],["inicio","Primera entrega"],["fin","Última entrega"],["duracion","Duración de la ruta (h:mm)"],["minutos","Minutos (1.ª a última entrega)"],["promEntreEntregas","Min. entre entregas"],
     ["kmEstimados","Km estimados"],["manejoEstMin","Manejo estimado (min)"],["realMin","Tiempo real (min)"],["minPorParada","Min. extra por parada"],
-    ["ahorroKm","Ahorro km"],["ahorroMin","Ahorro min"],["callesReales","Calles reales"],["valorPaq","Valor por paquete ($)"],["valor","Valor del día ($)"]];
+    ["ahorroKm","Ahorro km"],["ahorroMin","Ahorro min"],["callesReales","Calles reales"],["valorPaq","Valor por pedido ($)"],["valor","Valor del día ($)"]];
   const cell = (k,v) => v==null ? "" : k==="fecha" ? v : (k==="inicio"||k==="fin"||k==="salida") ? hhmm(v) : typeof v==="number" ? String(v).replace(".",",") : typeof v==="boolean" ? (v?"Sí":"No") : String(v);
   // Separador «;» y coma decimal: así lo abre bien Excel en español (Colombia).
   const rows = [cols.map(c=>c[1]).join(";")].concat(h.map(x=>cols.map(([k])=>k==="fecha" ? fechaLarga(x.inicio) : k==="duracion" ? hmm(rutaMin(x)) : k==="valorPaq" ? String(valorDia(x.id)) : k==="valor" ? String((x.paquetes||0)*valorDia(x.id)) : cell(k,x[k])).join(";")));
@@ -303,15 +304,15 @@ function acumMeses(){
 }
 function renderPay(){
   if(document.activeElement !== $("pyRate")) $("pyRate").value = tarifa();
-  $("pyFormula").textContent = `Valor = paquetes entregados × ${cop(tarifa())}. Los no entregados no suman. Cada día guarda el valor por paquete que tenía ese día.`;
-  const head = `<div class="pr" role="row"><span>Periodo</span><span>Domicilios</span><span>Paquetes</span><span>Valor</span></div>`;
-  const row = (lbl, s, tot) => `<div class="pr${tot ? " tot" : ""}" role="row"><span>${esc(lbl)}</span><span>${s.e}</span><span>${s.p}</span><span><b>${cop(s.v)}</b></span></div>`;
+  $("pyFormula").textContent = `Valor = pedidos entregados × ${cop(tarifa())}. Cada pedido cuenta por separado, aunque vayan varios a la misma dirección. Los no entregados no suman. Cada día guarda el valor por pedido que tenía ese día.`;
+  const head = `<div class="pr" role="row"><span>Periodo</span><span>Entregados</span><span>No entreg.</span><span>Valor</span></div>`;
+  const row = (lbl, s, tot) => `<div class="pr${tot ? " tot" : ""}" role="row"><span>${esc(lbl)}</span><span>${s.p}</span><span>${s.n}</span><span><b>${cop(s.v)}</b></span></div>`;
   const per = acumPeriodos();
   $("pyTable").innerHTML = head + per.map(([l,s],i)=>row(l, s, i===per.length-1)).join("");
   const ms = acumMeses();
   $("pyMonths").innerHTML = ms.length ? head.replace("Periodo","Mes") + ms.map(([m,s])=>row(nombreMes(m) + ` · ${s.dias} día(s)`, s)).join("") : `<div class="pr"><span>Aún no hay entregas.</span></div>`;
   const dias = Object.values(acumLoad()).map(d=>d.f).sort();
-  $("pyInfo").textContent = dias.length ? `Acumulado desde el ${fechaLarga(new Date(dias[0]+"T12:00:00").getTime())}. «Domicilios» cuenta paradas entregadas; varios paquetes en la misma dirección son un domicilio. Este resumen no se borra con el historial y va en el respaldo.` : "";
+  $("pyInfo").textContent = dias.length ? `Acumulado desde el ${fechaLarga(new Date(dias[0]+"T12:00:00").getTime())}. Cuenta pedidos (cada guía o paquete), no direcciones. Este resumen no se borra con el historial y va en el respaldo.` : "";
 }
 document.getElementById("pyRate").addEventListener("change", e=>{
   const v = Math.round(Number(e.target.value));
@@ -322,9 +323,9 @@ document.getElementById("pyRate").addEventListener("change", e=>{
   renderPay(); renderPace(); toast(`Valor por paquete: ${cop(v)}. Aplica desde hoy.`);
 });
 document.getElementById("pyCsv").onclick = ()=>{
-  const rows = ["Mes;Días trabajados;Domicilios (paradas) entregados;Paquetes entregados;Paquetes no entregados;Valor ($)"];
-  for(const [m,s] of acumMeses().reverse()) rows.push([nombreMes(m), s.dias, s.e, s.p, s.n, Math.round(s.v)].join(";"));
-  const t = acumSum(()=>true); rows.push(["TOTAL", t.dias, t.e, t.p, t.n, Math.round(t.v)].join(";"));
+  const rows = ["Mes;Días trabajados;Pedidos entregados;Pedidos no entregados;Valor ($)"];
+  for(const [m,s] of acumMeses().reverse()) rows.push([nombreMes(m), s.dias, s.p, s.n, Math.round(s.v)].join(";"));
+  const t = acumSum(()=>true); rows.push(["TOTAL", t.dias, t.p, t.n, Math.round(t.v)].join(";"));
   downloadCsv(rows, "acumulado-por-mes-" + ymd(Date.now()) + ".csv");
   toast("Excel por mes descargado.");
 };

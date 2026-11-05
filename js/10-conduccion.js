@@ -43,7 +43,7 @@ function renderDrive(){
   }
   const n = stopNum(s), total = list.length;
   $("dvPos").textContent = `Parada ${n} de ${n - 1 + total}`;
-  $("dvQty").textContent = [(s.qty||1)>1 ? `×${s.qty} paquetes` : "", s.status==="fail" ? "Ya tuvo un intento fallido" : "", s.zone ? "ST " + s.zone : ""].filter(Boolean).join(" · ");
+  $("dvQty").textContent = [(s.qty||1)>1 ? `${s.qty} pedidos en esta dirección` : "", s.status==="fail" ? "Ya tuvo un intento fallido" : "", s.zone ? "ST " + s.zone : ""].filter(Boolean).join(" · ");
   $("dvAddr").textContent = s.label || s.addr;
   $("dvUnit").textContent = [unitText(s), s.barrio].filter(Boolean).join(" · ");
   // Número de pedido (guía): grande y con etiqueta. Varios paquetes en la misma dirección = varios números.

@@ -30,6 +30,6 @@ test("historial compara días con paquetes por hora", async ({ page }) => {
   });
   await page.click("text=Más opciones"); await page.click("#btnHist");
   await expect(page.locator("#histChart > div")).toHaveCount(3);
-  await expect(page.locator("#histTotals")).toContainText("Paquetes por hora: promedio 8,0");
-  await expect(page.locator("#histList")).toContainText("paq/hora");
+  await expect(page.locator("#histTotals")).toContainText("Pedidos por hora: promedio 8,0");
+  await expect(page.locator("#histList")).toContainText("pedidos/hora");
 });
