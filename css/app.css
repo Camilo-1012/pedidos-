@@ -302,3 +302,23 @@ details summary{cursor:pointer;font-weight:600}
   .lockBox > h1{display:none}
   .keypad{grid-template-columns:repeat(6,minmax(0,1fr))}
 }
+
+/* Cabecera: botones con ícono. «Conducir» destacado; «Nueva jornada» discreto (se usa una vez al día). */
+.hdrBtns{display:flex;gap:6px;flex-wrap:wrap;align-items:center;justify-content:flex-end}
+.ico{width:18px;height:18px;flex:none}
+header.top .hbtn{background:rgba(255,255,255,.1);color:var(--bg);border-color:rgba(255,255,255,.22)}
+header.top .hbtn.icon{padding:8px;min-width:38px}
+header.top .hbtn.ghost{background:transparent;color:var(--accent);border-color:var(--accent)}
+header.top .primary .ico{color:var(--accent-ink)}
+@media (max-width: 520px){
+  .hdrBtns{width:100%;justify-content:flex-start}
+  .hdrBtns .grow{flex:1 1 auto}
+}
+/* Secciones desplegables (Ruta y Más opciones): cerradas muestran un resumen */
+details.sec > summary{list-style:none;display:flex;flex-direction:column;gap:2px;position:relative;padding-right:30px;cursor:pointer}
+details.sec > summary::-webkit-details-marker{display:none}
+details.sec > summary::after{content:"▾";position:absolute;right:2px;top:0;font-size:22px;line-height:1;transition:transform .15s;color:var(--muted)}
+details.sec[open] > summary::after{transform:rotate(180deg)}
+details.sec[open] > summary .secSum{display:none}
+.secSum{font-size:13px;color:var(--muted);font-weight:500;line-height:1.35}
+.secBody{display:flex;flex-direction:column;gap:12px;margin-top:12px}

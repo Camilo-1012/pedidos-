@@ -162,7 +162,7 @@ function renderSync(busyMsg){
   if(!on){ $("tmState").textContent = sync && sync.err ? sync.err : "Sin conectar. Cada persona conecta su app con su correo del equipo."; return; }
   const pend = Object.keys(sync.known||{}).length;
   $("tmState").textContent = busyMsg || (sync.err ? sync.err : `Conectado como ${sync.nombre} (${sync.email})${sync.admin ? " · administrador" : ""}. ` + (sync.last ? `Última sincronización: ${hhmm(sync.last)} · ${pend} parada(s) en la nube.` : ""));
-  $("btnTeam").textContent = sync.err ? "Equipo ⚠" : "Equipo";
+  $("btnTeamTxt").textContent = sync.err ? "Equipo ⚠" : "Equipo";
   $("tmAdminBtn").hidden = !sync.admin;
 }
 $("tmConnect").addEventListener("submit", async e=>{

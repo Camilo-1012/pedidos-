@@ -295,3 +295,11 @@ Hay pruebas a 412×360, 412×300 y 780×360.
   - con teléfono, abre el marcador con el número listo;
   - sin teléfono, el botón dice «Marcar» y abre el marcador vacío, y el número no se guarda en la app.
   - Ninguna app web puede llamar sola: siempre hay que tocar el botón de llamar del celular.
+
+## Cabecera y Ruta desplegable (v2.7)
+
+- **Cabecera:**
+  - usuario con ícono, Equipo (si está conectado) y **Bloquear como botón con candado**;
+  - **Conducir** destacado en amarillo, que abre el modo conducción;
+  - **Nueva jornada** como botón secundario, con borde, para no tocarlo por error.
+- **Ruta** es desplegable, como «Más opciones». Cerrada muestra paradas, km y punto de partida. La app recuerda si la dejaste abierta o cerrada.

@@ -72,7 +72,7 @@ function enter(u){
   if(started) return;
   started = u.id;
   window.RUTA_USER = {id:u.id, name:u.name, admin:!!u.admin};
-  q("btnUser").textContent = u.name;
+  q("btnUserName").textContent = u.name;
   // Los archivos de la app se cargan en orden y solo después de entrar con el PIN.
   for(const f of APP_FILES){ const s = document.createElement("script"); s.src = f; s.async = false; document.body.appendChild(s); }
 }

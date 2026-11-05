@@ -118,6 +118,11 @@ function render(){
   parts.push(state.realRoads !== false ? "calles reales" : "orden aproximado");
   if(state.autoWaze !== false) parts.push("Waze automático");
   $("optsSum").textContent = parts.join(" · ");
+  // Ruta desplegable: cerrada muestra paradas, km y desde dónde arranca. Abierta por defecto la primera vez.
+  const kmTxt = $("stKm").textContent + (real ? " km reales" : " km aprox.");
+  $("routeSum").textContent = pend.length ? `${pend.length} ${pend.length===1?"parada":"paradas"} · ${kmTxt} · ${parts[0]}` : `Sin paradas pendientes · ${parts[0]}`;
+  const rOpen = state.rutaOpen !== false;
+  if($("routeCard").open !== rOpen) $("routeCard").open = rOpen;
   if($("routeOpts").open !== !!state.optsOpen) $("routeOpts").open = !!state.optsOpen;
   $("autoWaze").checked = state.autoWaze !== false;
   if(document.activeElement !== $("orsKey")) $("orsKey").value = state.orsKey || "";

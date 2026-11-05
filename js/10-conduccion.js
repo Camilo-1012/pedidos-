@@ -78,6 +78,7 @@ $("dvGuiaBtn").onclick = ()=>{ const s = driveStop(); if(s) startAssign([s.id]);
 // Al terminar de escanear la guía desde el modo conducción, se actualiza la pantalla.
 $("dlgScan").addEventListener("close", ()=>renderDrive());
 $("btnDrive").onclick = openDrive;
+$("btnDriveTop").onclick = openDrive;
 $("dvExit").onclick = ()=>closeDrive(false);
 $("dvDone").onclick = ()=>{ const s = driveStop(); if(!s) return; if(navigator.vibrate) navigator.vibrate(60); toggleDone(s); renderDrive(); };
 $("dvFail").onclick = ()=>{ const s = driveStop(); if(!s) return; confirmBox("No estaba", `¿Marcar ${s.label||s.addr} como no entregada? Pasa al final de los pendientes.`, ()=>{ toggleFail(s); renderDrive(); }); };
