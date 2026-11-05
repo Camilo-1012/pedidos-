@@ -189,6 +189,7 @@ async function startScan(mode){
   $("scanFindBtn").textContent = scanMode==="assign" ? "Usar" : "Buscar";
   $("scanAssign").hidden = scanMode!=="assign";
   $("scanTargetTxt").hidden = scanMode!=="assign";
+  if(scanMode==="assign"){ $("stTel").hidden = state.assignTel === false; setStat("stTel", null, "Teléfono: —"); $("scanTelOn").checked = state.assignTel !== false; if(state.assignTel !== false) getWorker().catch(()=>{}); }
   $("dlgScan").classList.toggle("codeOnly", codeOnly);
   if(scanMode==="assign") assignShow();
   $("scanMsg").textContent = "Abriendo cámara…"; $("scanTorch").hidden = true;
@@ -228,7 +229,7 @@ async function startScan(mode){
 async function scanTick(){
   const v = $("scanVideo");
   // Se sigue buscando hasta tener un código numérico de guía (un QR con enlace no basta si también hay código de barras).
-  if(scanBusy || !v.videoWidth || !scanStream || !scanDet || live.done || live.codeAddr || codeScore(live.codeGuia||"") >= 3) return;
+  if(scanBusy || !v.videoWidth || !scanStream || !scanDet || live.done || live.codeAddr || live.phoneFor || codeScore(live.codeGuia||"") >= 3) return;
   scanBusy = true;
   try{
     const before = live.codeGuia;

@@ -281,3 +281,17 @@ Con alto de 600 px o menos (pantalla dividida con Waze, ventana flotante o celul
 - el teclado del PIN se reduce.
 
 Hay pruebas a 412×360, 412×300 y 780×360.
+
+## Teléfono más rápido (v2.6)
+
+- **Por voz, opcional:** al dictar una o varias direcciones, después de la dirección se puede decir «teléfono» (o «celular», «tel», «WhatsApp») y el número.
+  - Sin la palabra también funciona si el número del final forma un celular (3 + 9 dígitos) o un fijo (601…); conviene hacer una pausa.
+  - Si no se dice ningún número, la parada queda sin teléfono, como antes.
+  - Un número incompleto queda marcado como «(revisar teléfono …)».
+- **Al escanear la guía** (Escanear guías): si a la parada le falta el teléfono, la app lee solo los números de la misma etiqueta, hasta 5 s, antes de pasar a la siguiente.
+  - Acepta celulares y fijos, y descarta los números que sean parte de la guía.
+  - Casilla «Leer también el teléfono si a la parada le falta» para apagarlo; «Saltar este» deja el teléfono y sigue.
+- **Llamar en modo conducción:**
+  - con teléfono, abre el marcador con el número listo;
+  - sin teléfono, el botón dice «Marcar» y abre el marcador vacío, y el número no se guarda en la app.
+  - Ninguna app web puede llamar sola: siempre hay que tocar el botón de llamar del celular.

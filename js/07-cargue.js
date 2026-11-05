@@ -164,11 +164,12 @@ $("scanTarget").addEventListener("change", e=>{
   assignShow();
 });
 $("scanSkip").onclick = ()=>{
+  if(live && live.phoneFor){ live.phoneFor = null; return; }   // se deja el teléfono y se sigue con la siguiente parada
   const t = assignTarget(); if(!t) return;
   assignQ.push(assignQ.shift());     // va al final
   assignShow();
 };
-function assignGuia(g){
+async function assignGuia(g){
   const t = assignTarget(); if(!t) return;
   g = guiaFromCode(String(g));
   if(!g || g.length < 4){ setStat("stCode", false, "Ese código no parece una guía."); return; }
@@ -179,6 +180,11 @@ function assignGuia(g){
   save(); render();
   if(navigator.vibrate) navigator.vibrate(60);
   setStat("stCode", true, `✓ ${g} → ${t.st.label||t.st.addr}`);
+  // Si a esta parada le falta el teléfono, se lee de la misma etiqueta antes de pasar a la siguiente.
+  if(!t.st.phone && state.assignTel !== false && live && !live.done && scanStream){
+    const tel = await leerTelefono(t.st);
+    setStat("stTel", !!tel, tel ? "✓ Teléfono: " + tel.replace(/(\d{3})(\d{3})(\d{4})/,"$1 $2 $3") : "Teléfono: no se leyó (puedes seguir)");
+  } else if(t.st.phone) setStat("stTel", true, "Teléfono: ya lo tenía");
   if(!assignTarget()){
     if(live) live.done = true;
     stopScan(); toast("Listo: todas las paradas tienen su guía.");
@@ -187,6 +193,35 @@ function assignGuia(g){
   // Muestra la siguiente sin borrar el mensaje de confirmación.
   const ok = $("stCode").textContent; assignShow(); setStat("stCode", true, ok);
 }
+/* ---- Teléfono de la etiqueta en la misma pasada: lector de texto solo con números (más rápido que leer todo) ---- */
+// Celular (3 + 9 dígitos) o fijo (601…), con o sin espacios, puntos o guiones. Se descartan números que sean parte de una guía.
+function telDeTexto(text, excluir){
+  const t = String(text||"");
+  const cands = [...t.matchAll(/(?<![\d])(?:\+?57[\s.-]?)?((?:3\d{2}|60\d)[\s.-]?\d{3}[\s.-]?\d{4})(?![\d])/g)].map(m=>m[1].replace(/\D/g,""));
+  const dentro = (excluir||[]).join(" ");
+  return cands.find(c=>!dentro.includes(c)) || "";
+}
+async function leerTelefono(st){
+  let w; try{ w = await getWorker(); }catch(e){ return ""; }
+  live.phoneFor = st.id;
+  setStat("stTel", null, "Teléfono: leyendo…");
+  $("scanMsg").textContent = "Guía guardada. Leyendo el teléfono de la etiqueta… toca «Saltar este» si no lo tiene.";
+  const t0 = Date.now(); let tel = "";
+  while(live && !live.done && scanStream && live.phoneFor === st.id && Date.now() - t0 < 5000){
+    const v = $("scanVideo"); if(!v.videoWidth){ await new Promise(r=>setTimeout(r,150)); continue; }
+    try{
+      await w.setParameters({tessedit_pageseg_mode:"11", tessedit_char_whitelist:"0123456789+-.() "});
+      const { data } = await w.recognize(liveCrop(v));
+      tel = telDeTexto(data.text, guias(st));
+    }catch(e){ console.warn("teléfono", e); }
+    finally{ try{ await w.setParameters({tessedit_char_whitelist:""}); }catch(e){} }
+    if(tel) break;
+  }
+  if(live) live.phoneFor = null;
+  if(tel && !st.phone){ st.phone = tel; save(); render(); if(navigator.vibrate) navigator.vibrate(40); }
+  return tel;
+}
+$("scanTelOn").addEventListener("change", e=>{ state.assignTel = e.target.checked; save(); $("stTel").hidden = !e.target.checked; if(e.target.checked) getWorker().catch(()=>{}); });
 // Foto del código (si la lectura en vivo no lo toma): se busca el código en la imagen.
 $("scanPhotoIn").addEventListener("change", async e=>{
   const f = e.target.files && e.target.files[0]; e.target.value = ""; if(!f) return;

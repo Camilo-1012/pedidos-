@@ -58,7 +58,7 @@ function renderDrive(){
   $("dvNext").textContent = nx ? "Después: " + (nx.label || nx.addr) : "Es la última parada.";
   $("dvWaze").href = wazeUrl(s); $("dvWaze").removeAttribute("aria-disabled");
   $("dvCall").disabled = false;
-  $("dvCall").textContent = dialNumber(s.phone) ? "Llamar" : "Llamar (sin número)";
+  $("dvCall").textContent = dialNumber(s.phone) ? "Llamar" : "Marcar";
   $("dvPrev").disabled = dvIdx === 0; $("dvNextBtn").disabled = dvIdx >= total-1;
   $("dvPace").textContent = paceText();
 }
@@ -70,13 +70,9 @@ function dial(num){
 }
 $("dvCall").onclick = ()=>{
   const s = driveStop(); if(!s) return;
-  const num = dialNumber(s.phone);
-  if(num){ dial(num); return; }
-  // Sin teléfono: se puede escribir en el momento y queda guardado en la parada.
-  const v = prompt(`${s.label||s.addr} no tiene teléfono. Escríbelo para llamar (queda guardado):`, "");
-  const n2 = dialNumber(v);
-  if(!n2){ if(v) toast("Ese número no parece válido (7 a 10 dígitos)."); return; }
-  s.phone = n2; save(); render(); dial(n2);
+  // Con número: el marcador se abre con el número listo (solo se toca llamar).
+  // Sin número: se abre el marcador vacío para escribir el que aparece en la etiqueta.
+  dial(dialNumber(s.phone));
 };
 $("dvGuiaBtn").onclick = ()=>{ const s = driveStop(); if(s) startAssign([s.id]); };
 // Al terminar de escanear la guía desde el modo conducción, se actualiza la pantalla.

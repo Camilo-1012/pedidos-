@@ -383,9 +383,10 @@ $("frmText").addEventListener("submit", e=>{
     let ok=0, bad=0, merged=0; const ids = [];
     t.split(/\r?\n/).map(l=>l.trim()).filter(Boolean).forEach(line=>{
       const d = extractLabel(line); if(!d.addr) d.addr = line;
+      const tl = line.match(/\bTel[:.]?\s*((?:\+?57)?\d{7,10})\b/i); if(tl && !d.phone) d.phone = tl[1].replace(/^\+?57(?=\d{10}$)/,"");
       const q = line.match(/(?:^|\s)[x×]\s*(\d{1,2})\b|\b(\d{1,2})\s*(?:paq|paquetes|unid|und)\b|\b(?:por|cantidad)\s+(\d{1,2})\b/i);
       if(q) d.qty = +(q[1]||q[2]||q[3]);
-      if(d.barrio) d.barrio = d.barrio.replace(/\b(?:por|cantidad)\s+\d{1,2}\b|(?:^|\s)[x×]\s*\d{1,2}\b|\b\d{1,2}\s*(?:paq\w*|unid\w*|und)\b|\b(?:\+?57)?3\d{9}\b|\bST\s*\d+\b/gi,"").trim();
+      if(d.barrio) d.barrio = d.barrio.replace(/\bTel[:.]?\s*\d{7,12}\b/gi,"").replace(/\b(?:por|cantidad)\s+\d{1,2}\b|(?:^|\s)[x×]\s*\d{1,2}\b|\b\d{1,2}\s*(?:paq\w*|unid\w*|und)\b|\b(?:\+?57)?3\d{9}\b|\bST\s*\d+\b/gi,"").trim();
       const r = addOrMerge(d);
       if(r.merged) merged++; else if(r.stop.x===null) bad++; else ok++;
       ids.push(r.stop.id);

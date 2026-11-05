@@ -27,11 +27,10 @@ test("modo conducción de punta a punta", async ({ page }) => {
   // Saltar y volver
   await page.click("#dvNextBtn"); await expect(page.locator("#dvAddr")).toHaveText("Carrera 110 # 152-30");
   await expect(page.locator("#dvGuia")).toContainText("1111222233334444".replace(/./g, "") + "5555666677778888");
-  // Sin teléfono: lo pide, lo guarda y marca
-  page.once("dialog", d => d.accept("601 234 5678"));
+  // Sin teléfono: el botón dice «Marcar» y abre el marcador vacío
+  await expect(page.locator("#dvCall")).toHaveText("Marcar");
   await page.click("#dvCall");
-  expect(await page.evaluate(() => window._marcado)).toBe("6012345678");
-  expect(await page.evaluate(() => state.stops.find(s => s.guia === "5555666677778888").phone)).toBe("6012345678");
+  expect(await page.evaluate(() => window._marcado)).toBe("");
   await page.click("#dvPrev"); await expect(page.locator("#dvAddr")).toHaveText("Calle 145 # 103B-90");
   // Entregar → pasa a la siguiente
   await page.click("#dvDone");

@@ -38,6 +38,32 @@ function spokenToAddress(text){
   // "guion cero ocho" → "-08"
   return out.join(" ").replace(/- 0 (\d)\b/g,"- 0$1").replace(/\s+/g," ").trim();
 }
+/* Teléfono dictado (opcional): «…teléfono 311 222 3344» (también celular, cel, tel, WhatsApp, contacto).
+   Sin la palabra, se toma como teléfono un número del final que forme un celular (3 + 9 dígitos) o un fijo (601…),
+   siempre que lo anterior siga siendo una dirección válida. Devuelve la dirección ya convertida y el teléfono. */
+function telDeDigitos(d){
+  d = String(d||"").replace(/\D/g,"");
+  if(d.length===12 && d.startsWith("57")) d = d.slice(2);
+  return /^3\d{9}$/.test(d) || /^60\d{8}$/.test(d) ? d : "";
+}
+function splitPhone(text){
+  const t = String(text||"");
+  const m = t.match(/\b(tel[eé]fono|tel|celular|cel|whatsapp|contacto)\b/i);
+  if(m){
+    const digits = spokenToAddress(t.slice(m.index + m[0].length)).replace(/\D/g,"");
+    const tel = telDeDigitos(digits);
+    return {addrConv: spokenToAddress(t.slice(0, m.index)), tel, telMal: !tel && digits.length > 0 ? digits : ""};
+  }
+  const conv = spokenToAddress(t), toks = conv.split(" ");
+  // Del final hacia atrás: el grupo de números más corto que forme un teléfono válido.
+  for(let k = toks.length-1; k > 0 && /^\d+$/.test(toks[k]); k--){
+    const acc = toks.slice(k).join("");
+    if(acc.length > 12) break;
+    const tel = telDeDigitos(acc), antes = toks.slice(0,k).join(" ");
+    if(tel && parseAddress(antes)) return {addrConv: antes, tel, telMal: ""};
+  }
+  return {addrConv: conv, tel: "", telMal: ""};
+}
 let rec = null, recOn = false;
 function micUI(on, msg){
   recOn = on;
@@ -53,7 +79,7 @@ function startDictation(){
   rec = new SR();
   rec.lang = "es-CO"; rec.interimResults = true; rec.maxAlternatives = 3; rec.continuous = false;
   let finalTxt = "";
-  rec.onstart = ()=>micUI(true, "Escuchando… di la dirección, por ejemplo: «calle ciento cuarenta y tres número ciento cincuenta y uno be guion veintitrés».");
+  rec.onstart = ()=>micUI(true, "Escuchando… di la dirección, por ejemplo: «calle ciento cuarenta y tres número ciento cincuenta y uno be guion veintitrés». Si quieres, al final di «teléfono» y el número.");
   rec.onresult = ev=>{
     let interim = "";
     for(let i=ev.resultIndex;i<ev.results.length;i++){
@@ -65,8 +91,10 @@ function startDictation(){
         finalTxt += " " + best;
       } else interim += r[0].transcript;
     }
-    const conv = spokenToAddress((finalTxt + " " + interim).trim());
+    const sp = splitPhone((finalTxt + " " + interim).trim());
+    const conv = sp.addrConv;
     const pa = parseAddress(conv);
+    if(sp.tel){ $("fPhone").value = sp.tel; if(typeof updPhone === "function") updPhone(); }
     // La dirección va al campo Dirección; lo que se dijo después (apto, torre…) va a Notas.
     $("fAddr").value = pa ? pa.label : conv;
     const tail = pa ? rest(conv).trim() : "";
@@ -100,7 +128,7 @@ function rest(conv){
 $("micAddr").onclick = startDictation;
 
 // Dictado de varias direcciones seguidas: cada frase (o cada «siguiente») queda en una línea.
-let recBulk = null, bulkOn = false, bulkOk = 0, bulkBad = 0;
+let recBulk = null, bulkOn = false, bulkOk = 0, bulkBad = 0, bulkTel = 0, bulkTelMal = 0;
 function bulkUI(on, msg){
   bulkOn = on;
   $("micBulk").classList.toggle("on", on);
@@ -110,22 +138,24 @@ function bulkUI(on, msg){
 function addDictatedLines(text){
   const parts = text.split(/\b(?:siguiente|otra direcci[oó]n|nueva l[ií]nea|punto y aparte)\b/i).map(x=>x.trim()).filter(Boolean);
   for(const part of parts){
-    const conv = spokenToAddress(part);
+    const sp = splitPhone(part), conv = sp.addrConv;
     const pa = parseAddress(conv);
-    const line = pa ? (pa.label + rest(conv)) : "REVISAR: " + part;   // lo no entendido queda tal cual se dijo, para corregirlo
+    // Lo no entendido queda tal cual se dijo, para corregirlo. El teléfono va al final como «Tel 3112223344».
+    const line = (pa ? (pa.label + rest(conv)) : "REVISAR: " + part) + (sp.tel ? " Tel " + sp.tel : sp.telMal ? " (revisar teléfono " + sp.telMal + ")" : "");
     if(pa) bulkOk++; else bulkBad++;
+    if(sp.tel) bulkTel++; else if(sp.telMal) bulkTelMal++;
     const ta = $("txtArea");
     ta.value = (ta.value.trim() ? ta.value.replace(/\s+$/,"") + "\n" : "") + line;
     ta.scrollTop = ta.scrollHeight;
   }
-  bulkUI(true, `Escuchando… ${bulkOk} dirección(es) entendida(s)${bulkBad?`, ${bulkBad} por revisar`:""}. Di la siguiente o toca «Parar dictado».`);
+  bulkUI(true, `Escuchando… ${bulkOk} dirección(es) entendida(s)${bulkTel?`, ${bulkTel} con teléfono`:""}${bulkBad?`, ${bulkBad} por revisar`:""}${bulkTelMal?`, ${bulkTelMal} teléfono(s) por revisar`:""}. Di la siguiente o toca «Parar dictado».`);
 }
 function startBulkDictation(){
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if(!SR){ bulkUI(false, "Este navegador no permite dictar aquí. Usa el micrófono del teclado (una dirección por línea)."); $("txtArea").focus(); return; }
   if(!navigator.onLine){ bulkUI(false, "El dictado necesita internet."); return; }
   if(bulkOn){ bulkOn = false; try{ recBulk.stop(); }catch(e){} return; }
-  bulkOk = 0; bulkBad = 0;
+  bulkOk = 0; bulkBad = 0; bulkTel = 0; bulkTelMal = 0;
   recBulk = new SR();
   recBulk.lang = "es-CO"; recBulk.interimResults = false; recBulk.continuous = true; recBulk.maxAlternatives = 3;
   recBulk.onresult = ev=>{
@@ -146,7 +176,7 @@ function startBulkDictation(){
     if(bulkOn && $("dlgText").open){ try{ recBulk.start(); return; }catch(e){} }
     bulkUI(false, bulkOk||bulkBad ? `Listo: ${bulkOk} dirección(es) entendida(s)${bulkBad?`, ${bulkBad} por revisar (corrígelas en el texto)`:""}. Revisa y toca «Continuar».` : "");
   };
-  bulkUI(true, "Escuchando… di una dirección, haz una pausa o di «siguiente», y di la otra. Al final de cada una puedes decir la cantidad: «por tres» o «tres paquetes».");
+  bulkUI(true, "Escuchando… di una dirección, haz una pausa o di «siguiente», y di la otra. Opcional al final de cada una: «teléfono» y el número, o la cantidad («por tres»).");
   try{ recBulk.start(); }catch(e){ bulkUI(false, "No se pudo iniciar el dictado."); }
 }
 $("micBulk").onclick = startBulkDictation;
