@@ -252,3 +252,14 @@ El plan gratis de Supabase pausa el proyecto tras unos 7 días sin uso. Para evi
   - Al final de cada jornada, una fila **TOTAL DEL DÍA** con entregados, no entregados, pendientes y duración. Al final del archivo, **TOTAL GENERAL**.
   - La duración se mide desde la salida hasta la última entrega. Si no hubo salida registrada, desde la primera entrega.
 - **Excel resumen:** columnas de salida y duración, y fila TOTAL.
+
+## Acumulado y pagos (v2.5)
+
+- **Fórmula: Valor = paquetes entregados × valor por paquete.** Por defecto es **$1.600**. Los no entregados no suman.
+- Se abre con **Más opciones → Acumulado y pagos** o tocando la línea de ritmo bajo los totales, que ahora empieza con «Hoy N paq = $ …».
+- Muestra domicilios (paradas), paquetes y valor de **hoy, esta semana (lunes a domingo), este mes, el mes anterior y el total general**, y una tabla por mes con los días trabajados.
+- **Excel por mes:** mes, días trabajados, domicilios, paquetes entregados y no entregados, valor y una fila TOTAL.
+- **Excel por pedido:** columnas «Valor ($)» y «Valor acumulado ($)», y el valor en TOTAL DEL DÍA y TOTAL GENERAL. El **Excel resumen** agrega el valor por paquete y el valor del día.
+- **El valor por paquete se puede cambiar** y aplica desde hoy: cada día guarda el valor que tenía.
+- **El acumulado no se borra** con los 90 días del historial. Se guarda un resumen por día (fecha, paquetes, paradas, no entregados y valor) que va en el respaldo. Es por usuario de la app.
+- Si se toca «Deshacer» en una entrega, el acumulado baja.

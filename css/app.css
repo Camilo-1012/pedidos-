@@ -236,3 +236,12 @@ details summary{cursor:pointer;font-weight:600}
 .scanTarget small{display:block;font:600 14px var(--body);color:var(--muted);margin-top:2px}
 #dlgScan.codeOnly .scanbox{aspect-ratio:auto;height:32vh;max-height:32vh}
 #dlgScan.codeOnly .scanframe{inset:20% 6%}
+
+/* Acumulado y pagos */
+.paytbl{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.paytbl .pr{display:grid;grid-template-columns:minmax(0,1.3fr) repeat(2,minmax(0,.8fr)) minmax(0,1.3fr);gap:6px;padding:8px 10px;border-top:1px solid var(--line);font-size:14px;align-items:center}
+.paytbl .pr:first-child{border-top:none;background:var(--bg);font-weight:600;font-size:12px;color:var(--muted)}
+.paytbl .pr span:not(:first-child){text-align:right;font-variant-numeric:tabular-nums}
+.paytbl .pr.tot{background:var(--accent);color:var(--accent-ink);font-weight:700}
+.paytbl .pr b{font:700 16px var(--display)}
+#pace{cursor:pointer}

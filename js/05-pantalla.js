@@ -208,7 +208,7 @@ function toggleDone(s){
       if(s.status==="done"){ state.stops.splice(i,1); state.stops.push(s); if(s.x!==null) state.lastDoneId = s.id; toast((s.qty||1)>1 ? `Entregados ${s.qty} paquetes. Sigue con la parada 1.` : "Entregado. Sigue con la parada 1.");
         recordDay();
         if(state.autoWaze !== false){ const nx = nextStop(); if(nx){ save(); render(); openExternal(wazeUrl(nx)); return; } else toast("¡Terminaste! No quedan entregas pendientes."); } }
-      else if(state.lastDoneId===s.id){ state.lastDoneId = null; }
+      else { if(state.lastDoneId===s.id) state.lastDoneId = null; recordDay(); }   // al deshacer, baja el acumulado
         save(); render();
 }
 // «No estaba»: queda como intento fallido al final de los pendientes (o se quita la marca).

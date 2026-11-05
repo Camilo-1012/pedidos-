@@ -117,7 +117,7 @@ $("btnClearAll").onclick = ()=>confirmBox("Borrar toda la jornada","Se eliminan 
 // Formato 2: {app, v:2, fecha, state, hist}. Lleva la jornada, los ajustes y el historial (resúmenes por pedido, sin nombres).
 // Los respaldos viejos (solo la jornada) se siguen pudiendo restaurar.
 $("btnBackup").onclick = ()=>{
-  const data = {app:"ruta-entregas", v:2, fecha:new Date().toISOString(), state, hist: histLoad()};
+  const data = {app:"ruta-entregas", v:2, fecha:new Date().toISOString(), state, hist: histLoad(), acum: acumLoad()};
   const blob = new Blob([JSON.stringify(data,null,1)],{type:"application/json"});
   const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
   a.download = "ruta-" + new Date().toISOString().slice(0,10) + ".json";
@@ -150,6 +150,8 @@ $("restoreFile").addEventListener("change", async e=>{
         state = {...st, stops, seeded:true, driveOn:false};
         save();
         if(hist.length) store.set(HIST_KEY, merged);
+        // Acumulado general: se agregan los días que no estén (los que ya están se conservan).
+        if(d && d.acum && typeof d.acum === "object"){ const a = acumLoad(); for(const k in d.acum){ const x = d.acum[k]; if(!a[k] && x && typeof x.f === "string") a[k] = x; } store.set(ACUM_KEY, a); }
         render(); toast("Respaldo restaurado.");
       });
   }catch(err){ toast("Ese archivo no es un respaldo válido de la app."); }
@@ -158,7 +160,7 @@ $("restoreFile").addEventListener("change", async e=>{
 /* ============ App instalable y sin conexión ============ */
 // Al bloquear: apaga la cámara y cierra ventanas abiertas para que no queden datos a la vista.
 window.RUTA_onLock = ()=>{ try{ stopScan(); }catch(e){} };
-const APP_VERSION = "2.4";
+const APP_VERSION = "2.5";
 $("ver").textContent = "Versión " + APP_VERSION + ". Funciona sin internet una vez abierta la primera vez.";
 if(navigator.storage && navigator.storage.estimate){
   navigator.storage.estimate().then(e=>{ if(e && e.usage) $("ver").textContent += ` Espacio usado en este celular: ${(e.usage/1048576).toFixed(1).replace(".",",")} MB (la mayor parte es el lector de etiquetas).`; }).catch(()=>{});

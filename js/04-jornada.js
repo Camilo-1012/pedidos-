@@ -150,6 +150,7 @@ function paceText(){
   const p = dayPace();
   if(!p.done && !p.eta) return "";
   const parts = [];
+  if(p.paq) parts.push(`hoy ${p.paq} paq = ${cop(p.paq*tarifa())}`);
   if(p.perHour!=null) parts.push(`${num1(p.perHour)} paq/hora`);
   if(p.perStop!=null) parts.push(`${Math.round(p.perStop)} min por parada`);
   if(p.eta) parts.push(`terminas ≈ ${hhmm(p.eta)}${p.aprox ? " (estimado inicial)" : ""}`);
@@ -157,20 +158,26 @@ function paceText(){
   else if(p.done === 1) parts.push("el ritmo aparece desde la 2.ª entrega");
   return parts.join(" · ");
 }
-function renderPace(){ const t = paceText(); $("pace").hidden = !t; $("pace").textContent = t ? "Ritmo: " + t : ""; }
+function renderPace(){ const t = paceText(); $("pace").hidden = !t; $("pace").textContent = t ? t.charAt(0).toUpperCase() + t.slice(1) + " ›" : ""; $("pace").title = "Ver acumulado y pagos"; }
 setInterval(()=>{ if(document.visibilityState==="visible") renderPace(); }, 60000);
 // Paquetes por hora de una jornada del historial (null si fue muy corta para medir).
 const dayRate = x => x.minutos >= 20 && x.paquetes > 1 ? x.paquetes / (x.minutos/60) : null;
 // Guarda (o actualiza) el resumen del día en curso. Se llama al entregar, al marcar «No estaba» y al empezar una jornada nueva.
 function recordDay(){
   try{
-    const sum = daySummary(); if(!sum) return;
+    const sum = daySummary();
+    if(!sum){
+      // Se deshicieron todas las entregas del día: el acumulado de hoy vuelve a cero (y el historial no lo guarda).
+      if(state.dayId){ const a = acumLoad(); if(a[state.dayId]){ delete a[state.dayId]; store.set(ACUM_KEY, a); } store.set(HIST_KEY, histLoad().filter(x=>x.id!==state.dayId)); }
+      return;
+    }
     if(!state.dayId){ state.dayId = sum.id; }
     let h = histLoad().filter(x=>x.id!==sum.id);
     h.push(sum);
     const limit = Date.now() - HIST_DAYS*864e5;
     h = h.filter(x=>x.inicio >= limit).sort((a,b)=>a.inicio-b.inicio).slice(-150);
     store.set(HIST_KEY, h);
+    acumPut(sum);
   }catch(e){ console.warn("historial", e); }
 }
 function fmtDate(t){ return new Date(t).toLocaleDateString("es-CO",{weekday:"short", day:"numeric", month:"short"}); }
@@ -217,28 +224,30 @@ const hmm = min => min==null || isNaN(min) ? "" : `${Math.floor(min/60)}:${Strin
 const rutaMin = x => x.duracionRutaMin != null ? x.duracionRutaMin : x.minutos;   // jornadas viejas: primera → última entrega
 function histCsvPedidos(){
   const h = histLoad();
-  const rows = ["Fecha;Salida a ruta;Primera entrega;Última entrega;Duración de la ruta (h:mm);Guía (número de pedido);Dirección;Inmueble;Estado;Hora;Paquetes;Acumulado entregados;Tiempo desde la salida (h:mm)"];
-  let totEnt = 0, totNo = 0, totPed = 0, totMin = 0;
+  const rows = ["Fecha;Salida a ruta;Primera entrega;Última entrega;Duración de la ruta (h:mm);Guía (número de pedido);Dirección;Inmueble;Estado;Hora;Paquetes;Acumulado entregados;Tiempo desde la salida (h:mm);Valor ($);Valor acumulado ($)"];
+  let totEnt = 0, totNo = 0, totPed = 0, totMin = 0, totVal = 0;
   for(const x of h){
     const ini = x.salida || x.inicio;
     const base = [fechaLarga(x.inicio), x.salida ? hhmm(x.salida) : "", hhmm(x.inicio), hhmm(x.fin), hmm(rutaMin(x))];
     const peds = x.pedidos && x.pedidos.length ? x.pedidos : null;
-    if(!peds){ rows.push(base.concat(["(jornada sin detalle por pedido)","","","","","",String(x.paquetes||""),""]).join(";")); totEnt += x.paquetes||0; totMin += rutaMin(x)||0; continue; }
+    const vp = valorDia(x.id);   // valor por paquete de ese día
+    if(!peds){ rows.push(base.concat(["(jornada sin detalle por pedido)","","","","","",String(x.paquetes||""),"","",String((x.paquetes||0)*vp)]).join(";")); totEnt += x.paquetes||0; totMin += rutaMin(x)||0; totVal += (x.paquetes||0)*vp; continue; }
     // Acumulado: se suma cada paquete entregado en orden de hora, para ver cómo avanzó la ruta.
     let acum = 0, ent = 0, no = 0, pend = 0;
     for(const pd of peds){
       const q = pd.q||1;
       if(pd.e==="Entregado"){ acum += q; ent += q; } else if(pd.e==="No entregado") no += q; else pend += q;
       rows.push(base.concat([pd.g ? xText(pd.g) : "(sin guía)", csvCell(pd.d||""), csvCell(pd.u||""), pd.e, pd.h ? hhmm(pd.h) : "", String(q),
-        pd.e==="Entregado" ? String(acum) : "", pd.h ? hmm((pd.h - ini)/60000) : ""]).join(";"));
+        pd.e==="Entregado" ? String(acum) : "", pd.h ? hmm((pd.h - ini)/60000) : "",
+        pd.e==="Entregado" ? String(q*vp) : "", pd.e==="Entregado" ? String(acum*vp) : ""]).join(";"));
     }
     // Total del día: pedidos entregados, no entregados, pendientes y cuánto se demoró la ruta.
     rows.push([fechaLarga(x.inicio), x.salida ? hhmm(x.salida) : "", hhmm(x.inicio), hhmm(x.fin), hmm(rutaMin(x)),
-      "TOTAL DEL DÍA", csvCell(`${ent} entregado(s) de ${ent+no+pend}${no?` · ${no} no entregado(s)`:""}${pend?` · ${pend} pendiente(s)`:""}`), "", "", "", String(ent+no+pend), String(ent), hmm(rutaMin(x))].join(";"));
+      "TOTAL DEL DÍA", csvCell(`${ent} entregado(s) de ${ent+no+pend}${no?` · ${no} no entregado(s)`:""}${pend?` · ${pend} pendiente(s)`:""}`), "", "", "", String(ent+no+pend), String(ent), hmm(rutaMin(x)), String(ent*vp), String(ent*vp)].join(";"));
     rows.push("");
-    totEnt += ent; totNo += no; totPed += ent+no+pend; totMin += rutaMin(x)||0;
+    totEnt += ent; totNo += no; totPed += ent+no+pend; totMin += rutaMin(x)||0; totVal += ent*vp;
   }
-  if(h.length > 1) rows.push(["TOTAL GENERAL", "", "", "", hmm(totMin), `${h.length} jornada(s)`, csvCell(`${totEnt} entregado(s)${totNo?` · ${totNo} no entregado(s)`:""}`), "", "", "", String(totPed||totEnt), String(totEnt), hmm(totMin)].join(";"));
+  if(h.length > 1) rows.push(["TOTAL GENERAL", "", "", "", hmm(totMin), `${h.length} jornada(s)`, csvCell(`${totEnt} entregado(s)${totNo?` · ${totNo} no entregado(s)`:""}`), "", "", "", String(totPed||totEnt), String(totEnt), hmm(totMin), String(totVal), String(totVal)].join(";"));
   downloadCsv(rows, "pedidos-por-jornada-" + ymd(Date.now()) + ".csv");
   toast("Excel por pedido descargado, con acumulado y total de cada día.");
 }
@@ -247,18 +256,81 @@ function histCsv(){
   const cols = [["fecha","Fecha"],["entregas","Entregas"],["paquetes","Paquetes"],["noEntregadas","No entregadas"],["paqNoEntregados","Paquetes no entregados"],
     ["pendientes","Pendientes"],["salida","Salida a ruta"],["inicio","Primera entrega"],["fin","Última entrega"],["duracion","Duración de la ruta (h:mm)"],["minutos","Minutos (1.ª a última entrega)"],["promEntreEntregas","Min. entre entregas"],
     ["kmEstimados","Km estimados"],["manejoEstMin","Manejo estimado (min)"],["realMin","Tiempo real (min)"],["minPorParada","Min. extra por parada"],
-    ["ahorroKm","Ahorro km"],["ahorroMin","Ahorro min"],["callesReales","Calles reales"]];
+    ["ahorroKm","Ahorro km"],["ahorroMin","Ahorro min"],["callesReales","Calles reales"],["valorPaq","Valor por paquete ($)"],["valor","Valor del día ($)"]];
   const cell = (k,v) => v==null ? "" : k==="fecha" ? v : (k==="inicio"||k==="fin"||k==="salida") ? hhmm(v) : typeof v==="number" ? String(v).replace(".",",") : typeof v==="boolean" ? (v?"Sí":"No") : String(v);
   // Separador «;» y coma decimal: así lo abre bien Excel en español (Colombia).
-  const rows = [cols.map(c=>c[1]).join(";")].concat(h.map(x=>cols.map(([k])=>k==="fecha" ? fechaLarga(x.inicio) : k==="duracion" ? hmm(rutaMin(x)) : cell(k,x[k])).join(";")));
+  const rows = [cols.map(c=>c[1]).join(";")].concat(h.map(x=>cols.map(([k])=>k==="fecha" ? fechaLarga(x.inicio) : k==="duracion" ? hmm(rutaMin(x)) : k==="valorPaq" ? String(valorDia(x.id)) : k==="valor" ? String((x.paquetes||0)*valorDia(x.id)) : cell(k,x[k])).join(";")));
   // Fila de totales: entregas, paquetes y tiempo en ruta de todas las jornadas.
   if(h.length > 1){
     const sum = k => h.reduce((a,x)=>a+(+x[k]||0),0);
-    rows.push(cols.map(([k])=>k==="fecha" ? "TOTAL" : ["entregas","paquetes","noEntregadas","paqNoEntregados"].includes(k) ? String(sum(k)) : k==="duracion" ? hmm(h.reduce((a,x)=>a+(rutaMin(x)||0),0)) : "").join(";"));
+    rows.push(cols.map(([k])=>k==="fecha" ? "TOTAL" : ["entregas","paquetes","noEntregadas","paqNoEntregados"].includes(k) ? String(sum(k)) : k==="duracion" ? hmm(h.reduce((a,x)=>a+(rutaMin(x)||0),0)) : k==="valor" ? String(h.reduce((a,x)=>a+(x.paquetes||0)*valorDia(x.id),0)) : "").join(";"));
   }
   downloadCsv(rows, "resumen-jornadas-" + ymd(Date.now()) + ".csv");
   toast("Resumen por día descargado. Ábrelo con Excel o Google Sheets.");
 }
+
+/* ---- Acumulado general y pagos ----
+   Valor = paquetes entregados × valor por paquete (por defecto $1.600). Los no entregados no suman.
+   Se guarda un resumen por día que NO se borra con el historial (90 días): {fecha: {p paquetes, e paradas, n no entregados, t valor por paquete}}.
+   Cada día conserva el valor por paquete que tenía; si se cambia, aplica desde hoy. */
+const ACUM_KEY = "rutaEntregas.u." + USER.id + ".acum.v1", TARIFA_DEF = 1600;
+const tarifa = ()=>{ const v = Number(state.tarifa); return Number.isFinite(v) && v >= 0 && state.tarifa !== "" && state.tarifa != null ? v : TARIFA_DEF; };
+const cop = v => "$ " + Math.round(v||0).toLocaleString("es-CO");
+const acumLoad = ()=>store.get(ACUM_KEY) || {};
+function acumPut(x){
+  const a = acumLoad(), prev = a[x.id];
+  a[x.id] = {f: ymd(x.inicio), p: x.paquetes||0, e: x.entregas||0, n: x.paqNoEntregados||0, t: prev && prev.t != null ? prev.t : tarifa()};
+  store.set(ACUM_KEY, a);
+}
+const valorDia = id => { const d = acumLoad()[id]; return d && d.t != null ? d.t : tarifa(); };
+// Primera vez: se pasan al acumulado las jornadas que ya estaban en el historial.
+(function(){ const a = acumLoad(); let n = 0; for(const x of histLoad()) if(!a[x.id] && x.inicio){ a[x.id] = {f: ymd(x.inicio), p: x.paquetes||0, e: x.entregas||0, n: x.paqNoEntregados||0, t: tarifa()}; n++; } if(n) store.set(ACUM_KEY, a); })();
+function acumSum(filter){
+  return Object.values(acumLoad()).filter(filter).reduce((s,d)=>({p: s.p+d.p, e: s.e+d.e, n: s.n+(d.n||0), v: s.v + d.p*(d.t ?? tarifa()), dias: s.dias + (d.p>0 ? 1 : 0)}), {p:0, e:0, n:0, v:0, dias:0});
+}
+function acumPeriodos(){
+  const now = new Date(), hoy = ymd(now);
+  const lunes = new Date(now); lunes.setHours(0,0,0,0); lunes.setDate(lunes.getDate() - ((lunes.getDay()+6)%7));
+  const semana = ymd(lunes), mes = hoy.slice(0,7), mesAnt = ymd(new Date(now.getFullYear(), now.getMonth()-1, 1)).slice(0,7);
+  return [["Hoy", acumSum(d=>d.f===hoy)], ["Esta semana", acumSum(d=>d.f>=semana)], ["Este mes", acumSum(d=>d.f.startsWith(mes))],
+          ["Mes anterior", acumSum(d=>d.f.startsWith(mesAnt))], ["Total general", acumSum(()=>true)]];
+}
+const MESES = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
+const nombreMes = ym => MESES[+ym.slice(5,7)-1] + " " + ym.slice(0,4);
+function acumMeses(){
+  const ms = [...new Set(Object.values(acumLoad()).map(d=>d.f.slice(0,7)))].sort().reverse();
+  return ms.map(m=>[m, acumSum(d=>d.f.startsWith(m))]);
+}
+function renderPay(){
+  if(document.activeElement !== $("pyRate")) $("pyRate").value = tarifa();
+  $("pyFormula").textContent = `Valor = paquetes entregados × ${cop(tarifa())}. Los no entregados no suman. Cada día guarda el valor por paquete que tenía ese día.`;
+  const head = `<div class="pr" role="row"><span>Periodo</span><span>Domicilios</span><span>Paquetes</span><span>Valor</span></div>`;
+  const row = (lbl, s, tot) => `<div class="pr${tot ? " tot" : ""}" role="row"><span>${esc(lbl)}</span><span>${s.e}</span><span>${s.p}</span><span><b>${cop(s.v)}</b></span></div>`;
+  const per = acumPeriodos();
+  $("pyTable").innerHTML = head + per.map(([l,s],i)=>row(l, s, i===per.length-1)).join("");
+  const ms = acumMeses();
+  $("pyMonths").innerHTML = ms.length ? head.replace("Periodo","Mes") + ms.map(([m,s])=>row(nombreMes(m) + ` · ${s.dias} día(s)`, s)).join("") : `<div class="pr"><span>Aún no hay entregas.</span></div>`;
+  const dias = Object.values(acumLoad()).map(d=>d.f).sort();
+  $("pyInfo").textContent = dias.length ? `Acumulado desde el ${fechaLarga(new Date(dias[0]+"T12:00:00").getTime())}. «Domicilios» cuenta paradas entregadas; varios paquetes en la misma dirección son un domicilio. Este resumen no se borra con el historial y va en el respaldo.` : "";
+}
+document.getElementById("pyRate").addEventListener("change", e=>{
+  const v = Math.round(Number(e.target.value));
+  if(!Number.isFinite(v) || v < 0){ e.target.value = tarifa(); return; }
+  state.tarifa = v; save();
+  // Aplica desde hoy: se actualiza el valor del día en curso (los días anteriores conservan el suyo).
+  const a = acumLoad(), hoy = ymd(Date.now()); for(const k in a) if(a[k].f === hoy) a[k].t = v; store.set(ACUM_KEY, a);
+  renderPay(); renderPace(); toast(`Valor por paquete: ${cop(v)}. Aplica desde hoy.`);
+});
+document.getElementById("pyCsv").onclick = ()=>{
+  const rows = ["Mes;Días trabajados;Domicilios (paradas) entregados;Paquetes entregados;Paquetes no entregados;Valor ($)"];
+  for(const [m,s] of acumMeses().reverse()) rows.push([nombreMes(m), s.dias, s.e, s.p, s.n, Math.round(s.v)].join(";"));
+  const t = acumSum(()=>true); rows.push(["TOTAL", t.dias, t.e, t.p, t.n, Math.round(t.v)].join(";"));
+  downloadCsv(rows, "acumulado-por-mes-" + ymd(Date.now()) + ".csv");
+  toast("Excel por mes descargado.");
+};
+const openPay = ()=>{ renderPay(); $("dlgPay").showModal(); };
+document.getElementById("btnPay").onclick = openPay;
+document.getElementById("pace").onclick = openPay;
 
 /* ============ Reporte del día ============ */
 const hhmm = t => new Date(t).toLocaleTimeString("es-CO",{hour:"2-digit",minute:"2-digit"});

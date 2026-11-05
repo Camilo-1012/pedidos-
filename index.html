@@ -123,6 +123,7 @@
         <button type="button" id="btnBulk">Pegar varias direcciones (una por línea)</button>
         <button type="button" id="btnCopy">Copiar lista en orden (para WhatsApp)</button>
         <button type="button" id="btnReport">Reporte del día</button>
+        <button type="button" class="dark" id="btnPay">Acumulado y pagos</button>
         <button type="button" id="btnHist">Historial de jornadas</button>
         <button type="button" id="btnClearDone">Quitar los entregados</button>
         <div class="row">
@@ -333,6 +334,21 @@
       <p class="hint" id="tmWhen" style="margin:0"></p>
     </div>
   </div>
+</dialog>
+
+<dialog id="dlgPay" aria-labelledby="pyTitle">
+  <form method="dialog">
+    <div class="dlgHead"><h2 id="pyTitle">Acumulado y pagos</h2><button type="submit" class="small">Cerrar</button></div>
+    <label for="pyRate">Valor por paquete entregado (pesos)
+      <input id="pyRate" type="number" inputmode="numeric" min="0" step="100">
+    </label>
+    <p class="hint" id="pyFormula" style="margin:0"></p>
+    <div class="paytbl" id="pyTable" role="table" aria-label="Acumulado por periodo"></div>
+    <h3 style="margin:4px 0 0">Por mes</h3>
+    <div class="paytbl" id="pyMonths" role="table" aria-label="Acumulado por mes"></div>
+    <p class="hint" id="pyInfo" style="margin:0"></p>
+    <button type="button" id="pyCsv">Excel por mes</button>
+  </form>
 </dialog>
 
 <dialog id="dlgFound" aria-labelledby="fdTitle">
