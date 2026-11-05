@@ -56,6 +56,18 @@ jobs:
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 8
+      # Si una publicación anterior quedó colgada en GitHub Pages, bloquea las nuevas («in progress deployment»):
+      # se cancelan las de los commits anteriores. Si no hay ninguna, no pasa nada.
+      - name: Cancelar publicaciones anteriores trabadas
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for sha in $(git log -n 8 --format=%H | tail -n +2); do
+            if gh api -X POST "repos/${{ github.repository }}/pages/deployments/$sha/cancel" >/dev/null 2>&1; then echo "Cancelada la publicación trabada de $sha"; fi
+          done
       - name: Armar el sitio (solo los archivos de la app, sin pruebas)
         run: |
           mkdir _site
