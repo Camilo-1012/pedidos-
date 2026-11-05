@@ -239,3 +239,16 @@ El plan gratis de Supabase pausa el proyecto tras unos 7 días sin uso. Para evi
   - Rechaza una guía que ya esté en otra parada. Una parada con 2 paquetes pide 2 guías.
 - También se llega desde el botón **+ Guía** de cada parada que le falte y desde **Revisar cargue → Escanear guías faltantes**.
 - Si escaneas la **etiqueta completa** de un paquete cuya dirección ya está dictada y sin guía, la guía se **agrega a esa parada**, en vez de sumar un paquete más.
+
+## Versión 2.4
+
+- **Modo conducción:**
+  - Muestra el **número de pedido** (guía) en grande con la etiqueta «Pedido», o «Pedidos» si son varios paquetes. Si a la parada le falta, el botón «+ Escanear número de pedido» lo escanea ahí mismo.
+  - Arriba dice «Parada N de total».
+  - **Llamar** abre el marcador del teléfono con el número listo. Acepta celular, fijo con indicativo (601…) y fijo de 7 dígitos. Si la parada no tiene teléfono, lo pide, lo guarda y marca.
+- **Salida a ruta:** se registra la primera vez que se abre el modo conducción o se toca «Usar mi ubicación actual».
+- **Excel por pedido:**
+  - Columnas nuevas: Salida a ruta, Duración de la ruta (h:mm), Acumulado entregados y Tiempo desde la salida.
+  - Al final de cada jornada, una fila **TOTAL DEL DÍA** con entregados, no entregados, pendientes y duración. Al final del archivo, **TOTAL GENERAL**.
+  - La duración se mide desde la salida hasta la última entrega. Si no hubo salida registrada, desde la primera entrega.
+- **Excel resumen:** columnas de salida y duración, y fila TOTAL.

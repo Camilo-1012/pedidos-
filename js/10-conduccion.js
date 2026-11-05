@@ -10,7 +10,10 @@ async function keepAwake(on){
   }catch(e){ wakeLock = null; }   // sin batería suficiente o sin soporte: no pasa nada
 }
 function openDrive(){
-  state.driveOn = true; save();
+  state.driveOn = true;
+  // Hora de salida a ruta (para el Excel): la primera vez que se abre el modo conducción en la jornada.
+  if(!state.salidaAt) state.salidaAt = Date.now();
+  save();
   dvIdx = 0; $("drive").hidden = false; document.body.style.overflow = "hidden";
   try{ history.pushState({drive:1}, ""); }catch(e){}
   keepAwake(true); renderDrive();
@@ -33,26 +36,51 @@ function renderDrive(){
     $("dvPos").textContent = "Sin pendientes";
     $("dvQty").textContent = ""; $("dvAddr").textContent = "¡Terminaste!"; $("dvUnit").textContent = "No quedan entregas pendientes.";
     $("dvGuia").textContent = $("dvWho").textContent = $("dvNext").textContent = "";
-    $("dvWaze").setAttribute("aria-disabled","true"); $("dvCall").setAttribute("aria-disabled","true");
+    $("dvGuiaBtn").hidden = true;
+    $("dvWaze").setAttribute("aria-disabled","true"); $("dvCall").disabled = true;
     $("dvPace").textContent = paceText();
     return;
   }
   const n = stopNum(s), total = list.length;
-  $("dvPos").textContent = `Parada ${n} · quedan ${total}`;
+  $("dvPos").textContent = `Parada ${n} de ${n - 1 + total}`;
   $("dvQty").textContent = [(s.qty||1)>1 ? `×${s.qty} paquetes` : "", s.status==="fail" ? "Ya tuvo un intento fallido" : "", s.zone ? "ST " + s.zone : ""].filter(Boolean).join(" · ");
   $("dvAddr").textContent = s.label || s.addr;
   $("dvUnit").textContent = [unitText(s), s.barrio].filter(Boolean).join(" · ");
-  $("dvGuia").textContent = guias(s).join("  ");
+  // Número de pedido (guía): grande y con etiqueta. Varios paquetes en la misma dirección = varios números.
+  const gs = guias(s);
+  $("dvGuia").innerHTML = gs.length
+    ? `<span class="lbl">${gs.length > 1 ? "Pedidos" : "Pedido"}</span>` + gs.map(g=>`<span class="num">${esc(g)}</span>`).join("")
+    : `<span class="lbl">Pedido</span><span class="none">Sin número de pedido</span>`;
+  $("dvGuiaBtn").hidden = gs.length >= (s.qty||1);
+  $("dvGuiaBtn").textContent = gs.length ? `+ Escanear pedido ${gs.length+1} de ${s.qty||1}` : "+ Escanear número de pedido";
   $("dvWho").textContent = [s.name, s.phone && s.phone.replace(/(\d{3})(\d{3})(\d{4})/,"$1 $2 $3"), s.notes].filter(Boolean).join(" · ");
   const nx = list[dvIdx+1];
   $("dvNext").textContent = nx ? "Después: " + (nx.label || nx.addr) : "Es la última parada.";
   $("dvWaze").href = wazeUrl(s); $("dvWaze").removeAttribute("aria-disabled");
-  if(s.phone){ $("dvCall").href = "tel:" + cleanPhone(s.phone); $("dvCall").removeAttribute("aria-disabled"); }
-  else { $("dvCall").removeAttribute("href"); $("dvCall").setAttribute("aria-disabled","true"); }
+  $("dvCall").disabled = false;
+  $("dvCall").textContent = dialNumber(s.phone) ? "Llamar" : "Llamar (sin número)";
   $("dvPrev").disabled = dvIdx === 0; $("dvNextBtn").disabled = dvIdx >= total-1;
   $("dvPace").textContent = paceText();
 }
 const driveStop = ()=>drivePend()[dvIdx];
+// Abre el marcador del teléfono con el número listo (el usuario solo toca llamar).
+function dial(num){
+  const a = document.createElement("a"); a.href = "tel:" + num;
+  document.body.appendChild(a); a.click(); a.remove();
+}
+$("dvCall").onclick = ()=>{
+  const s = driveStop(); if(!s) return;
+  const num = dialNumber(s.phone);
+  if(num){ dial(num); return; }
+  // Sin teléfono: se puede escribir en el momento y queda guardado en la parada.
+  const v = prompt(`${s.label||s.addr} no tiene teléfono. Escríbelo para llamar (queda guardado):`, "");
+  const n2 = dialNumber(v);
+  if(!n2){ if(v) toast("Ese número no parece válido (7 a 10 dígitos)."); return; }
+  s.phone = n2; save(); render(); dial(n2);
+};
+$("dvGuiaBtn").onclick = ()=>{ const s = driveStop(); if(s) startAssign([s.id]); };
+// Al terminar de escanear la guía desde el modo conducción, se actualiza la pantalla.
+$("dlgScan").addEventListener("close", ()=>renderDrive());
 $("btnDrive").onclick = openDrive;
 $("dvExit").onclick = ()=>closeDrive(false);
 $("dvDone").onclick = ()=>{ const s = driveStop(); if(!s) return; if(navigator.vibrate) navigator.vibrate(60); toggleDone(s); renderDrive(); };

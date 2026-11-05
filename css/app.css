@@ -211,7 +211,11 @@ details summary{cursor:pointer;font-weight:600}
 .dvQty{font:700 22px var(--display);color:var(--accent)}
 .dvAddr{font:700 clamp(34px,11vw,56px)/1.02 var(--display);overflow-wrap:anywhere}
 .dvUnit{font-size:20px;font-weight:600}
-.dvGuia{font:600 17px ui-monospace,"Roboto Mono",Menlo,monospace;opacity:.85;overflow-wrap:anywhere}
+.dvGuia{display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left}
+.dvGuia .lbl{font:600 13px var(--body);text-transform:uppercase;letter-spacing:.06em;color:var(--accent)}
+.dvGuia .num{font:700 24px/1.15 ui-monospace,"Roboto Mono",Menlo,monospace;letter-spacing:.04em;overflow-wrap:anywhere}
+.dvGuia .none{font:600 16px var(--body);opacity:.75}
+.dvGuiaBtn{align-self:flex-start;background:transparent;color:var(--bg);border-color:var(--accent)}
 .dvWho,.dvNext{font-size:15px;opacity:.8;overflow-wrap:anywhere}
 .dvBtns{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .dvBtns > *{min-height:72px;font:700 22px var(--display);border-radius:14px}

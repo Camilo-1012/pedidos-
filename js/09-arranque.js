@@ -17,6 +17,7 @@ $("btnGps").onclick = ()=>{
     if(meters({lat,lng},{lat:4.65,lng:-74.1}) > 45000){ toast("Tu ubicación está fuera de Bogotá; no se usó como punto de partida."); return; }
     const gxy = inverseEstimate(lat, lng);
     state.startGPS = {lat, lng, acc:Math.round(accuracy), t:Date.now(), x:gxy?gxy.x:null, y:gxy?gxy.y:null};
+    if(!state.salidaAt) state.salidaAt = Date.now();   // salida a ruta (para el Excel)
     state.start = ""; $("start").value = "";
     save(); render();
     toast(accuracy>300 ? "Ubicación tomada, pero poco precisa. Activa el GPS para mejorarla." : "Ubicación tomada. Reordenando la ruta desde aquí…");
@@ -108,7 +109,7 @@ $("btnNew").onclick = ()=>{
   const pend = state.stops.filter(s=>s.status!=="done").length;
   confirmBox("Empezar jornada nueva",
     (pend ? `Quedan ${pend} paquete(s) sin entregar. ` : "") + "Se guarda el resumen del día en el historial y se borran todos los paquetes de este celular. El punto de partida se conserva.",
-    ()=>{ recordDay(); state.dayId=null; state.stops=[]; state.seeded=true; state.lastDoneId=null; state.cmpFirst=null; state.cmpLast=null; state.suggestedIds=null; LASTM=null; state.startGPS=null; state.loadOn=false; state.loadExtra=[]; save(); render(); window.scrollTo(0,0); toast("Jornada nueva lista. Toma la primera foto."); });
+    ()=>{ recordDay(); state.dayId=null; state.stops=[]; state.seeded=true; state.lastDoneId=null; state.cmpFirst=null; state.cmpLast=null; state.suggestedIds=null; LASTM=null; state.startGPS=null; state.salidaAt=null; state.loadOn=false; state.loadExtra=[]; save(); render(); window.scrollTo(0,0); toast("Jornada nueva lista. Toma la primera foto."); });
 };
 $("btnClearAll").onclick = ()=>confirmBox("Borrar toda la jornada","Se eliminan todos los paquetes y sus datos de este celular.",()=>{ state.stops=[]; state.lastDoneId=null; save(); render(); toast("Jornada borrada."); });
 
@@ -157,7 +158,7 @@ $("restoreFile").addEventListener("change", async e=>{
 /* ============ App instalable y sin conexión ============ */
 // Al bloquear: apaga la cámara y cierra ventanas abiertas para que no queden datos a la vista.
 window.RUTA_onLock = ()=>{ try{ stopScan(); }catch(e){} };
-const APP_VERSION = "2.3";
+const APP_VERSION = "2.4";
 $("ver").textContent = "Versión " + APP_VERSION + ". Funciona sin internet una vez abierta la primera vez.";
 if(navigator.storage && navigator.storage.estimate){
   navigator.storage.estimate().then(e=>{ if(e && e.usage) $("ver").textContent += ` Espacio usado en este celular: ${(e.usage/1048576).toFixed(1).replace(".",",")} MB (la mayor parte es el lector de etiquetas).`; }).catch(()=>{});

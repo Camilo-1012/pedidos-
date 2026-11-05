@@ -105,8 +105,12 @@ function daySummary(){
   const legs = done.slice(1).map((s,i)=>({real:(s.doneAt-done[i].doneAt)/60000, est:s.legEst!=null ? s.legEst/60 : null})).filter(x=>x.est!=null && x.real>0 && x.real<240);
   const sumR = legs.reduce((a,x)=>a+x.real,0), sumE = legs.reduce((a,x)=>a+x.est,0);
   const c = state.cmpFirst;
+  // Salida a ruta: al abrir el modo conducción o tomar la ubicación de arranque. Solo cuenta si fue antes de la
+  // primera entrega y el mismo turno (máx. 8 h antes); si no, la ruta se mide desde la primera entrega.
+  const salida = state.salidaAt && state.salidaAt <= t0 && t0 - state.salidaAt < 8*3600000 ? state.salidaAt : null;
   return {
-    id: state.dayId || ymd(t0), fecha: ymd(t0),
+    id: state.dayId || ymd(t0), fecha: ymd(t0), salida,
+    duracionRutaMin: Math.round((t1 - (salida || t0))/60000),
     entregas: done.length, paquetes: q(done), noEntregadas: fail.length, paqNoEntregados: q(fail), pendientes: pend.length,
     inicio: t0, fin: t1, minutos: Math.round((t1-t0)/60000),
     promEntreEntregas: done.length>1 ? Math.round((t1-t0)/60000/(done.length-1)) : null,
@@ -208,27 +212,50 @@ const xText = v => v ? `="${String(v).replace(/"/g,"")}"` : "";
 const fechaLarga = t => new Date(t).toLocaleDateString("es-CO",{year:"numeric", month:"2-digit", day:"2-digit"});
 // Excel por pedido: Fecha, Primera entrega, Última entrega, Guía (código de barras), Dirección, Inmueble, Estado, Hora, Paquetes.
 const csvCell = v => { v = String(v==null ? "" : v); return /[;"\n]/.test(v) ? '"' + v.replace(/"/g,'""') + '"' : v; };
+// Duración en formato h:mm (para Excel).
+const hmm = min => min==null || isNaN(min) ? "" : `${Math.floor(min/60)}:${String(Math.round(min%60)).padStart(2,"0")}`;
+const rutaMin = x => x.duracionRutaMin != null ? x.duracionRutaMin : x.minutos;   // jornadas viejas: primera → última entrega
 function histCsvPedidos(){
   const h = histLoad();
-  const rows = ["Fecha;Primera entrega;Última entrega;Guía (código de barras);Dirección;Inmueble;Estado;Hora;Paquetes"];
+  const rows = ["Fecha;Salida a ruta;Primera entrega;Última entrega;Duración de la ruta (h:mm);Guía (número de pedido);Dirección;Inmueble;Estado;Hora;Paquetes;Acumulado entregados;Tiempo desde la salida (h:mm)"];
+  let totEnt = 0, totNo = 0, totPed = 0, totMin = 0;
   for(const x of h){
-    const base = [fechaLarga(x.inicio), hhmm(x.inicio), hhmm(x.fin)];
+    const ini = x.salida || x.inicio;
+    const base = [fechaLarga(x.inicio), x.salida ? hhmm(x.salida) : "", hhmm(x.inicio), hhmm(x.fin), hmm(rutaMin(x))];
     const peds = x.pedidos && x.pedidos.length ? x.pedidos : null;
-    if(!peds){ rows.push(base.concat(["(jornada sin detalle por pedido)","","","","",""]).join(";")); continue; }
-    for(const pd of peds) rows.push(base.concat([pd.g ? xText(pd.g) : "(sin guía)", csvCell(pd.d||""), csvCell(pd.u||""), pd.e, pd.h ? hhmm(pd.h) : "", String(pd.q||1)]).join(";"));
+    if(!peds){ rows.push(base.concat(["(jornada sin detalle por pedido)","","","","","",String(x.paquetes||""),""]).join(";")); totEnt += x.paquetes||0; totMin += rutaMin(x)||0; continue; }
+    // Acumulado: se suma cada paquete entregado en orden de hora, para ver cómo avanzó la ruta.
+    let acum = 0, ent = 0, no = 0, pend = 0;
+    for(const pd of peds){
+      const q = pd.q||1;
+      if(pd.e==="Entregado"){ acum += q; ent += q; } else if(pd.e==="No entregado") no += q; else pend += q;
+      rows.push(base.concat([pd.g ? xText(pd.g) : "(sin guía)", csvCell(pd.d||""), csvCell(pd.u||""), pd.e, pd.h ? hhmm(pd.h) : "", String(q),
+        pd.e==="Entregado" ? String(acum) : "", pd.h ? hmm((pd.h - ini)/60000) : ""]).join(";"));
+    }
+    // Total del día: pedidos entregados, no entregados, pendientes y cuánto se demoró la ruta.
+    rows.push([fechaLarga(x.inicio), x.salida ? hhmm(x.salida) : "", hhmm(x.inicio), hhmm(x.fin), hmm(rutaMin(x)),
+      "TOTAL DEL DÍA", csvCell(`${ent} entregado(s) de ${ent+no+pend}${no?` · ${no} no entregado(s)`:""}${pend?` · ${pend} pendiente(s)`:""}`), "", "", "", String(ent+no+pend), String(ent), hmm(rutaMin(x))].join(";"));
+    rows.push("");
+    totEnt += ent; totNo += no; totPed += ent+no+pend; totMin += rutaMin(x)||0;
   }
+  if(h.length > 1) rows.push(["TOTAL GENERAL", "", "", "", hmm(totMin), `${h.length} jornada(s)`, csvCell(`${totEnt} entregado(s)${totNo?` · ${totNo} no entregado(s)`:""}`), "", "", "", String(totPed||totEnt), String(totEnt), hmm(totMin)].join(";"));
   downloadCsv(rows, "pedidos-por-jornada-" + ymd(Date.now()) + ".csv");
-  toast("Excel por pedido descargado. Ábrelo con Excel o Google Sheets.");
+  toast("Excel por pedido descargado, con acumulado y total de cada día.");
 }
 function histCsv(){
   const h = histLoad();
   const cols = [["fecha","Fecha"],["entregas","Entregas"],["paquetes","Paquetes"],["noEntregadas","No entregadas"],["paqNoEntregados","Paquetes no entregados"],
-    ["pendientes","Pendientes"],["inicio","Primera entrega"],["fin","Última entrega"],["minutos","Minutos"],["promEntreEntregas","Min. entre entregas"],
+    ["pendientes","Pendientes"],["salida","Salida a ruta"],["inicio","Primera entrega"],["fin","Última entrega"],["duracion","Duración de la ruta (h:mm)"],["minutos","Minutos (1.ª a última entrega)"],["promEntreEntregas","Min. entre entregas"],
     ["kmEstimados","Km estimados"],["manejoEstMin","Manejo estimado (min)"],["realMin","Tiempo real (min)"],["minPorParada","Min. extra por parada"],
     ["ahorroKm","Ahorro km"],["ahorroMin","Ahorro min"],["callesReales","Calles reales"]];
-  const cell = (k,v) => v==null ? "" : k==="fecha" ? v : (k==="inicio"||k==="fin") ? hhmm(v) : typeof v==="number" ? String(v).replace(".",",") : typeof v==="boolean" ? (v?"Sí":"No") : String(v);
+  const cell = (k,v) => v==null ? "" : k==="fecha" ? v : (k==="inicio"||k==="fin"||k==="salida") ? hhmm(v) : typeof v==="number" ? String(v).replace(".",",") : typeof v==="boolean" ? (v?"Sí":"No") : String(v);
   // Separador «;» y coma decimal: así lo abre bien Excel en español (Colombia).
-  const rows = [cols.map(c=>c[1]).join(";")].concat(h.map(x=>cols.map(([k])=>k==="fecha" ? fechaLarga(x.inicio) : cell(k,x[k])).join(";")));
+  const rows = [cols.map(c=>c[1]).join(";")].concat(h.map(x=>cols.map(([k])=>k==="fecha" ? fechaLarga(x.inicio) : k==="duracion" ? hmm(rutaMin(x)) : cell(k,x[k])).join(";")));
+  // Fila de totales: entregas, paquetes y tiempo en ruta de todas las jornadas.
+  if(h.length > 1){
+    const sum = k => h.reduce((a,x)=>a+(+x[k]||0),0);
+    rows.push(cols.map(([k])=>k==="fecha" ? "TOTAL" : ["entregas","paquetes","noEntregadas","paqNoEntregados"].includes(k) ? String(sum(k)) : k==="duracion" ? hmm(h.reduce((a,x)=>a+(rutaMin(x)||0),0)) : "").join(";"));
+  }
   downloadCsv(rows, "resumen-jornadas-" + ymd(Date.now()) + ".csv");
   toast("Resumen por día descargado. Ábrelo con Excel o Google Sheets.");
 }

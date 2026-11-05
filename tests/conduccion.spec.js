@@ -14,12 +14,24 @@ test("modo conducción de punta a punta", async ({ page }) => {
   await expect(page.locator("#drive")).toBeVisible();
   await expect(page.locator("#dvAddr")).toHaveText("Calle 145 # 103B-90");
   await expect(page.locator("#dvQty")).toContainText("×2 paquetes");
-  await expect(page.locator("#dvCall")).toHaveAttribute("href", "tel:3112223344");
+  // Número de pedido (guía) con etiqueta
+  await expect(page.locator("#dvGuia")).toContainText("Pedido");
+  await expect(page.locator("#dvGuia .num")).toHaveText("1111222233334444");
+  await expect(page.locator("#dvGuiaBtn")).toContainText("Escanear pedido 2 de 2");   // 2 paquetes y 1 guía
+  // Llamar abre el marcador con el número
+  await page.evaluate(() => { window._marcado = null; window.dial = n => { window._marcado = n; }; });
+  await page.click("#dvCall");
+  expect(await page.evaluate(() => window._marcado)).toBe("3112223344");
   await expect(page.locator("#dvWaze")).toHaveAttribute("href", /waze\.com/);
   await expect(page.locator("#dvNext")).toContainText("Carrera 110 # 152-30");
   // Saltar y volver
   await page.click("#dvNextBtn"); await expect(page.locator("#dvAddr")).toHaveText("Carrera 110 # 152-30");
-  await expect(page.locator("#dvCall")).toHaveAttribute("aria-disabled", "true");
+  await expect(page.locator("#dvGuia")).toContainText("1111222233334444".replace(/./g, "") + "5555666677778888");
+  // Sin teléfono: lo pide, lo guarda y marca
+  page.once("dialog", d => d.accept("601 234 5678"));
+  await page.click("#dvCall");
+  expect(await page.evaluate(() => window._marcado)).toBe("6012345678");
+  expect(await page.evaluate(() => state.stops.find(s => s.guia === "5555666677778888").phone)).toBe("6012345678");
   await page.click("#dvPrev"); await expect(page.locator("#dvAddr")).toHaveText("Calle 145 # 103B-90");
   // Entregar → pasa a la siguiente
   await page.click("#dvDone");

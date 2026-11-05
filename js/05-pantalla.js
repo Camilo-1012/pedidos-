@@ -178,7 +178,7 @@ function render(){
       <div class="actions">
         <a class="btn small waze" href="${wazeUrl(s)}" target="_blank" rel="noopener">Waze</a>
         <a class="btn small" href="${mapsUrl(s)}" target="_blank" rel="noopener">Maps</a>
-        ${s.phone?`<a class="btn small" href="tel:${esc(s.phone)}">Llamar</a>`:`<button class="small" data-act="edit">Tel.</button>`}
+        ${s.phone && dialNumber(s.phone)?`<a class="btn small" href="tel:${dialNumber(s.phone)}">Llamar</a>`:`<button class="small" data-act="edit">Tel.</button>`}
         <button class="small ${isDone?"":"primary"}" data-act="done">${isDone?"Deshacer":"Entregado"}</button>
       </div>
       <div class="actions2">
@@ -262,6 +262,12 @@ function updParsed(){
 }
 $("fAddr").addEventListener("input", updParsed);
 // Llamar o escribir por WhatsApp al cliente desde el formulario (apenas se escanea la etiqueta).
+// Número para marcar: celular (10 dígitos), fijo con indicativo (601…) o fijo de 7 dígitos. Si trae +57 se quita.
+function dialNumber(v){
+  let d = String(v||"").replace(/\D/g,"");
+  if(d.length===12 && d.startsWith("57")) d = d.slice(2);
+  return d.length >= 7 && d.length <= 10 ? d : "";
+}
 function cleanPhone(v){ const d = String(v||"").replace(/\D/g,""); const t = d.length===12 && d.startsWith("57") ? d.slice(2) : d; return /^3\d{9}$/.test(t) || /^60\d{8}$/.test(t) ? t : ""; }
 function waText(s){ return `Hola${s.name ? " " + s.name.split(" ")[0] : ""}, le escribe el domiciliario. Voy en camino con su paquete a ${s.label || s.addr || "su dirección"}${s.unit ? " (" + s.unit + ")" : ""}. ¿Me confirma si hay alguien para recibir?`; }
 function waUrl(phone, s){ return "https://wa.me/57" + phone + "?text=" + encodeURIComponent(waText(s)); }
