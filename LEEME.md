@@ -271,3 +271,13 @@ Cada pedido (guía o paquete) cuenta por separado, aunque vayan varios a la mism
 - **Historial:** pedidos entregados, pedidos por hora, y la efectividad sobre pedidos.
 - **Excel resumen:** los pedidos van primero y las direcciones aparte.
 - **Modo conducción:** dice «3 pedidos en esta dirección».
+
+### Ajuste v2.5.2: pantalla dividida
+
+Con alto de 600 px o menos (pantalla dividida con Waze, ventana flotante o celular acostado):
+- la cabecera se compacta y deja de estar fija, así que se va al bajar por la lista;
+- los botones y la barra inferior se achican;
+- el modo conducción pone los cuatro botones en una fila;
+- el teclado del PIN se reduce.
+
+Hay pruebas a 412×360, 412×300 y 780×360.
