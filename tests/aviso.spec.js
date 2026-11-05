@@ -26,7 +26,7 @@ test("avisar: 3 próximos, WhatsApp directo sin guardar contacto, mensaje con ho
   const href = await wa.getAttribute("href");
   expect(href).toMatch(/^https:\/\/wa\.me\/573112223344\?text=/);
   const msg = decodeURIComponent(href.split("?text=")[1]);
-  expect(msg).toMatch(/^Hola Laura, le escribe el domiciliario\. Voy en camino con su pedido para Calle 145 # 106-20\./);
+  expect(msg).toMatch(/^Hola Laura, le escribe el domiciliario de Temu\. Voy en camino con su pedido para Calle 145 # 106-20\./);
   expect(msg).toMatch(/Llego aproximadamente entre las \d{1,2}:\d{2} [ap]\. m\. y las \d{1,2}:\d{2} [ap]\. m\. ¿Hay alguien para recibir\?$/);
   expect(msg).not.toContain("..");
   await expect(filas.nth(0).getByRole("link", { name: "SMS" })).toHaveAttribute("href", /^sms:\+573112223344\?body=/);
@@ -34,6 +34,12 @@ test("avisar: 3 próximos, WhatsApp directo sin guardar contacto, mensaje con ho
   await page.evaluate(() => { const a = document.querySelector("#avList .found a"); a.removeAttribute("target"); a.addEventListener("click", e => e.preventDefault()); a.click(); });
   await expect(filas.nth(0)).toContainText("avisado");
   expect(await page.evaluate(() => !!state.stops[0].avisadoAt)).toBe(true);
+  await expect(page.locator("#avInfo")).toContainText("no existe en WhatsApp");
+  // La empresa se puede cambiar y queda guardada
+  await page.fill("#avEmpresa", "Otra Tienda"); await page.locator("#avEmpresa").dispatchEvent("change");
+  const msg2 = decodeURIComponent((await filas.nth(1).getByRole("link", { name: "WhatsApp" }).getAttribute("href")).split("?text=")[1]);
+  expect(msg2).toContain("le escribe el domiciliario de Otra Tienda.");
+  expect(await page.evaluate(() => state.empresa)).toBe("Otra Tienda");
   await page.click("#dlgAviso button:has-text('Cerrar')");
   await expect(page.locator("#list .chip", { hasText: "Avisado" })).toHaveCount(1);
   // También desde el modo conducción

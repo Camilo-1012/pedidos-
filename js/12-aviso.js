@@ -26,9 +26,11 @@ function etaProximos(n){
   return out;
 }
 const horaCorta = t => new Date(t).toLocaleTimeString("es-CO", {hour:"numeric", minute:"2-digit"}).replace(/\s?a\.?\s?m\.?/i," a. m.").replace(/\s?p\.?\s?m\.?/i," p. m.");
+// Empresa que aparece en el mensaje («el domiciliario de Temu»). Se puede cambiar en la ventana de Avisar.
+const empresa = ()=> (state.empresa == null ? "Temu" : state.empresa).trim();
 function avisoTexto(x){
-  const s = x.s, nombre = s.name ? " " + titleCase(s.name.split(" ")[0]) : "";
-  return `Hola${nombre}, le escribe el domiciliario. Voy en camino con su pedido para ${s.label || s.addr}${s.unit ? " (" + s.unit + ")" : ""}. ` +
+  const s = x.s, nombre = s.name ? " " + titleCase(s.name.split(" ")[0]) : "", emp = empresa();
+  return `Hola${nombre}, le escribe el domiciliario${emp ? " de " + emp : ""}. Voy en camino con su pedido para ${s.label || s.addr}${s.unit ? " (" + s.unit + ")" : ""}. ` +
     `Llego aproximadamente entre las ${horaCorta(x.desde)} y las ${horaCorta(x.hasta)}`.replace(/\.?$/, ".") + " ¿Hay alguien para recibir?";
 }
 function renderAviso(){
@@ -40,7 +42,7 @@ function renderAviso(){
     r.className = "found" + (s.avisadoAt ? " done" : "");
     r.innerHTML = `<div class="addr"></div><div class="hint" style="margin:0"></div><div class="row" style="gap:6px"></div>`;
     r.querySelector(".addr").textContent = `${stopNum(s)}. ${s.label || s.addr}`;
-    r.querySelector(".hint").textContent = [s.name, `llega ≈ ${horaCorta(x.eta)}`, s.avisadoAt ? `✓ avisado ${horaCorta(s.avisadoAt)}` : "", !tel ? "sin teléfono" : ""].filter(Boolean).join(" · ");
+    r.querySelector(".hint").textContent = [s.name, `llega entre ${horaCorta(x.desde)} y ${horaCorta(x.hasta)}`, s.avisadoAt ? `✓ avisado ${horaCorta(s.avisadoAt)}` : "", !tel ? "sin teléfono" : ""].filter(Boolean).join(" · ");
     const acts = r.querySelector(".row");
     if(tel){
       const marcar = ()=>{ s.avisadoAt = Date.now(); save(); setTimeout(renderAviso, 300); render(); };
@@ -56,11 +58,15 @@ function renderAviso(){
     }
     box.appendChild(r);
   }
-  const p = dayPace();
-  $("avInfo").textContent = (p.perStop != null ? `Horas calculadas con tu ritmo de hoy (${Math.round(p.perStop)} min por parada).` : `Horas calculadas con el tiempo de manejo + ${SERVICIO_MIN} min por entrega (cuando lleves 2 entregas se usa tu ritmo real).`) +
-    " WhatsApp abre el chat directo con el número, sin guardar el contacto: solo tocas Enviar.";
+  const p = dayPace(), desde = currentOrigin();
+  $("avInfo").textContent =
+    `Hora = la hora de ahora + el tiempo de manejo desde ${desde && desde.gps ? "tu ubicación GPS" : desde && desde.id ? "tu última entrega" : "el punto de salida"}` +
+    (p.perStop != null ? ` y tu ritmo real de hoy (${Math.round(p.perStop)} min por parada).` : ` + ${SERVICIO_MIN} min por cada entrega antes (desde la 2.ª entrega del día se usa tu ritmo real).`) +
+    " Úsalo cuando ya vas en ruta: si avisas antes de salir, las horas quedan muy temprano." +
+    " WhatsApp abre el chat sin guardar el contacto. Si dice que el número «no existe en WhatsApp», ese cliente no tiene WhatsApp con ese número: usa SMS.";
 }
-function abrirAviso(){ renderAviso(); $("dlgAviso").showModal(); }
+function abrirAviso(){ $("avEmpresa").value = empresa(); renderAviso(); $("dlgAviso").showModal(); }
+document.getElementById("avEmpresa").addEventListener("change", e=>{ state.empresa = e.target.value.trim(); save(); renderAviso(); });
 document.getElementById("btnAviso").onclick = abrirAviso;
 document.getElementById("dvAviso").onclick = abrirAviso;
 

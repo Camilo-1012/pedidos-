@@ -365,3 +365,8 @@ El optimizador ahora arma una tabla de costos una sola vez y calcula cada intent
 - **Parquea una vez**: entregas seguidas a ≤ 130 m entre sí (o en el mismo conjunto) se agrupan con un encabezado «P» en la lista y un aviso en modo conducción. Tras entregar una, si la siguiente queda cerca, dice «A pie · no muevas el vehículo». No cambia el orden de la ruta.
 - **Modo conducción**: el número grande es el **orden de la parada en la ruta** (el mismo de la lista); la guía, si la hay, va debajo. Se corrigió el contador «Parada X de Y», que crecía al avanzar con «Siguiente».
 - Limitaciones: el envío por WhatsApp no es automático (exigiría la API de WhatsApp Business, de pago y con servidor); la hora es aproximada; los 130 m son en línea recta. Los teléfonos de los clientes se usan solo para avisar de la entrega (Ley 1581).
+
+### Ajuste v2.11.1
+- El mensaje dice «le escribe el domiciliario de Temu». La empresa se cambia en la ventana de Avisar y queda guardada.
+- Cada cliente muestra la franja de llegada («llega entre 3:10 y 3:25») y la ventana explica de dónde sale la hora.
+- Si WhatsApp responde que el número «no existe en WhatsApp», ese cliente no tiene WhatsApp con ese número: usar SMS.
