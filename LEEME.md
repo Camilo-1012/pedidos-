@@ -307,3 +307,7 @@ Hay pruebas a 412×360, 412×300 y 780×360.
 ### Ajuste v2.7.1
 
 «Varias direcciones (pegar o dictar)» también está en **Agregar paquete**, además de «Más opciones».
+
+## Pedidos entregados (v2.8)
+
+Las paradas entregadas salen de la lista principal y pasan a la sección desplegable **«Pedidos entregados (N)»**, que va recogida por defecto. Cerrada muestra cuántas direcciones son y la hora de la última entrega. Abierta deja ver, editar o **Deshacer** cada entrega; al deshacer, la parada vuelve a la lista principal. La app recuerda si la dejaste abierta o cerrada.

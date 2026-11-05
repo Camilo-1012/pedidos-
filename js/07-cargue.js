@@ -36,7 +36,8 @@ function foundButtons(list){
 }
 function flashStop(st){
   render();
-  const li = document.querySelector(`#list li[data-id="${st.id}"]`); if(!li) return;
+  if(st.status==="done" && !$("doneCard").open){ state.doneOpen = true; save(); render(); }
+  const li = document.querySelector(`.route li[data-id="${st.id}"]`); if(!li) return;
   li.scrollIntoView({behavior:"smooth", block:"center"});
   li.classList.remove("flash"); void li.offsetWidth; li.classList.add("flash");
   setTimeout(()=>li.classList.remove("flash"), 3400);

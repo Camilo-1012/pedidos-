@@ -17,8 +17,9 @@ test("acumulado del día, deshacer, días anteriores, cambio de valor y Excel", 
   await page.click('#list li.stop:has-text("Carrera 110") button[data-act=done]');
   await page.click('#list li.stop:has-text("Calle 139") button[data-act=fail]');
   await expect(page.locator("#pace")).toContainText("Hoy 4 pedidos = $ 6.400");
-  // Deshacer una entrega baja el acumulado
-  await page.click('#list li.stop:has-text("Carrera 110") button[data-act=done]');
+  // Deshacer una entrega baja el acumulado (las entregadas están en su sección)
+  await page.click("#doneCard > summary");
+  await page.click('#listDone li.stop:has-text("Carrera 110") button[data-act=done]');
   await expect(page.locator("#pace")).toContainText("Hoy 3 pedidos = $ 4.800");
   await page.click('#list li.stop:has-text("Carrera 110") button[data-act=done]');
   // Pantalla de acumulado

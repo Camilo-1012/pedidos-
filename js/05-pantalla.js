@@ -150,12 +150,22 @@ function render(){
       : (z.on && z.entry ? `Sin punto de partida: se arranca por ${ZONE_ENTRIES[z.entry]}. Mejor usa «Usar mi ubicación actual» al salir.` : "Opcional. Sin punto de partida, la app elige el recorrido más corto.");
   }
 
+  // Pendientes en la lista principal; las entregadas, en «Pedidos entregados» (desplegable, recogida por defecto).
+  const doneStops = state.stops.filter(s=>s.status==="done");
+  $("doneWrap").hidden = !doneStops.length;
+  if(doneStops.length){
+    const pq = doneStops.reduce((a,s)=>a+(s.qty||1),0), ult = doneStops.filter(s=>s.doneAt).sort((a,b)=>b.doneAt-a.doneAt)[0];
+    $("doneTitle").textContent = `Pedidos entregados (${pq})`;
+    $("doneSum").textContent = `${doneStops.length} ${doneStops.length===1?"dirección":"direcciones"}${ult?` · última a las ${hhmm(ult.doneAt)}`:""} · toca para ver o deshacer`;
+    const dOpen = !!state.doneOpen; if($("doneCard").open !== dOpen) $("doneCard").open = dOpen;
+  }
   if(state.stops.length===0){
     list.innerHTML = '<li class="empty">Sin paquetes. Toma una foto de la etiqueta para empezar.</li>';
+    $("listDone").innerHTML = "";
     return;
   }
   let n = 0;
-  list.innerHTML = state.stops.map((s,idx)=>{
+  const html = state.stops.map((s,idx)=>{
     const isDone = s.status==="done", isFail = s.status==="fail", unk = s.x===null;
     const numTxt = isDone ? "✓" : String(++n);
     const cls = "stop" + (isDone?" done":"") + (isFail?" fail":"") + (unk&&!isDone?" unk":"");
@@ -196,7 +206,10 @@ function render(){
         <button class="small danger" data-act="del">Borrar</button>
       </div>
     </li>`;
-  }).join("");
+  });
+  list.innerHTML = state.stops.map((s,i)=>s.status!=="done" ? html[i] : "").join("") ||
+    `<li class="empty">${doneStops.length ? "¡No quedan pendientes! Las entregadas están abajo, en «Pedidos entregados»." : "Sin paquetes."}</li>`;
+  $("listDone").innerHTML = state.stops.map((s,i)=>s.status==="done" ? html[i] : "").join("");
 }
 
 function toggleDone(s){
@@ -229,7 +242,7 @@ function toggleFail(s){
   }
   save(); render();
 }
-$("list").addEventListener("click", e=>{
+function onListClick(e){
   const b = e.target.closest("button[data-act]"); if(!b) return;
   const id = b.closest("li").dataset.id;
   const i = state.stops.findIndex(s=>s.id===id); if(i<0) return;
@@ -244,7 +257,10 @@ $("list").addEventListener("click", e=>{
     case "del": confirmBox("Borrar paquete", `¿Borrar ${s.label||s.addr}?`, ()=>{ state.stops.splice(i,1); save(); render(); }); return;
   }
   save(); render();
-});
+}
+$("list").addEventListener("click", onListClick);
+$("listDone").addEventListener("click", onListClick);
+$("doneCard").addEventListener("toggle", e=>{ if(!!state.doneOpen !== e.target.open){ state.doneOpen = e.target.open; save(); } });
 
 /* ============ Diálogos ============ */
 let editing = null;
