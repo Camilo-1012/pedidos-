@@ -64,3 +64,11 @@ test("cámara: con la casilla apagada no lee el teléfono", async ({ page }) => 
   expect(await page.evaluate(() => state.stops.find(x => x.label === "Calle 143 # 118-20").phone)).toBe("");
   await expect(page.locator("#stTel")).toBeHidden();
 });
+
+test("«Varias direcciones» también está en Agregar paquete", async ({ page }) => {
+  await entrar(page);
+  await page.click("#btnBulk2");
+  await expect(page.locator("#dlgText")).toHaveAttribute("open", "");
+  await expect(page.locator("#txtTitle")).toHaveText("Pegar varias direcciones");
+  await expect(page.locator("#micBulk")).toBeVisible();
+});

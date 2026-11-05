@@ -3,6 +3,7 @@
 /* ============ Botones generales ============ */
 $("btnPaste").onclick = ()=>openText("one");
 $("btnBulk").onclick = ()=>openText("bulk");
+$("btnBulk2").onclick = ()=>openText("bulk");
 $("btnManual").onclick = ()=>openEdit({addr:""}, true);
 $("btnVoice").onclick = ()=>{ openEdit({addr:""}, true); startDictation(); };
 $("btnSort").onclick = optimize;
@@ -161,7 +162,7 @@ $("restoreFile").addEventListener("change", async e=>{
 /* ============ App instalable y sin conexión ============ */
 // Al bloquear: apaga la cámara y cierra ventanas abiertas para que no queden datos a la vista.
 window.RUTA_onLock = ()=>{ try{ stopScan(); }catch(e){} };
-const APP_VERSION = "2.7";
+const APP_VERSION = "2.7.1";
 $("ver").textContent = "Versión " + APP_VERSION + ". Funciona sin internet una vez abierta la primera vez.";
 if(navigator.storage && navigator.storage.estimate){
   navigator.storage.estimate().then(e=>{ if(e && e.usage) $("ver").textContent += ` Espacio usado en este celular: ${(e.usage/1048576).toFixed(1).replace(".",",")} MB (la mayor parte es el lector de etiquetas).`; }).catch(()=>{});

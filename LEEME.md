@@ -303,3 +303,7 @@ Hay pruebas a 412×360, 412×300 y 780×360.
   - **Conducir** destacado en amarillo, que abre el modo conducción;
   - **Nueva jornada** como botón secundario, con borde, para no tocarlo por error.
 - **Ruta** es desplegable, como «Más opciones». Cerrada muestra paradas, km y punto de partida. La app recuerda si la dejaste abierta o cerrada.
+
+### Ajuste v2.7.1
+
+«Varias direcciones (pegar o dictar)» también está en **Agregar paquete**, además de «Más opciones».
