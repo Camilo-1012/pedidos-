@@ -19,7 +19,7 @@ async function osrmFalso(ctx){
 const PARADAS = ["Calle 145 # 103B-90", "Carrera 110 # 152-30", "Calle 139 # 112-15", "Calle 150 # 104-20", "Carrera 105 # 148-11",
   "Calle 142 # 108-40", "Carrera 112 # 140-05", "Calle 147 # 115-30", "Carrera 107 # 135-60", "Calle 153 # 110-12"];
 
-test("elegir Moto reordena con el costo de moto", async ({ page }) => {
+test("Moto: mismo orden (el mejor en las pruebas) y tiempo de manejo ≈ 15 % menor", async ({ page }) => {
   test.setTimeout(120000);
   const errs = vigilarErrores(page);
   await entrar(page);
@@ -28,36 +28,16 @@ test("elegir Moto reordena con el costo de moto", async ({ page }) => {
   await expect(page.locator("#vehCarro")).toBeChecked();
   await page.evaluate(() => optimize(false));
   await expect(page.locator("#routeInfo")).toContainText("min en carro");
-  const carro = await page.evaluate(() => state.stops.filter(s => s.status !== "done").map(s => s.id));
-  // Cambiar a moto desde la opción
+  const carro = await page.evaluate(() => ({ ids: state.stops.filter(s => s.status !== "done").map(s => s.id).join(), min: state.route.min }));
   await page.click("#routeOpts > summary");
   await page.click('label[for="vehMoto"]');
   await expect(page.locator("#routeInfo")).toContainText("min en moto", { timeout: 20000 });
   await expect(page.locator("#optsSum")).toContainText("en moto");
-  await expect(page.locator("#vehInfo")).toContainText("devolverse");
-  const moto = await page.evaluate(() => state.stops.filter(s => s.status !== "done").map(s => s.id));
-  // Costo en moto (75 % promedio de ida y vuelta + 25 % sentido real) de cada orden, con la matriz que devolvió el servidor.
-  const costos = await page.evaluate(([carro, moto]) => {
-    const M = LASTM, D = M.D;   // en moto, LASTM.D ya es la matriz de moto × 0,85
-    const c = ids => { let s = 0, prev = "__o"; for(const id of ids){ s += D[M.idx.get(prev)][M.idx.get(id)]; prev = id; } return s; };
-    return { carro: c(carro), moto: c(moto) };
-  }, [carro, moto]);
-  expect(moto.join()).not.toBe(carro.join());          // el orden cambia
-  expect(costos.moto).toBeLessThanOrEqual(costos.carro + 1);
-  // Volver a carro
+  await expect(page.locator("#vehInfo")).toContainText("mismo para los dos");
+  const moto = await page.evaluate(() => ({ ids: state.stops.filter(s => s.status !== "done").map(s => s.id).join(), min: state.route.min }));
+  expect(moto.ids).toBe(carro.ids);
+  expect(moto.min / carro.min).toBeCloseTo(0.85, 2);
   await page.click('label[for="vehCarro"]');
   await expect(page.locator("#routeInfo")).toContainText("min en carro", { timeout: 20000 });
-  expect(await page.evaluate(() => state.vehiculo)).toBe("carro");
   expect(errs).toEqual([]);
-});
-
-test("sin internet, en moto cruzar las avenidas cuesta menos", async ({ page }) => {
-  await entrar(page);
-  const r = await page.evaluate(() => {
-    const a = parseAddress("Calle 140 # 110-10"), b = parseAddress("Calle 150 # 110-10");   // cruza Calle 145
-    state.vehiculo = "carro"; const carro = gridDist(a, b);
-    state.vehiculo = "moto";  const moto = gridDist(a, b);
-    return { carro, moto };
-  });
-  expect(r.carro - r.moto).toBeCloseTo(1, 5);
 });

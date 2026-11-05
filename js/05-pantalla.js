@@ -127,9 +127,8 @@ function render(){
   if($("routeOpts").open !== !!state.optsOpen) $("routeOpts").open = !!state.optsOpen;
   $("autoWaze").checked = state.autoWaze !== false;
   $(esMoto() ? "vehMoto" : "vehCarro").checked = true;
-  $("vehInfo").textContent = esMoto()
-    ? "Moto: el orden aprovecha que devolverse o dar la vuelta en U es fácil, y cruza las avenidas con menos rodeo. Sigue respetando los sentidos de las calles."
-    : "Carro: el orden evita devolverse y dar vueltas a la manzana, respetando los sentidos de las calles.";
+  $("vehInfo").textContent = (esMoto() ? "Moto: tiempos de manejo ≈ 15 % menores (avanza en el trancón y parquea en la puerta). " : "Carro: tiempos de manejo del servidor de rutas. ")
+    + "El orden de las paradas es el mismo para los dos: en las pruebas, el orden más corto en carro también fue el mejor en moto.";
   if(document.activeElement !== $("orsKey")) $("orsKey").value = state.orsKey || "";
   $("routeInfo").textContent = state.routeNote || "";
   $("roundTrip").checked = !!state.roundTrip;
@@ -384,7 +383,7 @@ $("frmEdit").addEventListener("submit", e=>{
   }
   $("dlgEdit").close();
   save(); render();   // se ve de inmediato aunque haya un cálculo de ruta en curso
-  optimize(true);
+  optimize(true, {estable: editing.isNew});
   if(fromScan && state.scanLoop && editing.isNew) setTimeout(()=>startScan("label"), 600);
   fromScan = false;
 });
@@ -417,7 +416,7 @@ $("frmText").addEventListener("submit", e=>{
       if(r.merged) merged++; else if(r.stop.x===null) bad++; else ok++;
       ids.push(r.stop.id);
     });
-    save(); render(); optimize(true);
+    save(); render(); optimize(true, {estable:true});
     toast(`${ok} ubicadas${bad?`, ${bad} para revisar`:""}${merged?`, ${merged} sumadas a una dirección repetida`:""}. Ruta ordenada.`);
     // Lo dictado o pegado no trae guía: se ofrece escanear el código de cada paquete ya mismo.
     const falt = guiasFaltantes([...new Set(ids)]);

@@ -71,7 +71,7 @@ jobs:
       - name: Armar el sitio (solo los archivos de la app, sin pruebas)
         run: |
           mkdir _site
-          rsync -a --exclude '.git' --exclude '.github' --exclude 'tests' --exclude 'node_modules' \
+          rsync -a --exclude '.git' --exclude '.github' --exclude 'tests' --exclude 'bench' --exclude 'supabase' --exclude 'node_modules' \
             --exclude 'package.json' --exclude 'package-lock.json' --exclude 'playwright.config.js' \
             --exclude 'test-results' --exclude 'playwright-report' --exclude '_site' ./ _site/
       - uses: actions/configure-pages@v6

@@ -101,7 +101,7 @@ $("btnMaps").onclick = ()=>{
 for(const id of ["vehCarro","vehMoto"]) $(id).addEventListener("change", e=>{
   if(!e.target.checked) return;
   state.vehiculo = e.target.value; save(); render();
-  toast(`Ruta para ${e.target.value === "moto" ? "moto" : "carro"}: reordenando…`);
+  toast(`Tiempos estimados para ${e.target.value === "moto" ? "moto" : "carro"}.`);
   optimize(false);
 });
 $("routeCard").addEventListener("toggle", e=>{ if(state.rutaOpen !== e.target.open){ state.rutaOpen = e.target.open; save(); } });
@@ -168,13 +168,13 @@ $("restoreFile").addEventListener("change", async e=>{
 /* ============ App instalable y sin conexión ============ */
 // Al bloquear: apaga la cámara y cierra ventanas abiertas para que no queden datos a la vista.
 window.RUTA_onLock = ()=>{ try{ stopScan(); }catch(e){} };
-const APP_VERSION = "2.9";
+const APP_VERSION = "2.10";
 $("ver").textContent = "Versión " + APP_VERSION + ". Funciona sin internet una vez abierta la primera vez.";
 if(navigator.storage && navigator.storage.estimate){
   navigator.storage.estimate().then(e=>{ if(e && e.usage) $("ver").textContent += ` Espacio usado en este celular: ${(e.usage/1048576).toFixed(1).replace(".",",")} MB (la mayor parte es el lector de etiquetas).`; }).catch(()=>{});
 }
 function netState(){ if(SERVED) $("net").hidden = navigator.onLine; }
-addEventListener("online", ()=>{ netState(); if(state.stops.some(s=>s.status!=="done")) optimize(true); }); addEventListener("offline", netState); netState();
+addEventListener("online", ()=>{ netState(); if(state.stops.some(s=>s.status!=="done")) optimize(true, {estable:true}); }); addEventListener("offline", netState); netState();
 // Pide al navegador no borrar los datos de la app cuando falte espacio.
 if(navigator.storage && navigator.storage.persist){ navigator.storage.persist().catch(()=>{}); }
 let deferredInstall = null;

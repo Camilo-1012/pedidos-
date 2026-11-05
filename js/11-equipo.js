@@ -112,7 +112,7 @@ async function doSync(manual){
     sync.last = Date.now(); sync.err = "";
     if(added || removed || updated){
       saveSilently(); render();
-      if(added) optimize(true);
+      if(added) optimize(true, {estable:true});
       const msg = [added ? `${added} parada(s) nueva(s)` : "", removed ? `${removed} quitada(s)` : "", updated ? `${updated} actualizada(s)` : ""].filter(Boolean).join(" · ");
       toast("Equipo: " + msg + ".");
     }

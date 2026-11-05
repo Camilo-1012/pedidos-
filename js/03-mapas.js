@@ -334,15 +334,16 @@ async function realOrder(silent){
   const SYM = D.map((r,a)=>r.map((v,b)=>(v + D[b][a])/2));
   IDX.clear(); pts.forEach((p,i)=>IDX.set(p,i));
   const o = hasO ? origin : null;
-  // Moto: el servidor gratuito solo tiene perfil de carro. En moto devolverse o dar la vuelta en U cuesta poco, así que
-  // la diferencia entre ida y vuelta (sentidos, rodear la manzana) pesa mucho menos: 25 % el sentido real, 75 % el promedio.
-  // Las calles de una vía se siguen respetando en la navegación (Waze); esto solo cambia el orden.
+  // El orden es el mismo para carro y moto: en el banco de pruebas (simulador de calles con sentidos y giros), el orden
+  // con los tiempos del servidor resultó el mejor también para moto; la moto solo cambia el tiempo estimado (más abajo).
   const moto = esMoto();
-  const COST = moto ? D.map((r,a)=>r.map((v,b)=>0.25*v + 0.75*SYM[a][b])) : D;
+  const COST = D;
   let ordered;
   try{
     MATRIX = SYM;  ordered = orderStops(o, geo, back);
-    MATRIX = COST; ordered = orOpt(o, ordered, back);   // ajuste final con sentidos reales (ida ≠ vuelta; suavizado en moto)
+    const blocks = lastBlocks;
+    MATRIX = COST; ordered = refinarPorTramos(o, ordered, back, blocks);   // ajuste final con sentidos reales (ida ≠ vuelta), sin mezclar tramos
+    if(optEstable && rutaEnCurso()) ordered = estabilizar(o, ordered, back);
   } finally { MATRIX = null; }
   // Totales reales.
   let sec = 0, m = 0, prev = o || ordered[0];

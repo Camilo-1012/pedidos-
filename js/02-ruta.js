@@ -28,8 +28,8 @@ function save(){
 // (distancia Manhattan), que se parece más a lo que anda un carro o una moto que la línea recta.
 // Sin calles reales, cruzar una avenida principal de la zona (Calle 132, 139, 145, 153) se penaliza con ≈ 2 cuadras:
 // hay que buscar el semáforo o el puente, no se cruza por cualquier cuadra.
-// En moto, cruzar la avenida cuesta menos (≈ 1 cuadra): se filtra mejor hasta el semáforo o el retorno.
-const CROSS_PENALTY = 2, CROSS_PENALTY_MOTO = 1;
+// (Se probó una penalidad menor para moto y daba rutas peores en el banco de pruebas: se usa la misma para ambos.)
+const CROSS_PENALTY = 2;
 const esMoto = ()=>typeof state !== "undefined" && state && state.vehiculo === "moto";
 function gridDist(a,b){
   let d = Math.abs(a.x-b.x) + Math.abs(a.y-b.y);
@@ -37,7 +37,7 @@ function gridDist(a,b){
   if(!st || !st.zone || st.zone.on !== false){
     const cuts = (st && st.zone && st.zone.cuts) || [132,139,145,153];
     const lo = Math.min(a.y,b.y), hi = Math.max(a.y,b.y);
-    for(const c of cuts) if(lo < c && hi >= c) d += esMoto() ? CROSS_PENALTY_MOTO : CROSS_PENALTY;
+    for(const c of cuts) if(lo < c && hi >= c) d += CROSS_PENALTY;
   }
   return d;
 }
@@ -54,53 +54,106 @@ function pathLen(start, path, back){
   if(back && start) L += dist(prev,start);
   return L;
 }
-function nearest(start, pts){
-  const rest = pts.slice(), path = [];
-  let cur = start;
-  if(!cur){ cur = rest.shift(); path.push(cur); }
-  while(rest.length){
-    let bi=0, bd=Infinity;
-    for(let i=0;i<rest.length;i++){ const d = dist(cur,rest[i]); if(d<bd){bd=d;bi=i;} }
-    cur = rest.splice(bi,1)[0]; path.push(cur);
+
+/* ---- Núcleo del optimizador (por índices, con cálculo incremental) ----
+   Se arma una sola vez la tabla de costos entre todos los puntos (C[i*N+j]); el inicio, si hay, es el índice 0.
+   Los movimientos de mejora (2-opt, or-opt) calculan solo lo que cambia: cada intento cuesta O(1) en vez de recorrer
+   toda la ruta. Así 99 paradas se ordenan en una fracción de segundo también en un celular. */
+function tabla(start, pts){
+  const all = start ? [start, ...pts] : pts.slice(), N = all.length, C = new Float64Array(N*N);
+  for(let i=0;i<N;i++) for(let j=0;j<N;j++) C[i*N+j] = i===j ? 0 : dist(all[i], all[j]);
+  return {all, N, C, s: start ? 0 : -1};
+}
+// Costo de un camino de índices P (sin el inicio), saliendo de s y, si back, volviendo a s.
+function largo(T, P, back){
+  const {C, N, s} = T; if(!P.length) return 0;
+  let L = 0, prev = s >= 0 ? s : P[0];
+  for(const i of P){ L += C[prev*N+i]; prev = i; }
+  if(back && s >= 0) L += C[prev*N+s];
+  return L;
+}
+function vecinoI(T, P0, first){
+  const {C, N, s} = T, rest = new Set(P0), path = [];
+  let cur = s;
+  if(first != null){ path.push(first); rest.delete(first); cur = first; }
+  else if(cur < 0){ cur = P0[0]; path.push(cur); rest.delete(cur); }
+  while(rest.size){
+    let bi = -1, bd = Infinity;
+    for(const i of rest){ const d = C[cur*N+i]; if(d < bd){ bd = d; bi = i; } }
+    path.push(bi); rest.delete(bi); cur = bi;
   }
   return path;
 }
-// 2-opt: invierte tramos de la ruta cuando eso elimina un cruce o una vuelta innecesaria.
-function twoOpt(start, path, back){
-  const P = start ? [start, ...path] : path.slice();
-  const n = P.length; if(n<4) return path;
-  const end = back && start ? start : null;
+// 2-opt (para costos simétricos): invierte tramos cuando eso elimina un cruce o una vuelta innecesaria.
+function twoOptI(T, P, back){
+  const {C, N, s} = T, A = s >= 0 ? [s, ...P] : P.slice(), n = A.length;
+  if(n < 4) return P;
+  const end = back && s >= 0 ? s : -1;
   let improved = true, guard = 0;
-  while(improved && guard++<300){
+  while(improved && guard++ < 500){
     improved = false;
     for(let i=1;i<n-1;i++){
       for(let k=i+1;k<n;k++){
-        const a=P[i-1], b=P[i], c=P[k], d=(k+1<n)?P[k+1]:end;
-        const before = dist(a,b) + (d?dist(c,d):0);
-        const after  = dist(a,c) + (d?dist(b,d):0);
-        if(after < before - 1e-9){
-          for(let l=i,r=k;l<r;l++,r--){ const t=P[l]; P[l]=P[r]; P[r]=t; }
-          improved = true;
-        }
+        const a = A[i-1], b = A[i], c = A[k], d = k+1<n ? A[k+1] : end;
+        const before = C[a*N+b] + (d>=0 ? C[c*N+d] : 0), after = C[a*N+c] + (d>=0 ? C[b*N+d] : 0);
+        if(after < before - 1e-9){ for(let l=i,r=k;l<r;l++,r--){ const t=A[l]; A[l]=A[r]; A[r]=t; } improved = true; }
       }
     }
   }
-  return start ? P.slice(1) : P;
+  return s >= 0 ? A.slice(1) : A;
 }
-// Or-opt: saca tramos de 1 a 3 paradas y los reubica donde menos desvío causen (en ambos sentidos).
-function orOpt(start, path, back){
-  let P = path.slice(), best = pathLen(start,P,back), improved = true, guard = 0;
-  while(improved && guard++<60){
+// 2-opt para costos asimétricos (ida ≠ vuelta): al invertir un tramo se recalcula su costo interno con sumas acumuladas.
+function twoOptAsymI(T, P, back){
+  const {C, N, s} = T, A = s >= 0 ? [s, ...P] : P.slice(), n = A.length;
+  if(n < 4) return P;
+  const end = back && s >= 0 ? s : -1;
+  let improved = true, guard = 0;
+  while(improved && guard++ < 200){
+    improved = false;
+    const fw = new Float64Array(n), bw = new Float64Array(n);   // fw[t] = Σ C[A[u],A[u+1]] u<t ; bw igual en reversa
+    for(let t=1;t<n;t++){ fw[t] = fw[t-1] + C[A[t-1]*N+A[t]]; bw[t] = bw[t-1] + C[A[t]*N+A[t-1]]; }
+    for(let i=1;i<n-1 && !improved;i++){
+      for(let k=i+1;k<n;k++){
+        const a = A[i-1], b = A[i], c = A[k], d = k+1<n ? A[k+1] : end;
+        const before = C[a*N+b] + (fw[k]-fw[i]) + (d>=0 ? C[c*N+d] : 0);
+        const after  = C[a*N+c] + (bw[k]-bw[i]) + (d>=0 ? C[b*N+d] : 0);
+        if(after < before - 1e-9){ for(let l=i,r=k;l<r;l++,r--){ const t=A[l]; A[l]=A[r]; A[r]=t; } improved = true; break; }
+      }
+    }
+  }
+  return s >= 0 ? A.slice(1) : A;
+}
+// Or-opt: saca tramos de 1 a 3 paradas y los reubica donde menos desvío causen (también al revés). Vale con costos asimétricos.
+function orOptI(T, P0, back){
+  const {C, N, s} = T, P = P0.slice(), n = P.length;
+  if(n < 2) return P;
+  const end = back && s >= 0 ? s : -1;
+  const c = (a,b)=> (a < 0 || b < 0) ? 0 : C[a*N+b];
+  let improved = true, guard = 0;
+  while(improved && guard++ < 2000){
     improved = false;
     for(let len=1; len<=3 && !improved; len++){
-      for(let i=0; i+len<=P.length && !improved; i++){
-        const seg = P.slice(i,i+len), rest = P.slice(0,i).concat(P.slice(i+len));
-        for(let j=0; j<=rest.length && !improved; j++){
-          if(j===i) continue;
-          for(const sg of len>1 ? [seg, seg.slice().reverse()] : [seg]){
-            const cand = rest.slice(0,j).concat(sg, rest.slice(j));
-            const L = pathLen(start,cand,back);
-            if(L < best - 1e-9){ P = cand; best = L; improved = true; break; }
+      for(let i=0; i+len<=n && !improved; i++){
+        const f = P[i], l = P[i+len-1];
+        const prev = i>0 ? P[i-1] : s, next = i+len<n ? P[i+len] : end;
+        let inF = 0, inR = 0; for(let t=i;t<i+len-1;t++){ inF += C[P[t]*N+P[t+1]]; inR += C[P[t+1]*N+P[t]]; }
+        const quitar = c(prev,f) + inF + c(l,next) - c(prev,next);   // lo que se ahorra al sacar el tramo
+        // Posiciones de inserción: entre R[j-1] y R[j] del camino sin el tramo (R virtual: P sin i..i+len-1).
+        const m = n - len;
+        for(let j=0; j<=m && !improved; j++){
+          if(j === i) continue;   // misma posición
+          const ra = j===0 ? s : (j-1 < i ? P[j-1] : P[j-1+len]);
+          const rb = j===m ? end : (j < i ? P[j] : P[j+len]);
+          const base = c(ra,rb);
+          const poner = c(ra,f) + inF + c(l,rb) - base;
+          if(poner - quitar < -1e-9){
+            const seg = P.splice(i, len); P.splice(j, 0, ...seg); improved = true; break;
+          }
+          if(len > 1){
+            const ponerR = c(ra,l) + inR + c(f,rb) - base;
+            if(ponerR - quitar < -1e-9){
+              const seg = P.splice(i, len).reverse(); P.splice(j, 0, ...seg); improved = true; break;
+            }
           }
         }
       }
@@ -108,31 +161,28 @@ function orOpt(start, path, back){
   }
   return P;
 }
-function polish(start, path, back){
-  let P = twoOpt(start, path, back);
-  for(let r=0;r<3;r++){
-    const before = pathLen(start,P,back);
-    P = twoOpt(start, orOpt(start, P, back), back);
-    if(pathLen(start,P,back) >= before - 1e-9) break;
+function polishI(T, P, back){
+  let Q = twoOptI(T, P, back);
+  for(let r=0;r<4;r++){
+    const before = largo(T, Q, back);
+    Q = twoOptI(T, orOptI(T, Q, back), back);
+    if(largo(T, Q, back) >= before - 1e-9) break;
   }
-  return P;
+  return Q;
 }
 // Barrido por franjas: recorre la zona en franjas de calles (o de carreras) yendo y viniendo, como se reparte a mano.
-function sweeps(start, pts){
-  const out = [];
+function sweepsI(T, idx){
+  const out = [], all = T.all;
   for(const axis of ["y","x"]){
     const other = axis==="y" ? "x" : "y";
     for(const w of [2,3,4,6,8,12]){
       for(const dir of [1,-1]){
         const bands = new Map();
-        for(const p of pts){ const k = Math.floor(p[axis]/w); if(!bands.has(k)) bands.set(k,[]); bands.get(k).push(p); }
+        for(const i of idx){ const k = Math.floor(all[i][axis]/w); if(!bands.has(k)) bands.set(k,[]); bands.get(k).push(i); }
         const keys = [...bands.keys()].sort((a,b)=>(a-b)*dir);
         for(const firstAsc of [true,false]){
           const path = []; let asc = firstAsc;
-          for(const k of keys){
-            const arr = bands.get(k).slice().sort((a,b)=> asc ? a[other]-b[other] : b[other]-a[other]);
-            path.push(...arr); asc = !asc;
-          }
+          for(const k of keys){ path.push(...bands.get(k).slice().sort((a,b)=> asc ? all[a][other]-all[b][other] : all[b][other]-all[a][other])); asc = !asc; }
           out.push(path);
         }
       }
@@ -143,22 +193,31 @@ function sweeps(start, pts){
 function solve(start, pts, back){
   if(pts.length===0) return [];
   if(pts.length===1) return pts.slice();
+  const T = tabla(start, pts), idx = pts.map((_,i)=>i + (start ? 1 : 0));
   const cands = [];
   // Vecino más cercano desde el inicio o, sin inicio, desde varias paradas posibles.
-  if(start) cands.push(nearest(start, pts));
-  else {
-    const tries = pts.length>60 ? pts.filter((_,i)=>i%Math.ceil(pts.length/60)===0) : pts;
-    for(const s0 of tries) cands.push([s0, ...nearest(s0, pts.filter(q=>q!==s0))]);
-  }
-  cands.push(...sweeps(start, pts));
+  if(start) cands.push(vecinoI(T, idx));
+  else { const tries = idx.length > 60 ? idx.filter((_,i)=>i % Math.ceil(idx.length/60)===0) : idx; for(const i0 of tries) cands.push(vecinoI(T, idx, i0)); }
+  cands.push(...sweepsI(T, idx));
   // Se pulen los mejores candidatos y se queda el más corto.
-  cands.sort((a,b)=>pathLen(start,a,back)-pathLen(start,b,back));
+  cands.sort((a,b)=>largo(T,a,back)-largo(T,b,back));
   let best = null, bl = Infinity;
-  for(const c of cands.slice(0, pts.length>80 ? 4 : 10)){
-    const P = polish(start, c, back), L = pathLen(start,P,back);
+  for(const c of cands.slice(0, 10)){
+    const P = polishI(T, c, back), L = largo(T, P, back);
     if(L < bl){ bl = L; best = P; }
   }
-  return best;
+  return best.map(i=>T.all[i]);
+}
+// Ajuste con los costos reales (ida ≠ vuelta): or-opt y 2-opt asimétrico hasta que ya no mejore.
+function orOpt(start, path, back){
+  if(path.length < 2) return path.slice();
+  const T = tabla(start, path), off = start ? 1 : 0;
+  let P = path.map((_,i)=>i+off), L = largo(T, P, back);
+  for(let r=0;r<20;r++){
+    P = twoOptAsymI(T, orOptI(T, P, back), back);
+    const L2 = largo(T, P, back); if(L2 >= L - 1e-9) break; L = L2;
+  }
+  return P.map(i=>T.all[i]);
 }
 // Punto desde donde se calcula: si ya hay entregas hechas, la última entregada (ahí está el repartidor); si no, el punto de partida.
 function currentOrigin(){
@@ -187,24 +246,40 @@ function currentOrigin(){
 }
 // Sector de la zona según las avenidas que la cortan (calles 132, 139, 145, 153 por defecto).
 function sectorOf(s){ const cuts = zone().cuts||[]; let k = 0; for(const c of cuts) if(s.y >= c) k++; return k; }
+// lastBlocks: tamaños de los tramos que deben quedar juntos y en ese orden (zona ST, sector, fuera de zona, reintentos).
+// El ajuste final con calles reales mejora dentro de cada tramo sin mezclarlos.
+let lastBlocks = null;
 function groupedOrder(origin, geo, back, keyFn){
   const groups = {};
   geo.forEach(s=>{ (groups[keyFn(s)] ||= []).push(s); });
   const zs = Object.entries(groups).map(([z,arr])=>({z,arr,x:arr.reduce((a,s)=>a+s.x,0)/arr.length,y:arr.reduce((a,s)=>a+s.y,0)/arr.length}));
   const zOrder = solve(origin, zs, false);
-  const ordered = []; let cur = origin;
-  zOrder.forEach((zg,i)=>{ const last = i===zOrder.length-1; const part = solve(cur, zg.arr, last && back); ordered.push(...part); cur = part[part.length-1]; });
+  const ordered = [], blocks = []; let cur = origin;
+  zOrder.forEach((zg,i)=>{ const last = i===zOrder.length-1; const part = solve(cur, zg.arr, last && back); ordered.push(...part); blocks.push(part.length); cur = part[part.length-1]; });
+  lastBlocks = blocks;
   return ordered;
 }
 let lastStrategy = "";
 function orderStops(origin, geo, back){
+  // «No estaba» (intento fallido) va al final: se reintenta después de las pendientes, no vuelve a ser la siguiente.
+  const reint = geo.filter(s=>s.status==="fail"), prim = geo.filter(s=>s.status!=="fail");
+  if(reint.length && prim.length){
+    const a = orderMain(origin, prim, false), bA = lastBlocks;
+    const b = solve(a[a.length-1], reint, back);
+    lastBlocks = bA.concat([b.length]);
+    return a.concat(b);
+  }
+  return orderMain(origin, geo, back);
+}
+function orderMain(origin, geo, back){
   const z = zone();
   // Las paradas fuera de la zona (casi siempre errores o paquetes de otra ruta) van al final para no desviar el recorrido.
   if(z.on && z.outLast){
     const inZ = geo.filter(s=>!zoneIssue(s)), outZ = geo.filter(s=>zoneIssue(s));
     if(outZ.length && inZ.length){
-      const a = orderCore(origin, inZ, false);
+      const a = orderCore(origin, inZ, false), bA = lastBlocks;
       const b = solve(a[a.length-1], outZ, back);
+      lastBlocks = bA.concat([b.length]);
       return a.concat(b);
     }
   }
@@ -218,10 +293,47 @@ function orderCore(origin, geo, back){
     const sect = groupedOrder(origin, geo, back, sectorOf);
     const cf = pathLen(origin, free, back), cs = pathLen(origin, sect, back);
     // Por sectores es más fácil de seguir en la calle: se prefiere si cuesta como máximo 3 % más que el orden libre.
-    if(cs <= cf * 1.03){ lastStrategy = "por sectores entre avenidas"; return sect; }
+    // El ajuste final con calles reales puede mover paradas entre sectores si ahorra tiempo (un solo tramo):
+    // en el banco de pruebas, mantener los sectores separados costaba ≈ 0,25 % más de tiempo.
+    if(cs <= cf * 1.03){ lastStrategy = "por sectores entre avenidas"; lastBlocks = [sect.length]; return sect; }
   }
   lastStrategy = "libre (el más corto)";
+  lastBlocks = [free.length];
   return free;
+}
+// Ajuste final por tramos (con la matriz que esté activa): mejora dentro de cada tramo sin mezclar tramos.
+function refinarPorTramos(origin, ordered, back, blocks){
+  const out = []; let k = 0, prev = origin;
+  (blocks && blocks.reduce((a,b)=>a+b,0)===ordered.length ? blocks : [ordered.length]).forEach((len, bi, arr)=>{
+    const seg = ordered.slice(k, k+len); k += len;
+    const r = orOpt(prev, seg, bi===arr.length-1 && back);
+    out.push(...r); if(r.length) prev = r[r.length-1];
+  });
+  return out;
+}
+/* Ruta en curso más estable: si ya se salió (hay entregas o salida registrada) y llegan paradas nuevas, se insertan
+   en el mejor hueco del orden actual. Solo se reordena todo si eso ahorra más de 3 %: así no se pierde el orden
+   en que se acomodó el vehículo por un ahorro mínimo. */
+const ESTABLE_MIN = 0.03;
+function rutaEnCurso(){ return !!(state.salidaAt || state.stops.some(s=>s.status==="done")); }
+function estabilizar(origin, ordered, back){
+  const prevIds = state.suggestedIds || [];
+  if(!prevIds.length || ordered.length < 2) return ordered;
+  const enOrden = new Set(ordered.map(s=>s.id));
+  const prev = prevIds.map(id=>ordered.find(s=>s.id===id)).filter(Boolean);
+  if(!prev.length) return ordered;
+  const nuevos = ordered.filter(s=>!prevIds.includes(s.id));
+  // Inserción más barata de cada nueva, antes de los reintentos («No estaba» siguen al final).
+  const P = prev.slice();
+  for(const s of nuevos){
+    const lim = s.status==="fail" ? P.length : (P.findIndex(q=>q.status==="fail")+1 || P.length+1) - 1;
+    let bj = lim, bc = Infinity;
+    for(let j=0;j<=lim;j++){ const c = pathLen(origin, [...P.slice(0,j), s, ...P.slice(j)], back); if(c < bc){ bc = c; bj = j; } }
+    P.splice(bj, 0, s);
+  }
+  if(P.length !== enOrden.size) return ordered;
+  const cP = pathLen(origin, P, back), cN = pathLen(origin, ordered, back);
+  return cN < cP * (1 - ESTABLE_MIN) ? ordered : P;
 }
 // Aplica un orden calculado sobre el estado actual (por si el repartidor marcó entregas mientras se calculaba).
 function applyOrder(orderIds){
@@ -233,12 +345,16 @@ function applyOrder(orderIds){
   const done = state.stops.filter(s=>s.status==="done");
   state.stops = [...out, ...restGeo, ...unk, ...done];
 }
-let optimizing = null, pendingOpt = false;
-function optimize(silent){
-  if(optimizing){ pendingOpt = true; return optimizing; }
+let optimizing = null, pendingOpt = false, optEstable = false;
+// optimize(silent, {estable:true}): para paradas nuevas a mitad de ruta (no revuelve el orden por poco ahorro).
+// Sin «estable» (Ordenar ruta, cambio de opciones) se reordena todo.
+function optimize(silent, opts){
+  const estable = !!(opts && opts.estable);
+  if(optimizing){ pendingOpt = true; optEstable = optEstable && estable; return optimizing; }
+  optEstable = estable;
   optimizing = optimizeNow(silent).catch(err=>console.error(err)).finally(()=>{
     optimizing = null;
-    if(pendingOpt){ pendingOpt = false; optimize(true); }
+    if(pendingOpt){ pendingOpt = false; optimize(true, {estable: optEstable}); }
   });
   return optimizing;
 }
@@ -248,7 +364,8 @@ function quickOrder(){
   const back = !!state.roundTrip && !!parseAddress(state.start);
   const geo = state.stops.filter(s=>s.status!=="done" && s.x!==null);
   if(MATRIX) return;   // no interferir si justo se está usando la matriz real
-  const quick = orderStops(origin, geo, back);
+  let quick = orderStops(origin, geo, back);
+  if(optEstable && rutaEnCurso()) quick = estabilizar(origin, quick, back);
   applyOrder(quick.map(s=>s.id));
   state.suggestedIds = quick.map(s=>s.id);
   LASTM = null;

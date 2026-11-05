@@ -323,3 +323,36 @@ En **Ruta → Opciones de la ruta → Vehículo** se elige Carro o Moto. Al camb
   - El tiempo de manejo se estima un 15 % menor.
   - Los sentidos de las calles se siguen respetando en Waze; esto solo cambia el orden.
 - Es una aproximación, no un perfil oficial de moto. Con el servidor simulado de las pruebas, el orden en moto cambia y su costo en moto queda igual o menor que el del orden de carro.
+
+## Validación del enrutamiento (v2.10)
+
+Medido con el banco de pruebas (`bench/`): un simulador de calles tipo Suba, con sentidos, giros y el rumbo del vehículo en cada parada. Los porcentajes son tiempo adicional sobre la mejor ruta posible.
+
+| Paradas | Con calles reales | Sin internet | Comparado contra |
+|---|---|---|---|
+| 8 | 0,43 % (máx. 3,3 %) | 1,2 % (máx. 7,8 %) | óptimo exacto |
+| 10 | 0,50 % (máx. 3,0 %) | 1,5 % (máx. 5,4 %) | óptimo exacto |
+| 25 | 0,41 % (máx. 2,1 %) | 2,6 % (máx. 5,3 %) | referencia de búsqueda exhaustiva |
+| 40 | 1,3 % (máx. 2,1 %) | 4,0 % (máx. 4,9 %) | referencia de búsqueda exhaustiva |
+
+**Velocidad** (celular de gama media simulado, CPU ×4 más lenta):
+
+| Paradas | Antes | Ahora |
+|---|---|---|
+| 30 | 0,4 s | 0,02–0,14 s |
+| 60 | 5 s | 0,05 s |
+| 99 | 10 s | 0,1 s |
+
+El optimizador ahora arma una tabla de costos una sola vez y calcula cada intento de mejora de forma incremental. Los movimientos son los mismos: vecino más cercano, barridos por franjas, 2-opt y or-opt, y se agregó un 2-opt para ida ≠ vuelta.
+
+**Cambios por la validación:**
+- **«No estaba»** se ordena siempre después de las pendientes. Antes, al reordenar podía volver a quedar de siguiente.
+- **«Terminar una zona antes de pasar a otra»** se respeta también en el ajuste con calles reales. Antes se podían mezclar zonas.
+- **Ruta en curso:** con entregas hechas o salida registrada, un pedido nuevo se inserta en el mejor hueco sin revolver el resto, salvo que reordenar todo ahorre más de 3 %. «Ordenar ruta» y los cambios de opciones sí reordenan todo.
+- **Carro / Moto:** el orden es el mismo para los dos. En las pruebas, el ajuste para moto (promediar ida y vuelta, cruzar avenidas más barato) daba rutas igual o peores, porque la moto también respeta los sentidos de las calles y el servidor no informa hacia dónde queda mirando el vehículo. La moto solo cambia el tiempo estimado (≈ 15 % menos).
+- Los **sectores entre avenidas** no se fuerzan en el ajuste final: mantenerlos separados costaba ≈ 0,25 % más de tiempo.
+
+**Límites:**
+- Es un simulador, no las calles reales de Suba.
+- Sin internet el orden es aproximado (2–4 % más).
+- El tiempo de entrega en cada puerta, el trancón y los semáforos no se modelan.
