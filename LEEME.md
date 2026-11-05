@@ -370,3 +370,8 @@ El optimizador ahora arma una tabla de costos una sola vez y calcula cada intent
 - El mensaje dice «le escribe el domiciliario de Temu». La empresa se cambia en la ventana de Avisar y queda guardada.
 - Cada cliente muestra la franja de llegada («llega entre 3:10 y 3:25») y la ventana explica de dónde sale la hora.
 - Si WhatsApp responde que el número «no existe en WhatsApp», ese cliente no tiene WhatsApp con ese número: usar SMS.
+
+### Ajuste v2.11.2: dos celulares con la misma cuenta
+- Se puede cargar con dos celulares a la vez: los dos se conectan al Equipo con el mismo correo y contraseña de Supabase y las paradas quedan unificadas (se sincroniza cada 30 s, al volver a la app o con «Sincronizar ahora»).
+- Desconectar un celular cierra solo su sesión (`logout?scope=local`); antes cerraba la sesión en todos.
+- «Empezar jornada nueva» y «Borrar toda la jornada» avisan que también se quitan del otro celular conectado.

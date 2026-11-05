@@ -8,7 +8,7 @@ function crearSupabase(){
       { id: "u-extrano", email: "extrano@otro.co", pass: "Clave-Extrano-1" }
     ],
     miembros: [ { user_id: "u-camilo", nombre: "Camilo", admin: true }, { user_id: "u-andrea", nombre: "Andrea", admin: false } ],
-    paradas: new Map(), reloj: Date.now(), llamadas: 0
+    paradas: new Map(), logouts: [], reloj: Date.now(), llamadas: 0
   };
   const ahora = () => new Date(++db.reloj).toISOString();
   const json = (route, status, body) => route.fulfill({ status, contentType: "application/json", body: body === undefined ? "" : JSON.stringify(body) });
@@ -40,7 +40,7 @@ function crearSupabase(){
       if (!u) return json(route, 400, { error: "invalid_grant", error_description: "Invalid login credentials" });
       return json(route, 200, { access_token: "tok-" + u.id, refresh_token: "ref-" + u.id, expires_in: 3600, user: { id: u.id, email: u.email } });
     }
-    if (path === "/auth/v1/logout") return json(route, 204);
+    if (path === "/auth/v1/logout"){ db.logouts.push(url.searchParams.get("scope") || "global"); return json(route, 204); }
     const uid = uidDe(req); if (!uid) return json(route, 401, { message: "JWT requerido" });
     if (path === "/rest/v1/equipo_miembros"){
       if (!miembro(uid)) return json(route, 200, []);

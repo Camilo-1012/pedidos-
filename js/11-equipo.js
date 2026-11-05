@@ -150,7 +150,8 @@ async function connectTeam(email, pass){
   }
 }
 function disconnectTeam(){
-  if(sync && sync.access) fetch(`${SB_URL}/auth/v1/logout`, {method:"POST", headers:{apikey:SB_KEY, Authorization:"Bearer " + sync.access}}).catch(()=>{});
+  if(sync && sync.access) fetch(`${SB_URL}/auth/v1/logout?scope=local`,   // solo este celular: el otro con la misma cuenta sigue conectado
+     {method:"POST", headers:{apikey:SB_KEY, Authorization:"Bearer " + sync.access}}).catch(()=>{});
   sync = null; store.set(SYNC_KEY, null); renderSync(); toast("Equipo desconectado. Tus paradas siguen en este celular.");
 }
 

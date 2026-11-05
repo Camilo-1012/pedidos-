@@ -98,6 +98,19 @@ test("equipo: el mismo usuario en dos celulares, borrar y trabajar sin señal", 
   await a.ctx.setOffline(false);
   await a.page.evaluate(() => syncNow(true));
   expect([...sb.db.paradas.values()].some(f => f.data.guia === "1003")).toBe(true);
+  // Cargar con los dos celulares a la vez: todo queda unificado en ambos
+  await agregar(b.page, [{ addr: "Calle 146 # 106-30", guia: "1004" }]);
+  await sincronizar(b.page); await sincronizar(a.page); await sincronizar(b.page);
+  const ga = (await a.page.evaluate(() => state.stops.map(s => s.guia))).sort();
+  const gb = (await b.page.evaluate(() => state.stops.map(s => s.guia))).sort();
+  expect(ga).toEqual(["1001", "1003", "1004"]); expect(gb).toEqual(ga);
+  // Desconectar A cierra solo su sesión (scope=local): B sigue sincronizando
+  await a.page.evaluate(() => disconnectTeam());
+  await expect.poll(() => sb.db.logouts).toEqual(["local"]);
+  await agregar(b.page, [{ addr: "Calle 139 # 110-20", guia: "1005" }]);
+  await sincronizar(b.page);
+  expect(await b.page.evaluate(() => sync && sync.err)).toBe("");
+  expect([...sb.db.paradas.values()].some(f => f.data.guia === "1005")).toBe(true);
   expect(a.errs).toEqual([]); expect(b.errs).toEqual([]);
 });
 

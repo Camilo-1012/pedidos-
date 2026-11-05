@@ -116,10 +116,12 @@ $("btnNew").onclick = ()=>{
   if(state.stops.length===0){ toast("Ya estás en una jornada limpia. Toma la primera foto."); return; }
   const pend = state.stops.filter(s=>s.status!=="done").length;
   confirmBox("Empezar jornada nueva",
-    (pend ? `Quedan ${pend} paquete(s) sin entregar. ` : "") + "Se guarda el resumen del día en el historial y se borran todos los paquetes de este celular. El punto de partida se conserva.",
+    (pend ? `Quedan ${pend} paquete(s) sin entregar. ` : "") + "Se guarda el resumen del día en el historial y se borran todos los paquetes de este celular. El punto de partida se conserva." + otroCel(),
     ()=>{ recordDay(); state.dayId=null; state.stops=[]; state.seeded=true; state.lastDoneId=null; state.cmpFirst=null; state.cmpLast=null; state.suggestedIds=null; LASTM=null; state.startGPS=null; state.salidaAt=null; state.loadOn=false; state.loadExtra=[]; save(); render(); window.scrollTo(0,0); toast("Jornada nueva lista. Toma la primera foto."); });
 };
-$("btnClearAll").onclick = ()=>confirmBox("Borrar toda la jornada","Se eliminan todos los paquetes y sus datos de este celular.",()=>{ state.stops=[]; state.lastDoneId=null; save(); render(); toast("Jornada borrada."); });
+// Con el equipo conectado, borrar aquí también borra en el otro celular de la misma cuenta.
+const otroCel = ()=> typeof syncOn === "function" && syncOn() ? " Como estás conectado al equipo, también se quitan del otro celular con tu misma cuenta." : "";
+$("btnClearAll").onclick = ()=>confirmBox("Borrar toda la jornada","Se eliminan todos los paquetes y sus datos de este celular." + otroCel(),()=>{ state.stops=[]; state.lastDoneId=null; save(); render(); toast("Jornada borrada."); });
 
 /* ============ Respaldo (archivo en el celular) ============ */
 // Formato 2: {app, v:2, fecha, state, hist}. Lleva la jornada, los ajustes y el historial (resúmenes por pedido, sin nombres).
@@ -168,7 +170,7 @@ $("restoreFile").addEventListener("change", async e=>{
 /* ============ App instalable y sin conexión ============ */
 // Al bloquear: apaga la cámara y cierra ventanas abiertas para que no queden datos a la vista.
 window.RUTA_onLock = ()=>{ try{ stopScan(); }catch(e){} };
-const APP_VERSION = "2.11.1";
+const APP_VERSION = "2.11.2";
 $("ver").textContent = "Versión " + APP_VERSION + ". Funciona sin internet una vez abierta la primera vez.";
 if(navigator.storage && navigator.storage.estimate){
   navigator.storage.estimate().then(e=>{ if(e && e.usage) $("ver").textContent += ` Espacio usado en este celular: ${(e.usage/1048576).toFixed(1).replace(".",",")} MB (la mayor parte es el lector de etiquetas).`; }).catch(()=>{});
