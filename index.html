@@ -104,6 +104,7 @@
       <button type="button" class="small" id="btnRestore" hidden style="margin-top:8px">Volver al orden sugerido</button>
     </div>
     <button type="button" class="primary" id="btnDrive">Modo conducción</button>
+    <button type="button" class="dark" id="btnAviso">Avisar a los próximos clientes (WhatsApp)</button>
     <div class="row">
       <button type="button" id="btnFind">Buscar paquete por guía</button>
       <button type="button" id="btnLoad">Revisar cargue</button>
@@ -313,14 +314,18 @@
 <div class="drive" id="drive" hidden role="dialog" aria-modal="true" aria-labelledby="dvAddr">
   <div class="dvTop">
     <span id="dvPos"></span>
-    <button type="button" class="small" id="dvExit">Salir</button>
+    <span style="display:flex;gap:6px">
+      <button type="button" class="small" id="dvAviso">Avisar</button>
+      <button type="button" class="small" id="dvExit">Salir</button>
+    </span>
   </div>
   <div class="dvMain">
+    <div class="dvPark" id="dvPark" hidden></div>
     <div class="dvQty" id="dvQty"></div>
     <div class="dvAddr" id="dvAddr"></div>
     <div class="dvUnit" id="dvUnit"></div>
     <div class="dvGuia" id="dvGuia"></div>
-    <button type="button" class="small dvGuiaBtn" id="dvGuiaBtn" hidden>+ Escanear número de pedido</button>
+    <button type="button" class="small dvGuiaBtn" id="dvGuiaBtn" hidden>+ Escanear guía</button>
     <div class="dvWho" id="dvWho"></div>
     <div class="dvNext" id="dvNext"></div>
   </div>
@@ -372,6 +377,14 @@
     <div class="paytbl" id="pyMonths" role="table" aria-label="Acumulado por mes"></div>
     <p class="hint" id="pyInfo" style="margin:0"></p>
     <button type="button" id="pyCsv">Excel por mes</button>
+  </form>
+</dialog>
+
+<dialog id="dlgAviso" aria-labelledby="avTitle">
+  <form method="dialog">
+    <div class="dlgHead"><h2 id="avTitle">Avisar a los próximos</h2><button type="submit" class="small">Cerrar</button></div>
+    <div id="avList" style="display:flex;flex-direction:column;gap:8px"></div>
+    <p class="hint" id="avInfo" style="margin:0"></p>
   </form>
 </dialog>
 

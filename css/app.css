@@ -214,7 +214,8 @@ details summary{cursor:pointer;font-weight:600}
 .dvGuia{display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left}
 .dvGuia .lbl{font:600 13px var(--body);text-transform:uppercase;letter-spacing:.06em;color:var(--accent)}
 .dvGuia .num{font:700 24px/1.15 ui-monospace,"Roboto Mono",Menlo,monospace;letter-spacing:.04em;overflow-wrap:anywhere}
-.dvGuia .none{font:600 16px var(--body);opacity:.75}
+.dvGuia .orden{font:700 60px/1 var(--display);color:var(--accent)}
+.dvGuia .gs{font:600 15px ui-monospace,"Roboto Mono",Menlo,monospace;opacity:.8;overflow-wrap:anywhere}
 .dvGuiaBtn{align-self:flex-start;background:transparent;color:var(--bg);border-color:var(--accent)}
 .dvWho,.dvNext{font-size:15px;opacity:.8;overflow-wrap:anywhere}
 .dvBtns{display:grid;grid-template-columns:1fr 1fr;gap:10px}
@@ -280,7 +281,7 @@ details summary{cursor:pointer;font-weight:600}
   .dvQty{font-size:15px}
   .dvAddr{font-size:clamp(22px,7vh,34px)}
   .dvUnit{font-size:15px}
-  .dvGuia .num{font-size:17px}
+  .dvGuia .orden{font-size:40px}
   .dvWho,.dvNext{font-size:13px}
   .dvBtns{grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
   .dvBtns > *{min-height:46px;font-size:16px;border-radius:10px;padding:4px}
@@ -324,3 +325,10 @@ details.sec[open] > summary .secSum{display:none}
 .secBody{display:flex;flex-direction:column;gap:12px;margin-top:12px}
 
 .seg.seg2{grid-template-columns:repeat(2,minmax(0,1fr))}
+
+/* Parquea una vez */
+.route li.parkHead{list-style:none;display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:10px;background:var(--ink);color:var(--bg);font-weight:600;font-size:14px}
+.route li.parkHead .pk{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:6px;background:var(--accent);color:var(--accent-ink);font:700 16px var(--display);flex:none}
+.route li.stop.inPark{border-left-color:var(--ink);margin-left:12px}
+.dvPark:not([hidden]){display:flex;flex-direction:column;gap:2px;background:var(--accent);color:var(--accent-ink);border-radius:10px;padding:8px 10px;font-weight:600;font-size:15px}
+.dvPark small{font-weight:500;font-size:13px}

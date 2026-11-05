@@ -188,6 +188,7 @@ function render(){
           ${!isDone && zoneIssue(s)?`<span class="chip warn">Fuera de tu zona: ${esc(zoneIssue(s))}</span>`:""}
           ${s.zoneCheck && s.zoneCheck.bad?`<span class="chip warn">No coincide con ${esc(s.barrio)}: queda a ${s.zoneCheck.km.toFixed(1).replace(".",",")} km</span>`:""}
           ${isFail?'<span class="chip warn">Intento fallido</span>':""}
+          ${s.avisadoAt && !isDone ? `<span class="chip ok">Avisado ${hhmm(s.avisadoAt)}</span>` : ""}
           ${state.loadOn && !isDone ? (loadedOf(s) >= (s.qty||1) ? '<span class="chip ok">Cargado ✓</span>' : `<span class="chip warn">Sin verificar${(s.qty||1)>1?" "+((s.qty||1)-loadedOf(s))+" de "+s.qty:""}</span>`) : ""}
           ${s.example?'<span class="chip ex">Ejemplo</span>':""}
         </div>
@@ -211,7 +212,15 @@ function render(){
       </div>
     </li>`;
   });
-  list.innerHTML = state.stops.map((s,i)=>s.status!=="done" ? html[i] : "").join("") ||
+  // «Parquea una vez»: encabezado antes del primer miembro de cada grupo y sangría en sus paradas.
+  const grupos = typeof gruposParqueo === "function" ? gruposParqueo() : [];
+  const inicioGrupo = new Map(grupos.map(g=>[g.miembros[0].id, g])), enGrupo = new Set(grupos.flatMap(g=>g.miembros.map(m=>m.id)));
+  list.innerHTML = state.stops.map((s,i)=>{
+    if(s.status==="done") return "";
+    const g = inicioGrupo.get(s.id);
+    const head = g ? `<li class="parkHead"><span class="pk">P</span><span>${esc(textoParqueo(g))}</span></li>` : "";
+    return head + (enGrupo.has(s.id) ? html[i].replace('<li class="stop', '<li class="stop inPark') : html[i]);
+  }).join("") ||
     `<li class="empty">${doneStops.length ? "¡No quedan pendientes! Las entregadas están abajo, en «Pedidos entregados»." : "Sin paquetes."}</li>`;
   $("listDone").innerHTML = state.stops.map((s,i)=>s.status==="done" ? html[i] : "").join("");
 }

@@ -42,17 +42,31 @@ function renderDrive(){
     return;
   }
   const n = stopNum(s), total = list.length;
-  $("dvPos").textContent = `Parada ${n} de ${n - 1 + total}`;
+  // Parquea una vez: si esta parada es parte de un grupo a pie, se avisa y se listan las demás del grupo.
+  const gr = typeof gruposParqueo === "function" ? gruposParqueo().find(g=>g.miembros.some(m=>m.id===s.id)) : null;
+  // ¿Acaba de entregar muy cerca? Entonces ya está parqueado: sigue a pie.
+  const ld = state.lastDoneId ? state.stops.find(x=>x.id===state.lastDoneId && x.status==="done") : null;
+  const aPie = ld && ld.doneAt && Date.now() - ld.doneAt < 20*60000 && metrosEntre(ld, s) <= PARQUEO_M;
+  $("dvPark").hidden = !gr && !aPie;
+  if(aPie){
+    const resto = gr ? gr.miembros.filter(m=>m.id!==s.id) : [];
+    $("dvPark").innerHTML = `<span>A pie · queda a ≈ ${Math.max(20, Math.round(metrosEntre(ld, s)/10)*10)} m de la entrega anterior: no muevas el vehículo</span>` +
+      (resto.length ? `<small>Después, también a pie: ${resto.map(m=>esc((m.label||m.addr) + (m.unit ? " · " + m.unit : ""))).join(" — ")}</small>` : "");
+  } else if(gr){
+    const resto = gr.miembros.filter(m=>m.id!==s.id);
+    $("dvPark").innerHTML = `<span>P · ${esc(textoParqueo(gr))}</span><small>Después, a pie: ${resto.map(m=>esc((m.label||m.addr) + (m.unit ? " · " + m.unit : ""))).join(" — ")}</small>`;
+  }
+  $("dvPos").textContent = `Parada ${n} de ${state.stops.filter(x=>x.status!=="done").length}`;
   $("dvQty").textContent = [(s.qty||1)>1 ? `${s.qty} pedidos en esta dirección` : "", s.status==="fail" ? "Ya tuvo un intento fallido" : "", s.zone ? "ST " + s.zone : ""].filter(Boolean).join(" · ");
   $("dvAddr").textContent = s.label || s.addr;
   $("dvUnit").textContent = [unitText(s), s.barrio].filter(Boolean).join(" · ");
-  // Número de pedido (guía): grande y con etiqueta. Varios paquetes en la misma dirección = varios números.
+  // Número de orden en la ruta (el mismo de la lista): grande, para ubicar el paquete en el vehículo.
+  // Si el paquete tiene guía escaneada, se muestra debajo como dato secundario.
   const gs = guias(s);
-  $("dvGuia").innerHTML = gs.length
-    ? `<span class="lbl">${gs.length > 1 ? "Pedidos" : "Pedido"}</span>` + gs.map(g=>`<span class="num">${esc(g)}</span>`).join("")
-    : `<span class="lbl">Pedido</span><span class="none">Sin número de pedido</span>`;
+  $("dvGuia").innerHTML = `<span class="lbl">Pedido n.º</span><span class="orden">${n}</span>` +
+    (gs.length ? `<span class="gs">Guía${gs.length > 1 ? "s" : ""}: ${gs.map(esc).join(" · ")}</span>` : "");
   $("dvGuiaBtn").hidden = gs.length >= (s.qty||1);
-  $("dvGuiaBtn").textContent = gs.length ? `+ Escanear pedido ${gs.length+1} de ${s.qty||1}` : "+ Escanear número de pedido";
+  $("dvGuiaBtn").textContent = gs.length ? `+ Escanear guía ${gs.length+1} de ${s.qty||1}` : "+ Escanear guía";
   $("dvWho").textContent = [s.name, s.phone && s.phone.replace(/(\d{3})(\d{3})(\d{4})/,"$1 $2 $3"), s.notes].filter(Boolean).join(" · ");
   const nx = list[dvIdx+1];
   $("dvNext").textContent = nx ? "Después: " + (nx.label || nx.addr) : "Es la última parada.";

@@ -14,10 +14,10 @@ test("modo conducción de punta a punta", async ({ page }) => {
   await expect(page.locator("#drive")).toBeVisible();
   await expect(page.locator("#dvAddr")).toHaveText("Calle 145 # 103B-90");
   await expect(page.locator("#dvQty")).toContainText("2 pedidos en esta dirección");
-  // Número de pedido (guía) con etiqueta
-  await expect(page.locator("#dvGuia")).toContainText("Pedido");
-  await expect(page.locator("#dvGuia .num")).toHaveText("1111222233334444");
-  await expect(page.locator("#dvGuiaBtn")).toContainText("Escanear pedido 2 de 2");   // 2 paquetes y 1 guía
+  // Número de orden en la ruta (el mismo de la lista) y la guía debajo
+  await expect(page.locator("#dvGuia .orden")).toHaveText("1");
+  await expect(page.locator("#dvGuia .gs")).toContainText("1111222233334444");
+  await expect(page.locator("#dvGuiaBtn")).toContainText("Escanear guía 2 de 2");   // 2 paquetes y 1 guía
   // Llamar abre el marcador con el número
   await page.evaluate(() => { window._marcado = null; window.dial = n => { window._marcado = n; }; });
   await page.click("#dvCall");
@@ -26,6 +26,8 @@ test("modo conducción de punta a punta", async ({ page }) => {
   await expect(page.locator("#dvNext")).toContainText("Carrera 110 # 152-30");
   // Saltar y volver
   await page.click("#dvNextBtn"); await expect(page.locator("#dvAddr")).toHaveText("Carrera 110 # 152-30");
+  await expect(page.locator("#dvGuia .orden")).toHaveText("2");
+  await expect(page.locator("#dvPos")).toHaveText("Parada 2 de 3");   // el total no cambia al avanzar
   await expect(page.locator("#dvGuia")).toContainText("1111222233334444".replace(/./g, "") + "5555666677778888");
   // Sin teléfono: el botón dice «Marcar» y abre el marcador vacío
   await expect(page.locator("#dvCall")).toHaveText("Marcar");
