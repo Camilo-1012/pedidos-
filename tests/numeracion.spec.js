@@ -23,10 +23,10 @@ test("números fijos en ruta y orden estable con GPS, entregas, No estaba y pedi
   const cargue = await pendientes(page);
   // Salida con GPS: no se revuelve el orden ni los números; muestra la dirección aproximada
   await page.click("#btnGps");
-  await expect(page.locator("#startInfo")).toContainText(/Cerca de (Calle|Carrera) \d+ # \d+-\d\d/);
+  await expect(page.locator("#startInfo")).toContainText(/Cerca de ≈ (Calle|Carrera) \d+ # \d+-\d\d/);
   await expect.poll(() => page.evaluate(() => !optimizing && !!state.startGPS)).toBe(true);
   expect(await pendientes(page)).toEqual(cargue);
-  await expect(page.locator("#routeSum")).toContainText(/Desde tu ubicación \(≈ (Calle|Carrera) /);
+  await expect(page.locator("#routeSum")).toContainText(/Desde ≈ (Calle|Carrera) /);
   // Entregar la 1: la siguiente sigue siendo la 2 (no pasa a ser «1»)
   await page.click("#list li.stop >> nth=0 >> button[data-act=done]");
   expect(await numsLista(page)).toEqual(["2", "3", "4", "5", "6"]);

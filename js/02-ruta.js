@@ -224,14 +224,16 @@ function orOpt(start, path, back){
 function currentOrigin(){
   const g = state.startGPS && state.startGPS.x!=null ? state.startGPS : null;
   const gpsOrigin = g ? {x:g.x, y:g.y, lat:g.lat, lng:g.lng, label:"Mi ubicación", gps:true, t:g.t} : null;
+  const sp = parseAddress(state.start);
   const done = state.stops.filter(s=>s.status==="done" && s.x!==null);
   if(done.length && state.lastDoneId){
     const ld = done.find(s=>s.id===state.lastDoneId);
-    // La ubicación GPS manda si se tomó después de la última entrega (p. ej. el repartidor se desvió).
-    if(ld && !(gpsOrigin && g.t > (ld.doneAt||0))) return {x:ld.x,y:ld.y,label:ld.label,lat:ld.lat,lng:ld.lng,id:ld.id};
+    // La ubicación GPS o la dirección escrita mandan si se pusieron después de la última entrega
+    // (p. ej. el repartidor se desvió o empieza otra vuelta desde otro lado).
+    const t = ld ? (ld.doneAt||0) : 0;
+    if(ld && !(gpsOrigin && g.t > t) && !(sp && (state.startAt||0) > t)) return {x:ld.x,y:ld.y,label:ld.label,lat:ld.lat,lng:ld.lng,id:ld.id};
   }
   if(gpsOrigin) return gpsOrigin;
-  const sp = parseAddress(state.start);
   if(!sp){
     // Sin punto de partida: se arranca por la entrada a la zona de trabajo (si está activa).
     const z = zone();

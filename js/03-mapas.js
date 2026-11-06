@@ -200,12 +200,16 @@ async function findBarrio(name){
   return list.length ? barrioCache[key] : null;
 }
 // Posición aproximada en la cuadrícula (calle/carrera) a partir de lat/lng, para que el orden aproximado también funcione.
+// Sin internet: calle y carrera aproximadas del GPS, con los puntos conocidos más cercanos (esquinas del mapa ya
+// ubicadas y direcciones aprendidas al entregar). Con internet se confirma con los nombres de las calles (cruceDeGps).
 function inverseEstimate(lat, lng){
   const pts = SEED.map(r=>({x:r[0],y:r[1],lat:r[2],lng:r[3],w:0.3}));
   for(const k in geoCache){ const c = geoCache[k]; if(c.src==="osm" && c.x!=null) pts.push({x:c.x,y:c.y,lat:c.lat,lng:c.lng,w:1}); }
+  for(const k in learned){ const pa = parseAddress(k), L = learned[k]; if(pa && L.acc <= LEARN_ACC) pts.push({x:pa.x,y:pa.y,lat:L.lat,lng:L.lng,w:2}); }
   const AtA=[[0,0,0],[0,0,0],[0,0,0]], bx=[0,0,0], by=[0,0,0];
   for(const p of pts){
-    const d = meters(p,{lat,lng})/1000, w = p.w/(1+(d/2)*(d/2)), v=[1,p.lat,p.lng];
+    // Peso local: los puntos a menos de ~1 km mandan; los lejanos solo ayudan si no hay cercanos.
+    const d = meters(p,{lat,lng})/1000, w = p.w/(1+(d/0.8)**4), v=[1,p.lat,p.lng];
     for(let i=0;i<3;i++){ for(let j=0;j<3;j++) AtA[i][j]+=w*v[i]*v[j]; bx[i]+=w*v[i]*p.x; by[i]+=w*v[i]*p.y; }
   }
   const a = solve3(AtA,bx), b = solve3(AtA,by);
@@ -221,16 +225,52 @@ function direccionAprox(p){
     ? `Calle ${cl} # ${Math.floor(p.x)}-${placa(p.x)}`
     : `Carrera ${kr} # ${Math.floor(p.y)}-${placa(p.y)}`;
 }
-// Con internet: barrio (y dirección, si el mapa la tiene) del punto, según OpenStreetMap. Una consulta por toque del botón.
+// Con internet: la calle y la carrera más cercanas al GPS, por sus nombres en OpenStreetMap («Carrera 149C con Calle 137»).
+// Devuelve también x, y en la cuadrícula de la app, para que el orden sin internet y los sectores partan del lugar correcto.
+const VIA_NOMBRE = /^(AVENIDA CALLE|AVENIDA CARRERA|AV\.? CALLE|AV\.? CARRERA|CALLE|CARRERA|DIAGONAL|TRANSVERSAL|AC|AK|CL|CLL|KR|CRA|DG|TV)\.?\s+(\d{1,3}(?:\s?[A-H])?(?:\s?BIS)?(?:\s?[A-H])?)(?:\s+(SUR|ESTE))?(?![\dA-Z])/;
+function viaDeNombre(n){
+  const t = String(n||"").toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/\s+/g," ").trim();
+  const m = VIA_NOMBRE.exec(t); if(!m) return null;
+  const v = viaInfo(m[1]); if(!v) return null;
+  // El nombre con el mismo formato que las direcciones de la app («Carrera 149C», «Calle 136A Bis»).
+  const pa = parseAddress(`${m[1]} ${m[2]}${m[3] ? " " + m[3] : ""} # 1-01`);
+  return pa ? {axis: v.axis, nombre: pa.label.split(" # ")[0], num: m[2] + (m[3] ? " " + m[3] : "")} : null;
+}
+function metrosAVia(p, geom){
+  const kx = 111320*Math.cos(p.lat*Math.PI/180), ky = 110540;
+  let best = Infinity;
+  for(let i=1;i<geom.length;i++){
+    const ax = (geom[i-1].lon-p.lng)*kx, ay = (geom[i-1].lat-p.lat)*ky, bx = (geom[i].lon-p.lng)*kx, by = (geom[i].lat-p.lat)*ky;
+    const dx = bx-ax, dy = by-ay, L = dx*dx+dy*dy, u = L ? Math.max(0, Math.min(1, -(ax*dx+ay*dy)/L)) : 0;
+    best = Math.min(best, Math.hypot(ax+u*dx, ay+u*dy));
+  }
+  return best;
+}
+async function cruceDeGps(lat, lng){
+  const j = await overpass(`[out:json][timeout:12];way(around:180,${lat},${lng})["highway"]["name"];out tags geom;`);
+  let calle = null, carrera = null;
+  for(const w of j.elements||[]){
+    if(!w.geometry || w.geometry.length < 2) continue;
+    const tg = w.tags||{};
+    const v = [tg.name, tg.alt_name, tg.official_name, tg.old_name].map(viaDeNombre).find(Boolean);
+    if(!v) continue;
+    const d = metrosAVia({lat,lng}, w.geometry);
+    if(v.axis==="calle"){ if(!calle || d < calle.d) calle = {...v, d}; }
+    else if(!carrera || d < carrera.d) carrera = {...v, d};
+  }
+  if(!calle && !carrera) return null;
+  const pa = calle && carrera ? parseAddress(`${carrera.nombre} # ${calle.num}-01`) : null;
+  const pri = !calle ? carrera : !carrera ? calle : (calle.d <= carrera.d ? calle : carrera), otro = pri===calle ? carrera : calle;
+  return {texto: otro ? `${pri.nombre} con ${otro.nombre}` : pri.nombre, x: pa ? pa.x : null, y: pa ? pa.y : null};
+}
+// Con internet: barrio del punto, según OpenStreetMap. Una consulta por toque del botón.
 async function lugarDeGps(lat, lng){
   const ctl = new AbortController(), to = setTimeout(()=>ctl.abort(), 7000);
   try{
     const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1&accept-language=es`, {signal: ctl.signal});
     if(!r.ok) return null;
     const a = (await r.json()).address || {};
-    const barrio = a.neighbourhood || a.quarter || a.suburb || "";
-    const dir = a.road && a.house_number ? `${a.road} # ${String(a.house_number).replace(/^#\s*/, "")}` : "";
-    return {barrio, dir};
+    return {barrio: a.neighbourhood || a.quarter || a.suburb || ""};
   }catch(e){ return null; } finally { clearTimeout(to); }
 }
 async function checkBarrios(onProgress){

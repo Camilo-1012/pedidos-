@@ -12,7 +12,14 @@ $("btnSort").onclick = ()=>{
   if(!state.stops.some(s=>s.status==="done" || s.status==="fail")) state.renumerar = true;
   optimize(false).finally(()=>{ state.renumerar = false; save(); render(); });
 };
-$("start").addEventListener("change", e=>{ state.start = e.target.value.trim(); if(state.start) state.startGPS = null; save(); optimize(true); });
+// Dirección de partida escrita: manda sobre la última entrega si se escribe después (state.startAt).
+$("start").addEventListener("change", e=>{
+  state.start = e.target.value.trim(); state.startAt = Date.now();
+  if(state.start) state.startGPS = null;
+  save(); render();
+  if(state.start && !parseAddress(state.start)) toast("No reconozco esa dirección; no se está usando. Escríbela así: Carrera 149C # 137-20.");
+  else optimize(true, {estable:true});
+});
 // Punto de partida por GPS: la posición exacta del celular. Se puede volver a tocar a mitad de ruta para recalcular desde donde se está.
 $("btnGps").onclick = ()=>{
   if(!navigator.geolocation){ toast("Este celular no permite usar la ubicación aquí."); return; }
@@ -26,16 +33,22 @@ $("btnGps").onclick = ()=>{
     if(!state.salidaAt) state.salidaAt = Date.now();   // salida a ruta (para el Excel)
     state.start = ""; $("start").value = "";
     save(); render();
-    const dirTxt = state.startGPS.dir ? ` Estás cerca de ${state.startGPS.dir}.` : "";
-    toast(accuracy>300 ? "Ubicación tomada, pero poco precisa. Activa el GPS para mejorarla." + dirTxt : "Ubicación tomada." + dirTxt);
+    toast(accuracy>300 ? "Ubicación tomada, pero poco precisa. Activa el GPS para mejorarla." : navigator.onLine ? "Ubicación tomada. Buscando en qué calle estás…" : `Ubicación tomada. Sin internet: cerca de ≈ ${state.startGPS.dir || "?"} (aproximado).`);
     // En ruta no se revuelve el orden del vehículo (ver estabilizar en js/02-ruta.js); si conviene reordenar, se avisa.
     optimize(true, {estable:true});
-    // Barrio y dirección según el mapa (con internet); si no responde, queda la aproximada.
-    if(navigator.onLine) lugarDeGps(lat, lng).then(l=>{
-      const g = state.startGPS; if(!l || !g || g.t !== t) return;
-      if(l.barrio) g.barrio = l.barrio;
-      if(l.dir) g.dirMapa = l.dir;
-      save(); render();
+    if(!navigator.onLine) return;
+    // Calle y carrera reales según el mapa (corrige la estimación) y barrio.
+    cruceDeGps(lat, lng).then(c=>{
+      const g = state.startGPS; if(!g || g.t !== t) return;
+      if(!c){ toast(`No encontré el nombre de la calle en el mapa. Aproximado: ${g.dir || "sin dato"}.`); return; }
+      g.cruce = c.texto;
+      if(c.x != null){ g.x = c.x; g.y = c.y; g.dir = ""; }
+      save(); render(); toast("Estás en " + c.texto + ".");
+      if(c.x != null) optimize(true, {estable:true});
+    }).catch(()=>{ const g = state.startGPS; if(g && g.t === t) toast(`El mapa no respondió. Ubicación aproximada: ${g.dir || "sin dato"}.`); });
+    lugarDeGps(lat, lng).then(l=>{
+      const g = state.startGPS; if(!l || !g || g.t !== t || !l.barrio) return;
+      g.barrio = l.barrio; save(); render();
     });
   }, err=>{
     btn.disabled = false; btn.textContent = state.startGPS ? "Actualizar mi ubicación" : "Usar mi ubicación actual";
@@ -183,7 +196,7 @@ $("restoreFile").addEventListener("change", async e=>{
 /* ============ App instalable y sin conexión ============ */
 // Al bloquear: apaga la cámara y cierra ventanas abiertas para que no queden datos a la vista.
 window.RUTA_onLock = ()=>{ try{ stopScan(); }catch(e){} };
-const APP_VERSION = "2.14";
+const APP_VERSION = "2.15";
 $("ver").textContent = "Versión " + APP_VERSION + ". Funciona sin internet una vez abierta la primera vez.";
 if(navigator.storage && navigator.storage.estimate){
   navigator.storage.estimate().then(e=>{ if(e && e.usage) $("ver").textContent += ` Espacio usado en este celular: ${(e.usage/1048576).toFixed(1).replace(".",",")} MB (la mayor parte es el lector de etiquetas).`; }).catch(()=>{});

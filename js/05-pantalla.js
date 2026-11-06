@@ -112,7 +112,7 @@ function render(){
   $("realRoads").checked = state.realRoads !== false;
   // Resumen de las opciones cuando el bloque está oculto.
   const parts = [];
-  parts.push(state.startGPS ? "Desde tu ubicación" + ((state.startGPS.dirMapa || state.startGPS.dir) ? " (≈ " + (state.startGPS.dirMapa || state.startGPS.dir) + ")" : "") : state.start ? "Desde " + state.start : (zone().on && zone().entry ? "Entrada por " + (ZONE_ENTRIES[zone().entry]||"la zona").replace(/ \(.*\)$/,"") : "Sin punto de partida"));
+  parts.push(currentOrigin() && currentOrigin().id ? "Desde tu última entrega" : state.startGPS ? "Desde " + (state.startGPS.cruce || (state.startGPS.dir ? "≈ " + state.startGPS.dir : "tu ubicación")) : state.start ? "Desde " + state.start : (zone().on && zone().entry ? "Entrada por " + (ZONE_ENTRIES[zone().entry]||"la zona").replace(/ \(.*\)$/,"") : "Sin punto de partida"));
   parts.push(esMoto() ? "en moto" : "en carro");
   if(state.byZone) parts.push("por zona ST");
   if(state.roundTrip) parts.push("con regreso");
@@ -148,15 +148,23 @@ function render(){
   $("byZone").checked = !!state.byZone;
   const g = state.startGPS;
   $("btnGpsClear").hidden = !g;
+  // Punto de partida: qué se está usando de verdad para calcular la ruta.
+  const o = currentOrigin();
+  const sigue = o && o.id ? ` Ojo: la ruta sigue desde tu última entrega (${o.label}), que es más reciente. Si ya no estás ahí, toca «Actualizar mi ubicación».` : "";
+  let info = "", mal = false;
   if(g){
-    const d = g.dirMapa || g.dir || (g.x!=null ? direccionAprox(g) : "");
-    const near = d ? ` Cerca de ${d}${g.barrio ? " (" + g.barrio + ")" : ""}.` : (g.barrio ? ` Barrio ${g.barrio}.` : "");
-    $("startInfo").textContent = `Arrancas desde tu ubicación (precisión ±${g.acc} m, tomada a las ${hhmm(g.t)}).${near}` + (g.acc>300 ? " La precisión es baja: activa el GPS del celular y vuelve a tocar el botón." : "");
+    const lugar = g.cruce ? `Estás en ${g.cruce} (según el mapa)` : g.dir ? `Cerca de ≈ ${g.dir} (aproximado${navigator.onLine ? ", confirmando en el mapa…" : ", sin internet"})` : "Sin dirección aproximada";
+    info = `${lugar}${g.barrio ? ", barrio " + g.barrio : ""}. Precisión ±${g.acc} m, tomada a las ${hhmm(g.t)}`.replace(/\.?$/, ".") + (g.acc>300 ? " La precisión es baja: activa el GPS y vuelve a tocar el botón." : "");
+  } else if(state.start){
+    if(sp) info = `✓ Se usa como punto de partida: ${sp.label}.`;
+    else { info = `✗ No reconozco «${state.start}»: no se está usando. Escríbela así: Carrera 149C # 137-20.`; mal = true; }
   } else {
     const z = zone();
-    $("startInfo").textContent = state.start ? (sp ? "Ubicado: " + sp.label : "No reconozco esa dirección; se ordenará sin punto de partida.")
-      : (z.on && z.entry ? `Sin punto de partida: se arranca por ${ZONE_ENTRIES[z.entry]}. Mejor usa «Usar mi ubicación actual» al salir.` : "Opcional. Sin punto de partida, la app elige el recorrido más corto.");
+    info = z.on && z.entry ? `Sin punto de partida: se arranca por ${ZONE_ENTRIES[z.entry]}. Mejor usa «Usar mi ubicación actual» al salir.` : "Opcional. Sin punto de partida, la app elige el recorrido más corto.";
   }
+  $("startInfo").textContent = info + sigue;
+  $("startInfo").style.color = mal || sigue ? "var(--warn)" : "";
+  $("startInfo").style.fontWeight = mal || sigue ? "600" : "";
 
   // Pendientes en la lista principal; las entregadas, en «Pedidos entregados» (desplegable, recogida por defecto).
   const doneStops = state.stops.filter(s=>s.status==="done");
