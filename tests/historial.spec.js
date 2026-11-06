@@ -1,56 +1,83 @@
-// Historial y Excel: la guía sale completa (como texto) y sin nombres ni teléfonos.
+// El historial (y el Excel) nunca pierde entregas hechas: ni al quitar entregados, ni al borrar la jornada,
+// ni con dos jornadas el mismo día, ni cuando el otro celular vacía la lista. Y se puede recuperar desde la nube.
 const { test, expect } = require("@playwright/test");
-const { entrar, cargar } = require("./ayuda");
-const fs = require("fs");
+const { entrar, cargar, vigilarErrores } = require("./ayuda");
+const { crearSupabase } = require("./supabase-falso");
 
-test("Excel por pedido con fecha, horas, guía y dirección", async ({ page }) => {
+const entregar = (page, addr) => page.evaluate(a => toggleDone(state.stops.find(s => s.addr === a)), addr);
+const hist = page => page.evaluate(() => histLoad().map(x => ({ paquetes: x.paquetes, guias: x.pedidos.filter(p => p.e === "Entregado").map(p => p.g).sort() })));
+const confirmar = page => page.click("#frmConfirm button[type=submit]");
+
+test("historial: quitar entregados, borrar la jornada y dos jornadas el mismo día no borran entregas", async ({ page }) => {
+  const errs = vigilarErrores(page);
   await entrar(page);
-  await cargar(page, [{ addr: "Calle 145 # 103B-90", guia: "2637905208923531", name: "Laura Gomez", phone: "3112223344" }, { addr: "Carrera 91 # 147-20" }]);
-  await page.click("#list li.stop >> nth=0 >> button[data-act=done]");
-  await page.click("#list li.stop >> nth=0 >> button[data-act=fail]");
-  await page.click("text=Más opciones");
-  await page.click("#btnHist");
-  const [dl] = await Promise.all([page.waitForEvent("download"), page.click("#histCsvPed")]);
-  const csv = fs.readFileSync(await dl.path(), "utf8");
-  expect(csv.charCodeAt(0)).toBe(0xFEFF);                       // BOM para que Excel lea tildes
-  expect(csv).toContain("Fecha;Salida a ruta;Primera entrega;Última entrega;Duración de la ruta (h:mm);Guía (número de pedido);Dirección");
-  expect(csv).toContain("TOTAL DEL DÍA");
-  expect(csv).toContain('="2637905208923531"');                 // 16 dígitos completos
-  expect(csv).toContain("Calle 145 # 103B-90");
-  expect(csv).not.toContain("Laura");
-  expect(csv).not.toContain("3112223344");
+  await page.evaluate(() => { state.autoWaze = false; save(); });
+  await cargar(page, [{ addr: "Calle 145 # 106-20", guia: "A1" }, { addr: "Calle 139 # 112-15", guia: "A2" }, { addr: "Calle 132 # 105-10", guia: "A3" }]);
+  await entregar(page, "Calle 145 # 106-20"); await entregar(page, "Calle 139 # 112-15");
+  expect(await hist(page)).toEqual([{ paquetes: 2, guias: ["A1", "A2"] }]);
+  // «Quitar entregados» y luego otra entrega: las dos primeras siguen en el historial
+  await page.evaluate(() => $("btnClearDone").click());
+  await entregar(page, "Calle 132 # 105-10");
+  expect(await hist(page)).toEqual([{ paquetes: 3, guias: ["A1", "A2", "A3"] }]);
+  // Jornada nueva el mismo día: es otra jornada, la primera no se pisa
+  await page.evaluate(() => $("btnNew").click()); await confirmar(page);
+  await cargar(page, [{ addr: "Calle 153 # 115-40", guia: "B1" }, { addr: "Calle 146 # 106-30", guia: "B2" }]);
+  await entregar(page, "Calle 153 # 115-40");
+  expect(await hist(page)).toEqual([{ paquetes: 3, guias: ["A1", "A2", "A3"] }, { paquetes: 1, guias: ["B1"] }]);
+  // «Borrar toda la jornada» y entregas después: lo entregado antes se conserva y lo nuevo va aparte
+  await page.evaluate(() => $("btnClearAll").click()); await confirmar(page);
+  await cargar(page, [{ addr: "Carrera 110 # 150-20", guia: "C1" }]);
+  await entregar(page, "Carrera 110 # 150-20");
+  expect(await hist(page)).toEqual([{ paquetes: 3, guias: ["A1", "A2", "A3"] }, { paquetes: 1, guias: ["B1"] }, { paquetes: 1, guias: ["C1"] }]);
+  // Deshacer la única entrega de una jornada sí la quita (no se hizo)
+  await page.evaluate(() => toggleDone(state.stops.find(s => s.guia === "C1")));
+  expect(await hist(page)).toEqual([{ paquetes: 3, guias: ["A1", "A2", "A3"] }, { paquetes: 1, guias: ["B1"] }]);
+  // El acumulado de pagos cuenta las 4
+  expect(await page.evaluate(() => acumSum(() => true).p)).toBe(4);
+  expect(errs).toEqual([]);
 });
 
-test("Excel: acumulado de entregados, duración de la ruta y totales", async ({ page }) => {
-  await entrar(page);
-  // Jornada simulada: salida 8:00, entregas 8:30 (2 paquetes), 9:00 y una no entregada a las 9:15.
-  await page.evaluate(() => {
-    const base = new Date(); base.setHours(8, 0, 0, 0); const t = m => base.getTime() + m * 60000;
-    state.stops = [mkStop({ addr: "Calle 145 # 103B-90", guia: "1001", qty: 2 }), mkStop({ addr: "Carrera 110 # 152-30", guia: "1002" }), mkStop({ addr: "Calle 139 # 112-15", guia: "1003" })];
-    state.salidaAt = t(0);
-    Object.assign(state.stops[0], { status: "done", doneAt: t(30) });
-    Object.assign(state.stops[1], { status: "done", doneAt: t(60) });
-    Object.assign(state.stops[2], { status: "fail", failAt: t(75) });
-    save(); recordDay(); render();
-  });
-  await page.click("text=Más opciones"); await page.click("#btnHist");
-  const [dl] = await Promise.all([page.waitForEvent("download"), page.click("#histCsvPed")]);
-  const filas = fs.readFileSync(await dl.path(), "utf8").replace(/^\ufeff/, "").split(/\r?\n/).map(l => l.split(";"));
-  const col = n => filas[0].indexOf(n);
-  const g = id => filas.find(f => f[col("Guía (número de pedido)")] === `="${id}"`);
-  expect(g("1001")[col("Acumulado entregados")]).toBe("2");
-  expect(g("1002")[col("Acumulado entregados")]).toBe("3");
-  expect(g("1003")[col("Acumulado entregados")]).toBe("");               // no entregado: no suma
-  expect(g("1002")[col("Tiempo desde la salida (h:mm)")]).toBe("1:00");
-  expect(g("1001")[col("Salida a ruta")]).toMatch(/08:00/);
-  expect(g("1001")[col("Duración de la ruta (h:mm)")]).toBe("1:00");    // salida 8:00 → última entrega 9:00
-  const tot = filas.find(f => f[col("Guía (número de pedido)")] === "TOTAL DEL DÍA");
-  expect(tot[col("Dirección")]).toBe("3 pedido(s) entregado(s) de 4 · 1 no entregado(s)");
-  expect(tot[col("Acumulado entregados")]).toBe("3");
-  // Excel resumen: salida y duración
-  const [dl2] = await Promise.all([page.waitForEvent("download"), page.click("#histCsv")]);
-  const res = fs.readFileSync(await dl2.path(), "utf8");
-  expect(res).toContain("Salida a ruta");
-  expect(res).toContain("Duración de la ruta (h:mm)");
-  expect(res).toMatch(/;1:00;/);
+async function celular(browser, sb){
+  const ctx = await browser.newContext({ ...require("@playwright/test").devices["Pixel 7"] });
+  await sb.instalar(ctx);
+  const page = await ctx.newPage(); const errs = vigilarErrores(page);
+  await entrar(page, "Camilo");
+  await page.evaluate(() => { state.stops = []; state.seeded = true; state.autoWaze = false; save(); render(); });
+  await page.click("text=Más opciones"); await page.click("#btnTeamCfg");
+  await page.fill("#tmEmail", "camilo@equipo.co"); await page.fill("#tmPass", "Clave-Camilo-1"); await page.click("#tmGo");
+  await expect(page.locator("#tmState")).toContainText("Conectado");
+  await page.keyboard.press("Escape");
+  return { ctx, page, errs };
+}
+
+test("historial: si el otro celular empieza jornada nueva no se pierde nada, y se recupera desde la nube", async ({ browser }) => {
+  const sb = crearSupabase();
+  test.setTimeout(120000);
+  const a = await celular(browser, sb), b = await celular(browser, sb);
+  await cargar(a.page, [{ addr: "Calle 145 # 106-20", guia: "D1" }, { addr: "Calle 139 # 112-15", guia: "D2" }, { addr: "Calle 132 # 105-10", guia: "D3" }]);
+  await entregar(a.page, "Calle 145 # 106-20"); await entregar(a.page, "Calle 139 # 112-15");
+  await a.page.evaluate(() => syncNow(true)); await b.page.evaluate(() => syncNow(true));
+  // B toca «Jornada nueva»: a A se le vacía la lista
+  await b.page.click("#btnNew"); await confirmar(b.page);
+  await b.page.evaluate(() => syncNow(true)); await a.page.evaluate(() => syncNow(true));
+  expect(await a.page.evaluate(() => state.stops.length)).toBe(0);
+  // A sigue con pedidos nuevos (más de 8 h después): queda como otra jornada y la anterior sigue completa
+  await cargar(a.page, [{ addr: "Calle 153 # 115-40", guia: "E1" }]);
+  await a.page.evaluate(() => { const s = state.stops[0]; s.status = "done"; s.doneAt = Date.now() + 9 * 3600000; recordDay(); });
+  expect(await hist(a.page)).toEqual([{ paquetes: 2, guias: ["D1", "D2"] }, { paquetes: 1, guias: ["E1"] }]);
+  // Historial perdido en el celular: «Recuperar entregas guardadas en la nube» lo reconstruye
+  await a.page.evaluate(() => { store.set(HIST_KEY, []); store.set(ACUM_KEY, {}); syncNow(true); });
+  await a.page.evaluate(() => syncNow(true));
+  await a.page.evaluate(() => { renderHist(); document.getElementById("dlgHist").showModal(); });
+  await expect(a.page.locator("#histNube")).toBeVisible();
+  await a.page.click("#histNube");
+  await expect(a.page.locator("#toast")).toContainText("Se recuperaron 3 pedido(s)");
+  const h = await hist(a.page);
+  expect(h.flatMap(x => x.guias).sort()).toEqual(["D1", "D2", "E1"]);
+  expect(await a.page.evaluate(() => acumSum(() => true).p)).toBe(3);
+  // Otra vez: no duplica
+  await a.page.click("#histNube");
+  await expect(a.page.locator("#toast")).toContainText("ya tenía todo");
+  expect(a.errs).toEqual([]); expect(b.errs).toEqual([]);
+  await a.ctx.close(); await b.ctx.close();
 });

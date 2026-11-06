@@ -80,18 +80,20 @@ function updateComparison(){
 const HIST_KEY = "rutaEntregas.u." + USER.id + ".hist.v1", HIST_DAYS = 90;
 function histLoad(){ return store.get(HIST_KEY) || []; }
 function ymd(t){ const d = new Date(t); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
-function pedidosDelDia(){
+function pedidosDelDia(){ return pedidosDe(state.stops); }
+function pedidosDe(lista){
   const out = [];
-  const rows = state.stops.filter(s=>!s.example && (s.status==="done" || s.status==="fail" || s.status==="pend"))
+  const rows = lista.filter(s=>!s.example && (s.status==="done" || s.status==="fail" || s.status==="pend"))
     .sort((a,b)=>(a.doneAt||a.failAt||9e15)-(b.doneAt||b.failAt||9e15));
   for(const s of rows){
     const est = s.status==="done" ? "Entregado" : s.status==="fail" ? "No entregado" : "Pendiente";
     const h = s.status==="done" ? s.doneAt : s.status==="fail" ? s.failAt : null;
     const gs = guias(s), q = s.qty||1;
     const d = s.label || s.addr || "", u = unitText(s, " ");
-    if(!gs.length){ out.push({g:"", d, u, e:est, h, q}); continue; }
+    // i = id de la parada: sirve para no perder pedidos de la jornada si la parada se borra de la lista (ver recordDay).
+    if(!gs.length){ out.push({i:s.id, g:"", d, u, e:est, h, q}); continue; }
     // Varias guías en la misma parada: una fila por guía (los paquetes de más quedan en la última).
-    gs.forEach((g,i)=>out.push({g, d, u, e:est, h, q: i===gs.length-1 ? Math.max(1, q-(gs.length-1)) : 1}));
+    gs.forEach((g,k)=>out.push({i:s.id, g, d, u, e:est, h, q: k===gs.length-1 ? Math.max(1, q-(gs.length-1)) : 1}));
   }
   return out;
 }
@@ -109,7 +111,7 @@ function daySummary(){
   // primera entrega y el mismo turno (máx. 8 h antes); si no, la ruta se mide desde la primera entrega.
   const salida = state.salidaAt && state.salidaAt <= t0 && t0 - state.salidaAt < 8*3600000 ? state.salidaAt : null;
   return {
-    id: state.dayId || ymd(t0), fecha: ymd(t0), salida,
+    id: state.dayId || nuevaJornadaId(t0), fecha: ymd(t0), salida,
     duracionRutaMin: Math.round((t1 - (salida || t0))/60000),
     entregas: done.length, paquetes: q(done), noEntregadas: fail.length, paqNoEntregados: q(fail), pendientes: pend.length,
     inicio: t0, fin: t1, minutos: Math.round((t1-t0)/60000),
@@ -162,17 +164,81 @@ function renderPace(){ const t = paceText(); $("pace").hidden = !t; $("pace").te
 setInterval(()=>{ if(document.visibilityState==="visible") renderPace(); }, 60000);
 // Paquetes por hora de una jornada del historial (null si fue muy corta para medir).
 const dayRate = x => x.minutos >= 20 && x.paquetes > 1 ? x.paquetes / (x.minutos/60) : null;
+// Id de una jornada: fecha + hora de la primera entrega. Así dos jornadas del mismo día no se pisan.
+const nuevaJornadaId = t0 => ymd(t0) + "-" + Math.round(t0);
+// Une el resumen nuevo con lo que ya estaba guardado de esa jornada: los pedidos de paradas que ya no están en la
+// lista (se borraron, o se quitaron desde el otro celular) se conservan; los demás se toman como están ahora.
+// Así el historial nunca pierde entregas que sí se hicieron.
+function unirJornada(prev, sum){
+  const hoy = new Set(state.stops.map(s=>s.id)), dirsHoy = new Set(state.stops.map(s=>s.label || s.addr));
+  const nuevos = sum ? sum.pedidos : [];
+  const clave = p => p.g + "|" + p.d;
+  const yaEsta = new Set(nuevos.map(clave));
+  // Filas viejas sin id de parada (versiones anteriores): se conservan si esa dirección ya no está en la lista.
+  const guardar = (prev && prev.pedidos || []).filter(p=>p.i ? !hoy.has(p.i) : !yaEsta.has(clave(p)) && !dirsHoy.has(p.d));
+  if(!guardar.length) return sum;
+  return armarJornada({...(sum || prev), id: prev.id}, [...guardar, ...nuevos], prev);
+}
+// Rehace los totales de una jornada a partir de sus pedidos (al unir o al recuperar desde la nube).
+function armarJornada(base, pedidos, prev){
+  const ped = pedidos.slice().sort((a,b)=>(a.h||9e15)-(b.h||9e15));
+  const ent = ped.filter(p=>p.e==="Entregado"), no = ped.filter(p=>p.e==="No entregado");
+  if(!ent.length && !no.length) return null;
+  const q = arr => arr.reduce((a,p)=>a+(p.q||1),0), dirs = arr => new Set(arr.map(p=>p.d)).size;
+  const horas = [...ent, ...no].map(p=>p.h).filter(Boolean);
+  const inicio = Math.min(prev && prev.inicio || 9e15, base.inicio || 9e15, ...horas), fin = Math.max(prev && prev.fin || 0, base.fin || 0, ...horas);
+  return {...base, fecha: ymd(inicio), inicio, fin, minutos: Math.round((fin-inicio)/60000),
+    duracionRutaMin: Math.round((fin - (base.salida && base.salida <= inicio ? base.salida : inicio))/60000),
+    entregas: dirs(ent), paquetes: q(ent), noEntregadas: dirs(no), paqNoEntregados: q(no), pendientes: base.pendientes || 0,
+    promEntreEntregas: ent.length > 1 ? Math.round((fin-inicio)/60000/(ent.length-1)) : null, pedidos: ped};
+}
+// Agrega al historial pedidos entregados (o no entregados) que no estén en él, agrupados por fecha. Devuelve cuántos agregó.
+// Se usa para recuperar desde la nube lo que se perdió del historial de este celular (ver js/11-equipo.js).
+function agregarAlHistorial(paradas){
+  let h = histLoad(), n = 0;
+  const porFecha = new Map();
+  for(const p of pedidosDe(paradas)){ if(!p.h) continue; const f = ymd(p.h); if(!porFecha.has(f)) porFecha.set(f, []); porFecha.get(f).push(p); }
+  for(const [f, filas] of porFecha){
+    const delDia = h.filter(x=>(x.fecha || ymd(x.inicio)) === f);
+    const ids = new Set(delDia.flatMap(x=>(x.pedidos||[]).map(p=>p.i).filter(Boolean)));
+    const claves = new Set(delDia.flatMap(x=>(x.pedidos||[]).map(p=>p.g + "|" + p.d)));
+    const faltan = filas.filter(p=>!ids.has(p.i) && !claves.has(p.g + "|" + p.d));
+    if(!faltan.length) continue;
+    const dest = delDia.sort((a,b)=>b.inicio-a.inicio)[0];
+    const x = dest ? armarJornada(dest, [...(dest.pedidos||[]), ...faltan], dest)
+                   : armarJornada({id: f + "-nube", fecha: f, salida: null, recuperada: true}, faltan, null);
+    if(!x) continue;
+    h = h.filter(y=>y.id!==x.id); h.push(x); acumPut(x); n += faltan.length;
+  }
+  if(n){ h.sort((a,b)=>a.inicio-b.inicio); store.set(HIST_KEY, h); }
+  return n;
+}
 // Guarda (o actualiza) el resumen del día en curso. Se llama al entregar, al marcar «No estaba» y al empezar una jornada nueva.
 function recordDay(){
   try{
-    const sum = daySummary();
+    let sum = daySummary();
+    let h = histLoad();
+    // Jornada vieja que quedó abierta (p. ej. se vació la lista desde el otro celular y no se tocó «Jornada nueva»):
+    // si nada de lo que hay ahora está en ella y su última entrega fue hace más de 8 h, se empieza otra.
+    if(state.dayId && sum){
+      const prev = h.find(x=>x.id===state.dayId);
+      const ids = new Set(sum.pedidos.map(p=>p.i));
+      if(prev && !(prev.pedidos||[]).some(p=>ids.has(p.i)) && sum.inicio - (prev.fin||0) > 8*3600000){
+        state.dayId = null; sum = daySummary();
+      }
+    }
+    const id = state.dayId || (sum && sum.id);
+    if(!id) return;
+    const prev = h.find(x=>x.id===id);
+    if(prev) sum = unirJornada(prev, sum);
     if(!sum){
       // Se deshicieron todas las entregas del día: el acumulado de hoy vuelve a cero (y el historial no lo guarda).
-      if(state.dayId){ const a = acumLoad(); if(a[state.dayId]){ delete a[state.dayId]; store.set(ACUM_KEY, a); } store.set(HIST_KEY, histLoad().filter(x=>x.id!==state.dayId)); }
+      const a = acumLoad(); if(a[id]){ delete a[id]; store.set(ACUM_KEY, a); }
+      store.set(HIST_KEY, h.filter(x=>x.id!==id));
       return;
     }
-    if(!state.dayId){ state.dayId = sum.id; }
-    let h = histLoad().filter(x=>x.id!==sum.id);
+    if(!state.dayId) state.dayId = sum.id;
+    h = h.filter(x=>x.id!==sum.id);
     h.push(sum);
     const limit = Date.now() - HIST_DAYS*864e5;
     h = h.filter(x=>x.inicio >= limit).sort((a,b)=>a.inicio-b.inicio).slice(-150);
@@ -189,6 +255,7 @@ function histTotals(h, days){
   return {n:sel.length, e, f, pq, efect: pq+pf ? Math.round(100*pq/(pq+pf)) : null, porHora: mins>0 ? (pq/(mins/60)).toFixed(1).replace(".",",") : null, ahorro};
 }
 function renderHist(){
+  const nube = document.getElementById("histNube"); if(nube) nube.hidden = !(typeof syncOn === "function" && syncOn());
   const h = histLoad().slice().reverse();
   const t7 = histTotals(h,7), t30 = histTotals(h,30);
   const line = (lbl,t) => t.n ? `<div><b>${lbl}:</b> ${t.n} jornada(s) · ${t.pq} pedidos entregados${t.efect!=null?` · efectividad ${t.efect} %`:""}${t.porHora?` · ${t.porHora} pedidos por hora`:""}${t.ahorro>0?` · ahorro estimado ${fmtKm(t.ahorro)}`:""}</div>` : `<div><b>${lbl}:</b> sin jornadas</div>`;

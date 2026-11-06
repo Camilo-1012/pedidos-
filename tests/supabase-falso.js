@@ -17,7 +17,7 @@ function crearSupabase(){
   const puedeVer = (uid, row) => miembro(uid) && (row.owner === uid || miembro(uid).admin);
   function filtrar(rows, params){
     for (const [k, v] of params){
-      if (["select", "order", "on_conflict"].includes(k)) continue;
+      if (["select", "order", "on_conflict", "limit", "offset"].includes(k)) continue;
       const [op, ...rest] = v.split("."); const val = rest.join(".");
       rows = rows.filter(r => {
         const x = r[k];

@@ -244,3 +244,26 @@ $("tmAdminBtn").onclick = ()=>renderTeam(true);
 $("btnTeamCfg").onclick = ()=>{ renderSync(); $("dlgTeam").showModal(); if(sync && sync.admin) renderTeam(true); };
 renderSync();
 if(syncOn()) setTimeout(()=>syncNow(false), 1500);
+
+/* ============ Recuperar el historial desde la nube ============ */
+// Las paradas borradas (jornada nueva, borrar) quedan en Supabase marcadas como borradas, con su estado y hora.
+// Con ellas se reconstruyen en el historial de este celular las entregas que falten (desde que se conectó el equipo).
+async function recuperarDeLaNube(){
+  if(!syncOn()){ toast("Conecta el equipo en la nube para recuperar."); return; }
+  const btn = document.getElementById("histNube"); btn.disabled = true; btn.textContent = "Buscando en la nube…";
+  try{
+    // Supabase entrega máximo 1000 filas por consulta: se pide por páginas.
+    const filas = [];
+    for(let desde = 0; desde < 50000; desde += 1000){
+      const pag = await sb(`paradas?select=id,data&owner=eq.${sync.uid}&order=id.asc&limit=1000&offset=${desde}`) || [];
+      filas.push(...pag); if(pag.length < 1000) break;
+    }
+    const paradas = filas.map(f=>({...f.data, id: f.id})).filter(s=>(s.status==="done" && s.doneAt) || (s.status==="fail" && s.failAt));
+    const n = agregarAlHistorial(paradas);
+    renderHist();
+    toast(n ? `Se recuperaron ${n} pedido(s) en el historial. Ya salen en el Excel.` : "El historial ya tenía todo lo que hay en la nube.");
+  }catch(e){
+    toast("No se pudo recuperar: " + (e && e.message || "sin conexión") + ".");
+  }finally{ btn.disabled = false; btn.textContent = "Recuperar entregas guardadas en la nube"; }
+}
+document.getElementById("histNube").onclick = recuperarDeLaNube;

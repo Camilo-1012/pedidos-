@@ -392,3 +392,8 @@ El optimizador ahora arma una tabla de costos una sola vez y calcula cada intent
 - Antes, tocar «Usar mi ubicación actual» al salir reordenaba toda la ruta desde ese punto y cambiaba el orden con que se había cargado el vehículo.
 - **Ubicación actual:** muestra la dirección aproximada («Cerca de Calle 145 # 106-60») y, con internet, el barrio según OpenStreetMap.
 - El número de parada es de cada celular (no se sincroniza): escribe los números en los paquetes con el celular con el que vas a conducir.
+
+## El historial no pierde entregas (v2.14)
+- **Error corregido:** el resumen de la jornada se rehacía solo con las paradas que había en la lista. Si se quitaban los entregados («Quitar los entregados»), se borraba la jornada, o el otro celular vaciaba la lista (jornada nueva allá), la siguiente entrega reescribía el día y desaparecían del historial, del Excel y del acumulado los pedidos ya entregados. Además, dos jornadas el mismo día usaban el mismo id y la segunda pisaba a la primera.
+- Ahora cada pedido del historial guarda el id de su parada: los de paradas que ya no están en la lista se conservan. Cada jornada tiene id propio (fecha + hora de la primera entrega). Si la lista se vació desde otro celular y pasan más de 8 h, lo nuevo va en otra jornada. Deshacer una entrega sí la quita.
+- **Recuperar entregas guardadas en la nube** (Historial, con el equipo conectado): reconstruye en el historial y el acumulado los pedidos entregados que estén en Supabase y falten en el celular (desde que se conectó el equipo). No duplica.
