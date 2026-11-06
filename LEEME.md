@@ -428,3 +428,7 @@ El optimizador ahora arma una tabla de costos una sola vez y calcula cada intent
 
 ### Ajuste v2.18.2
 - Un «No estaba» sin ninguna entrega ya no congela los números: la ruta en curso empieza solo con la primera entrega. Una lista que traía los números del cargue se renumera 1, 2, 3… al abrir la app.
+
+## La ruta ordenada no se desordena sola (v2.19)
+- Antes, hasta la primera entrega, cualquier recálculo automático reordenaba toda la ruta: al volver la señal (evento «online»), al editar una parada, al tomar el GPS, al llegar pedidos del otro celular, al cambiar carro/moto. Si en ese momento el servidor de rutas no respondía, quedaba el orden aproximado y se veía «desordenado».
+- Ahora, una vez ordenada la ruta, solo «Ordenar ruta» (y cambiar las opciones de la ruta: zona, sectores, ida y vuelta) reordena todo. Lo demás respeta el orden de la lista, incluidos los cambios a mano con ▲▼: los pedidos nuevos (y una parada a la que se le cambió la dirección) se insertan en su mejor lugar. Si reordenar todo ahorraría 5 % o más, se avisa en Ruta.

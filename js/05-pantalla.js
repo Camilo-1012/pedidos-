@@ -131,9 +131,9 @@ function render(){
     + "El orden de las paradas es el mismo para los dos: en las pruebas, el orden más corto en carro también fue el mejor en moto.";
   if(document.activeElement !== $("orsKey")) $("orsKey").value = state.orsKey || "";
   $("routeInfo").textContent = state.routeNote || "";
-  const mj = state.mejoraRuta && rutaEnCurso() ? state.mejoraRuta : null;
+  const mj = state.mejoraRuta && state.stops.some(s=>s.status!=="done") ? state.mejoraRuta : null;
   $("mejoraInfo").hidden = !mj;
-  $("mejoraInfo").textContent = mj ? `Hay un orden ${mj.pct} % más corto${mj.min ? ` (≈ ${mj.min} min menos)` : ""}. No se cambió para no revolver el vehículo; si quieres usarlo, toca «Ordenar ruta». Cada paquete conserva su número.` : "";
+  $("mejoraInfo").textContent = mj ? `Hay un orden ${mj.pct} % más corto${mj.min ? ` (≈ ${mj.min} min menos)` : ""}. No se cambió solo para no desordenar tu ruta; si quieres usarlo, toca «Ordenar ruta».${rutaEnCurso() ? " Cada paquete conserva su número." : ""}` : "";
   $("roundTrip").checked = !!state.roundTrip;
   drawMap();
   updateComparison();
@@ -395,18 +395,20 @@ $("frmEdit").addEventListener("submit", e=>{
     const r = addOrMerge(d);
     if(r.filled) toast(`Guía agregada a la parada que ya tenías: ${r.stop.label||r.stop.addr}.`);
     else if(r.merged) toast(`Misma dirección que otra parada: ahora son ${r.stop.qty} paquetes en ${r.stop.label||r.stop.addr}.`);
-    else toast(p ? "Paquete agregado y ruta reordenada." : "Agregado, pero la dirección quedó para revisar.");
+    else toast(p ? "Paquete agregado en su lugar de la ruta." : "Agregado, pero la dirección quedó para revisar.");
   } else {
     const dup = guias(d).find(g=>findGuia(g, editing.s));
     if(dup){ toast(`La guía ${dup} ya está en ${placeName(findGuia(dup, editing.s))}. Revísala.`); return; }
     const changed = (p?p.label:"") !== editing.s.label;
     Object.assign(editing.s, d, {x:p?p.x:null, y:p?p.y:null, label:p?p.label:"", example:false});
     if(changed || editing.s.geo==="barrio"){ editing.s.lat = null; editing.s.lng = null; editing.s.geo = null; }
+    // Si cambió la dirección, la parada se vuelve a ubicar en la ruta (las demás no se mueven).
+    if(changed && state.suggestedIds) state.suggestedIds = state.suggestedIds.filter(id=>id!==editing.s.id);
     editing.s.zoneCheck = null;
   }
   $("dlgEdit").close();
   save(); render();   // se ve de inmediato aunque haya un cálculo de ruta en curso
-  optimize(true, {estable: editing.isNew});
+  optimize(true, {estable: true});
   if(fromScan && state.scanLoop && editing.isNew) setTimeout(()=>startScan("label"), 600);
   fromScan = false;
 });
@@ -440,7 +442,7 @@ $("frmText").addEventListener("submit", e=>{
       ids.push(r.stop.id);
     });
     save(); render(); optimize(true, {estable:true});
-    toast(`${ok} ubicadas${bad?`, ${bad} para revisar`:""}${merged?`, ${merged} sumadas a una dirección repetida`:""}. Ruta ordenada.`);
+    toast(`${ok} ubicadas${bad?`, ${bad} para revisar`:""}${merged?`, ${merged} sumadas a una dirección repetida`:""}. Agregadas en su lugar de la ruta.`);
     // Lo dictado o pegado suele venir sin teléfono ni guía: primero se ofrece escribir los teléfonos y luego escanear las guías.
     const unicos = [...new Set(ids)];
     const sinTel = unicos.filter(id=>{ const s = state.stops.find(x=>x.id===id); return s && !s.phone; });

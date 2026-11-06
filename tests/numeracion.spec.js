@@ -81,8 +81,11 @@ test("GPS tomado antes de cargar: los números siguen el orden de entrega, no el
   for (const a of ["Calle 153 # 115-40", "Calle 132 # 105-10", "Calle 145 # 106-20", "Calle 139 # 112-15", "Calle 145 # 110-80"])
     await page.evaluate(x => { state.stops.push(mkStop({ addr: x })); save(); render(); return optimize(true, { estable: true }); }, a);
   expect(await numsLista(page)).toEqual(["1", "2", "3", "4", "5"]);
+  // Cada una entra en su mejor lugar de la ruta (no al final, como se cargó) y el recorrido queda cerca del mejor posible
   const orden = await page.evaluate(() => state.stops.map(s => s.addr));
-  expect(orden[0]).toBe("Calle 145 # 106-20");           // la más cercana a la salida va primero
+  expect(orden).not.toEqual(["Calle 153 # 115-40", "Calle 132 # 105-10", "Calle 145 # 106-20", "Calle 139 # 112-15", "Calle 145 # 110-80"]);
+  const [actual, mejor] = await page.evaluate(() => { const o = currentOrigin(), p = state.stops.filter(s => s.status !== "done"); return [pathLen(o, p, false), pathLen(o, orderStops(o, p, false), false)]; });
+  expect(actual).toBeLessThanOrEqual(mejor * 1.15);
 });
 
 test("lista con números de cargue (versión anterior) y un «No estaba» sin entregas: se renumera 1, 2, 3…", async ({ page }) => {
@@ -96,4 +99,30 @@ test("lista con números de cargue (versión anterior) y un «No estaba» sin en
     save(); render();
   });
   expect(await numsLista(page)).toEqual(["1", "2", "3", "4", "5"]);
+});
+
+test("ruta ya ordenada: lo automático (editar, volver la señal, otro pedido, vehículo) no la desordena", async ({ page }) => {
+  await sinInternetExterno(page);
+  await entrar(page); await cargar(page, PARADAS);
+  await page.click("#btnSort");
+  await expect.poll(() => page.evaluate(() => !optimizing)).toBe(true);
+  // El repartidor ajusta a mano: sube la última al primer lugar
+  await page.evaluate(() => { const p = state.stops.pop(); state.stops.unshift(p); save(); render(); });
+  const mio = await page.evaluate(() => state.stops.map(s => s.addr));
+  const sinCambios = async () => { await expect.poll(() => page.evaluate(() => !optimizing)).toBe(true); expect(await page.evaluate(() => state.stops.map(s => s.addr))).toEqual(mio); };
+  await page.evaluate(() => { dispatchEvent(new Event("online")); }); await sinCambios();
+  await page.evaluate(() => { const r = document.getElementById("vehMoto"); r.checked = true; r.dispatchEvent(new Event("change")); }); await sinCambios();
+  await page.evaluate(() => optimize(true, { estable: true })); await sinCambios();
+  // Editar el teléfono de una parada (sin cambiar la dirección): no se mueve nada
+  await page.evaluate(() => openEdit(state.stops[2]));
+  await page.fill("#fPhone", "3001112233"); await page.click("#frmEdit button[type=submit]");
+  await sinCambios();
+  expect(await numsLista(page)).toEqual(["1", "2", "3", "4", "5", "6"]);
+  // Un pedido nuevo entra en su lugar y las demás conservan su orden relativo
+  await page.evaluate(() => { state.stops.push(mkStop({ addr: "Calle 146 # 106-30" })); save(); render(); return optimize(true, { estable: true }); });
+  expect((await page.evaluate(() => state.stops.map(s => s.addr))).filter(a => a !== "Calle 146 # 106-30")).toEqual(mio);
+  // «Ordenar ruta» sí reordena todo
+  await page.click("#btnSort");
+  await expect.poll(() => page.evaluate(() => !optimizing)).toBe(true);
+  expect(await page.evaluate(() => state.stops[0].addr)).not.toBe(mio[0]);
 });

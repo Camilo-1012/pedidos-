@@ -427,7 +427,7 @@ async function realOrder(silent){
     MATRIX = SYM;  ordered = orderStops(o, geo, back);
     const blocks = lastBlocks;
     MATRIX = COST; ordered = refinarPorTramos(o, ordered, back, blocks);   // ajuste final con sentidos reales (ida ≠ vuelta), sin mezclar tramos
-    if(optEstable && rutaEnCurso()) ordered = estabilizar(o, ordered, back); else state.mejoraRuta = null;
+    if(optEstable) ordered = estabilizar(o, ordered, back); else state.mejoraRuta = null;
   } finally { MATRIX = null; }
   // Totales reales.
   let sec = 0, m = 0, prev = o || ordered[0];
