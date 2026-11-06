@@ -314,13 +314,14 @@ function refinarPorTramos(origin, ordered, back, blocks){
   });
   return out;
 }
-/* Ruta en curso: desde que se sale (ubicación GPS de salida o modo conducción) o hay alguna entrega o «No estaba».
-   - El orden del vehículo se respeta: las paradas nuevas se insertan en el mejor hueco del orden actual (el de la lista,
-     incluidos los cambios a mano) y nada se reordena solo. Si reordenar todo ahorra 5 % o más, se avisa y el repartidor
-     decide con «Ordenar ruta».
-   - Cada paquete conserva su número (el que se le escribió al cargar); las paradas nuevas toman el siguiente número libre. */
+/* Ruta en curso: desde la primera entrega o «No estaba».
+   - Antes de eso, la lista es el orden de entrega y se numera 1, 2, 3… (se reordena todo al cargar o al tomar el GPS).
+   - Después, el orden del vehículo se respeta: las paradas nuevas se insertan en el mejor hueco del orden actual (el de
+     la lista, incluidos los cambios a mano) y nada se reordena solo. Si reordenar todo ahorra 5 % o más, se avisa y el
+     repartidor decide con «Ordenar ruta».
+   - Cada paquete conserva su número; las paradas nuevas toman el siguiente número libre. */
 const MEJORA_AVISO = 0.05;
-function rutaEnCurso(){ return !!(state.salidaAt || state.stops.some(s=>s.status==="done" || s.status==="fail")); }
+function rutaEnCurso(){ return state.stops.some(s=>s.status==="done" || s.status==="fail"); }
 function estabilizar(origin, ordered, back){
   const conocidas = new Set(state.suggestedIds || []);
   if(!conocidas.size || ordered.length < 2) return ordered;
@@ -343,12 +344,11 @@ function estabilizar(origin, ordered, back){
     ? {pct: Math.round((1 - cN/cP) * 100), min: MATRIX ? Math.round((cP - cN) / 60) : null} : null;
   return P;
 }
-// Números de las paradas. Antes de salir siguen el orden de la lista (1, 2, 3…). En ruta quedan fijos: entregar una
-// no corre los números de las demás, y las nuevas toman el siguiente libre. «Ordenar ruta» antes de la primera entrega
-// vuelve a numerar todo (state.renumerar).
+// Números de las paradas. Hasta la primera entrega siguen el orden de la lista (1, 2, 3…), que es el orden de entrega.
+// Después quedan fijos: entregar una no corre los números de las demás, y las nuevas toman el siguiente libre.
 function numerar(){
   if(!state || !state.stops) return;
-  const fijos = rutaEnCurso() && !state.renumerar;
+  const fijos = rutaEnCurso();
   if(!fijos){ let n = 0; for(const s of state.stops) if(s.status!=="done") s.num = ++n; return; }
   let max = 0; for(const s of state.stops) if(s.num > max) max = s.num;
   const vistos = new Set();

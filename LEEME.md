@@ -421,3 +421,7 @@ El optimizador ahora arma una tabla de costos una sola vez y calcula cada intent
 - En «Varias direcciones» y en el formulario de una dirección hay botones de vía: **Dicha · Calle · Carrera · Diag. · Transv.** Con una elegida, solo se dicta el resto: «ciento cuarenta y uno bis be ciento cuarenta y tres be cincuenta y nueve» → «Carrera 141 Bis B # 143B-59».
 - Si en una dirección sí se dice la vía («calle…», «avenida…»), manda lo dicho. «Dicha» = como antes. La opción queda guardada y es la misma en los dos lugares.
 - También se corrigió que la letra después de «bis» («bis be») no se entendía en el dictado.
+
+### Ajuste v2.18.1: números = orden de entrega hasta la primera entrega
+- En la v2.13 la «ruta en curso» empezaba también al tomar la ubicación GPS. Si se tomaba antes de cargar, los pedidos se numeraban en el orden en que se cargaban (29, 27, 26…) y no en el de entrega.
+- Ahora la ruta en curso empieza con la primera entrega o «No estaba». Hasta entonces la lista se reordena completa y se numera 1, 2, 3… en el orden de entrega (también al tomar el GPS). Después, los números quedan fijos y el orden no se revuelve solo.

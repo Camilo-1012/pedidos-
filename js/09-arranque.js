@@ -6,12 +6,9 @@ $("btnBulk").onclick = ()=>openText("bulk");
 $("btnBulk2").onclick = ()=>openText("bulk");
 $("btnManual").onclick = ()=>openEdit({addr:""}, true);
 $("btnVoice").onclick = ()=>{ openEdit({addr:""}, true); startDictation(); };
-// «Ordenar ruta»: reordena todo. Antes de la primera entrega o «No estaba» también vuelve a numerar (1, 2, 3…);
+// «Ordenar ruta»: reordena todo. Antes de la primera entrega los números siguen el nuevo orden (1, 2, 3…);
 // después, cada paquete conserva su número.
-$("btnSort").onclick = ()=>{
-  if(!state.stops.some(s=>s.status==="done" || s.status==="fail")) state.renumerar = true;
-  optimize(false).finally(()=>{ state.renumerar = false; save(); render(); });
-};
+$("btnSort").onclick = ()=>optimize(false);
 // Dirección de partida escrita: manda sobre la última entrega si se escribe después (state.startAt).
 $("start").addEventListener("change", e=>{
   state.start = e.target.value.trim(); state.startAt = Date.now();
@@ -200,7 +197,7 @@ $("restoreFile").addEventListener("change", async e=>{
 /* ============ App instalable y sin conexión ============ */
 // Al bloquear: apaga la cámara y cierra ventanas abiertas para que no queden datos a la vista.
 window.RUTA_onLock = ()=>{ try{ stopScan(); }catch(e){} };
-const APP_VERSION = "2.18";
+const APP_VERSION = "2.18.1";
 $("ver").textContent = "Versión " + APP_VERSION + ". Funciona sin internet una vez abierta la primera vez.";
 if(navigator.storage && navigator.storage.estimate){
   navigator.storage.estimate().then(e=>{ if(e && e.usage) $("ver").textContent += ` Espacio usado en este celular: ${(e.usage/1048576).toFixed(1).replace(".",",")} MB (la mayor parte es el lector de etiquetas).`; }).catch(()=>{});

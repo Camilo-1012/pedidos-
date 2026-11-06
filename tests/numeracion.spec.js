@@ -1,5 +1,5 @@
-// En ruta: cada paquete conserva su número y el orden del vehículo no se revuelve solo
-// (al tomar la ubicación GPS, al entregar, con «No estaba» ni al llegar pedidos nuevos).
+// Hasta la primera entrega la lista es el orden de entrega numerado 1, 2, 3… (aunque se haya tomado el GPS antes de cargar).
+// Desde la primera entrega o «No estaba»: cada paquete conserva su número y el orden no se revuelve solo.
 const { test, expect } = require("@playwright/test");
 const { entrar, cargar, vigilarErrores, sinInternetExterno } = require("./ayuda");
 
@@ -20,13 +20,16 @@ test("números fijos en ruta y orden estable con GPS, entregas, No estaba y pedi
   await page.click("#btnSort");
   await expect.poll(() => page.evaluate(() => !optimizing)).toBe(true);
   expect(await numsLista(page)).toEqual(["1", "2", "3", "4", "5", "6"]);
-  const cargue = await pendientes(page);
-  // Salida con GPS: no se revuelve el orden ni los números; muestra la dirección aproximada
+  // GPS antes de entregar: reordena desde ahí y los números siguen el orden de entrega (1…6)
   await page.click("#btnGps");
   await expect(page.locator("#startInfo")).toContainText(/Cerca de ≈ (Calle|Carrera) \d+ # \d+-\d\d/);
   await expect.poll(() => page.evaluate(() => !optimizing && !!state.startGPS)).toBe(true);
-  expect(await pendientes(page)).toEqual(cargue);
+  expect(await numsLista(page)).toEqual(["1", "2", "3", "4", "5", "6"]);
   await expect(page.locator("#routeSum")).toContainText(/Desde ≈ (Calle|Carrera) /);
+  // Pedidos cargados después de tomar el GPS: entran en su lugar de la ruta y se vuelve a numerar en orden
+  await page.evaluate(() => { state.stops.push(mkStop({ addr: "Calle 146 # 106-60" }), mkStop({ addr: "Calle 133 # 105-40" })); save(); render(); return optimize(true, { estable: true }); });
+  expect(await numsLista(page)).toEqual(["1", "2", "3", "4", "5", "6", "7", "8"]);
+  await page.evaluate(() => { state.stops = state.stops.filter(s => !["Calle 146 # 106-60", "Calle 133 # 105-40"].includes(s.addr)); save(); render(); });
   // Entregar la 1: la siguiente sigue siendo la 2 (no pasa a ser «1»)
   await page.click("#list li.stop >> nth=0 >> button[data-act=done]");
   expect(await numsLista(page)).toEqual(["2", "3", "4", "5", "6"]);
@@ -50,21 +53,34 @@ test("números fijos en ruta y orden estable con GPS, entregas, No estaba y pedi
   expect(errs).toEqual([]);
 });
 
-test("aviso de orden más corto en ruta (sin reordenar solo) y numeración nueva en la jornada siguiente", async ({ page }) => {
+test("en ruta: aviso de orden más corto (sin reordenar solo); «Ordenar ruta» reordena y conserva los números", async ({ page }) => {
   await sinInternetExterno(page);
   await entrar(page); await cargar(page, PARADAS);
+  await page.evaluate(() => { state.autoWaze = false; save(); });
   await page.click("#btnSort");
   await expect.poll(() => page.evaluate(() => !optimizing)).toBe(true);
-  // Se sale y luego el repartidor deja el orden al revés: la app no lo cambia sola, pero avisa
-  await page.evaluate(() => { state.salidaAt = Date.now(); const p = state.stops.filter(s => s.status !== "done").reverse(); state.stops = p; save(); render(); });
+  // Primera entrega y luego el repartidor deja el resto al revés: la app no lo cambia sola, pero avisa
+  await page.click("#list li.stop >> nth=0 >> button[data-act=done]");
+  await page.evaluate(() => { const d = state.stops.filter(s => s.status === "done"), p = state.stops.filter(s => s.status !== "done").reverse(); state.stops = [...p, ...d]; save(); render(); });
   const alReves = await pendientes(page);
   await page.evaluate(() => optimize(true, { estable: true }));
   expect(await pendientes(page)).toEqual(alReves);
   await expect(page.locator("#mejoraInfo")).toBeVisible();
   await expect(page.locator("#mejoraInfo")).toContainText(/Hay un orden \d+ % más corto/);
-  // «Ordenar ruta» antes de la primera entrega: reordena y vuelve a numerar 1…6
   await page.click("#btnSort");
   await expect.poll(() => page.evaluate(() => !optimizing)).toBe(true);
-  expect(await numsLista(page)).toEqual(["1", "2", "3", "4", "5", "6"]);
+  expect((await numsLista(page)).slice().sort()).toEqual(["2", "3", "4", "5", "6"]);
   await expect(page.locator("#mejoraInfo")).toBeHidden();
+});
+
+test("GPS tomado antes de cargar: los números siguen el orden de entrega, no el de cargue", async ({ page }) => {
+  await sinInternetExterno(page);
+  await entrar(page);
+  await page.evaluate(() => { state.stops = []; state.salidaAt = Date.now(); state.startGPS = { lat: 4.74, lng: -74.09, acc: 10, t: Date.now(), x: 104, y: 145 }; save(); render(); });
+  // Se cargan uno por uno, en desorden
+  for (const a of ["Calle 153 # 115-40", "Calle 132 # 105-10", "Calle 145 # 106-20", "Calle 139 # 112-15", "Calle 145 # 110-80"])
+    await page.evaluate(x => { state.stops.push(mkStop({ addr: x })); save(); render(); return optimize(true, { estable: true }); }, a);
+  expect(await numsLista(page)).toEqual(["1", "2", "3", "4", "5"]);
+  const orden = await page.evaluate(() => state.stops.map(s => s.addr));
+  expect(orden[0]).toBe("Calle 145 # 106-20");           // la más cercana a la salida va primero
 });
