@@ -32,3 +32,17 @@ test("dictado: separa la placa cuando el reconocimiento junta las cifras", async
     "Calle 145 # 106-20"
   ]);
 });
+
+test("dictado: «bis» mal escrito por el reconocimiento («Avis», «vis») se corrige", async ({ page }) => {
+  await entrar(page);
+  const r = await page.evaluate(() => [
+    "carrera 141 Avis B 143b 59",             // el caso real
+    "carrera 141 vis b número 143 b guion 59",
+    "calle 139 vis 112 15",
+    "carrera 141 a Avis 143 59",              // «A bis»
+    "carrera 141 Avis B 143B59"               // y las cifras juntas
+  ].map(t => { const p = parseAddress(splitPhone(t).addrConv); return p ? p.label : "NO"; }));
+  expect(r).toEqual(["Carrera 141 Bis B # 143B-59", "Carrera 141 Bis B # 143B-59", "Calle 139 Bis # 112-15", "Carrera 141A Bis # 143-59", "Carrera 141 Bis B # 143B-59"]);
+  // «Avis» lejos de un número no se toca (p. ej. un nombre)
+  expect(await page.evaluate(() => spokenToAddress("conjunto avis torre 2"))).toBe("conjunto avis torre 2");
+});

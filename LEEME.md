@@ -413,3 +413,6 @@ El optimizador ahora arma una tabla de costos una sola vez y calcula cada intent
 - Acepta celular de 10 dígitos (con o sin +57 y espacios), fijo 601… o fijo de 7 dígitos; si está incompleto avisa «Revisa» y no lo guarda. Vacío = sin teléfono.
 - Al terminar, «Seguir con las guías (escanear)». Si responde que no a los teléfonos, igual ofrece las guías.
 - También desde «Revisar cargue» → «Escribir teléfonos faltantes (N)».
+
+### Ajuste v2.17.1: «bis» dictado
+- El reconocimiento de voz escribe «bis» como «Avis», «vis», «biz»… Justo después de un número (o de su letra) se corrige a «Bis»: «carrera 141 Avis B 143b 59» → «Carrera 141 Bis B # 143B-59».

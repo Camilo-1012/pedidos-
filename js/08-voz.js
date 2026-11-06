@@ -8,6 +8,9 @@ const NUM_UNI = {cero:0,un:1,uno:1,una:1,dos:2,tres:3,cuatro:4,cinco:5,seis:6,si
   veintiseis:26,veintisiete:27,veintiocho:28,veintinueve:29};
 const NUM_DEC = {treinta:30,cuarenta:40,cincuenta:50,sesenta:60,setenta:70,ochenta:80,noventa:90};
 const NUM_CEN = {cien:100,ciento:100,doscientos:200,doscientas:200,trescientos:300,cuatrocientos:400,quinientos:500,seiscientos:600,setecientos:700,ochocientos:800,novecientos:900};
+// «Bis» dictado suele llegar mal escrito por el reconocimiento: «Avis», «vis», «biz»… Solo se corrige justo después
+// de un número o de su letra («141 Avis B» → «141 Bis B»).
+const BIS_OIDO = new Set(["bis","vis","avis","abis","biss","bisz","biz","bix","vix","beis","bies","viz","visa"]);
 const SPOKEN_LETTER = {a:"A",be:"B",b:"B",ce:"C",c:"C",de:"D",d:"D",e:"E",efe:"F",f:"F",ge:"G",g:"G",hache:"H",h:"H"};
 function spokenToAddress(text){
   const toks = (text||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"")
@@ -26,6 +29,7 @@ function spokenToAddress(text){
     if(["numero","numeral","no","nro","n","con","#"].includes(t)){ out.push("#"); continue; }
     if(["guion","raya","menos","-"].includes(t)){ out.push("-"); continue; }
     if(t==="letra" && SPOKEN_LETTER[toks[i+1]]){ out.push(SPOKEN_LETTER[toks[++i]]); continue; }
+    if(BIS_OIDO.has(t) && out.length && (/^\d+$/.test(out[out.length-1]) || (/^([a-h]|be|ce|de|ge)$/.test(out[out.length-1]) && /^\d+$/.test(out[out.length-2]||"")))){ out.push("bis"); continue; }
     out.push(t);
   }
   flush();
