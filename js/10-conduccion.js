@@ -56,7 +56,9 @@ function renderDrive(){
     const resto = gr.miembros.filter(m=>m.id!==s.id);
     $("dvPark").innerHTML = `<span>P · ${esc(textoParqueo(gr))}</span><small>Después, a pie: ${resto.map(m=>esc((m.label||m.addr) + (m.unit ? " · " + m.unit : ""))).join(" — ")}</small>`;
   }
-  $("dvPos").textContent = `Parada ${n} de ${state.stops.filter(x=>x.status!=="done").length}`;
+  // El número grande es el del paquete (fijo en ruta); arriba, cuántas entregas faltan.
+  const faltan = state.stops.filter(x=>x.status!=="done").length;
+  $("dvPos").textContent = faltan === 1 ? "Última entrega" : `Faltan ${faltan} entregas`;
   $("dvQty").textContent = [(s.qty||1)>1 ? `${s.qty} pedidos en esta dirección` : "", s.status==="fail" ? "Ya tuvo un intento fallido" : "", s.zone ? "ST " + s.zone : ""].filter(Boolean).join(" · ");
   $("dvAddr").textContent = s.label || s.addr;
   $("dvUnit").textContent = [unitText(s), s.barrio].filter(Boolean).join(" · ");

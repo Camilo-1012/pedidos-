@@ -6,7 +6,12 @@ $("btnBulk").onclick = ()=>openText("bulk");
 $("btnBulk2").onclick = ()=>openText("bulk");
 $("btnManual").onclick = ()=>openEdit({addr:""}, true);
 $("btnVoice").onclick = ()=>{ openEdit({addr:""}, true); startDictation(); };
-$("btnSort").onclick = optimize;
+// «Ordenar ruta»: reordena todo. Antes de la primera entrega o «No estaba» también vuelve a numerar (1, 2, 3…);
+// después, cada paquete conserva su número.
+$("btnSort").onclick = ()=>{
+  if(!state.stops.some(s=>s.status==="done" || s.status==="fail")) state.renumerar = true;
+  optimize(false).finally(()=>{ state.renumerar = false; save(); render(); });
+};
 $("start").addEventListener("change", e=>{ state.start = e.target.value.trim(); if(state.start) state.startGPS = null; save(); optimize(true); });
 // Punto de partida por GPS: la posición exacta del celular. Se puede volver a tocar a mitad de ruta para recalcular desde donde se está.
 $("btnGps").onclick = ()=>{
@@ -16,20 +21,28 @@ $("btnGps").onclick = ()=>{
     btn.disabled = false; btn.textContent = "Actualizar mi ubicación";
     const {latitude:lat, longitude:lng, accuracy} = pos.coords;
     if(meters({lat,lng},{lat:4.65,lng:-74.1}) > 45000){ toast("Tu ubicación está fuera de Bogotá; no se usó como punto de partida."); return; }
-    const gxy = inverseEstimate(lat, lng);
-    state.startGPS = {lat, lng, acc:Math.round(accuracy), t:Date.now(), x:gxy?gxy.x:null, y:gxy?gxy.y:null};
+    const gxy = inverseEstimate(lat, lng), t = Date.now();
+    state.startGPS = {lat, lng, acc:Math.round(accuracy), t, x:gxy?gxy.x:null, y:gxy?gxy.y:null, dir:direccionAprox(gxy)};
     if(!state.salidaAt) state.salidaAt = Date.now();   // salida a ruta (para el Excel)
     state.start = ""; $("start").value = "";
     save(); render();
-    toast(accuracy>300 ? "Ubicación tomada, pero poco precisa. Activa el GPS para mejorarla." : "Ubicación tomada. Reordenando la ruta desde aquí…");
-    quickOrder();      // se ve de inmediato
-    optimize(true);    // y luego se afina con las calles reales
+    const dirTxt = state.startGPS.dir ? ` Estás cerca de ${state.startGPS.dir}.` : "";
+    toast(accuracy>300 ? "Ubicación tomada, pero poco precisa. Activa el GPS para mejorarla." + dirTxt : "Ubicación tomada." + dirTxt);
+    // En ruta no se revuelve el orden del vehículo (ver estabilizar en js/02-ruta.js); si conviene reordenar, se avisa.
+    optimize(true, {estable:true});
+    // Barrio y dirección según el mapa (con internet); si no responde, queda la aproximada.
+    if(navigator.onLine) lugarDeGps(lat, lng).then(l=>{
+      const g = state.startGPS; if(!l || !g || g.t !== t) return;
+      if(l.barrio) g.barrio = l.barrio;
+      if(l.dir) g.dirMapa = l.dir;
+      save(); render();
+    });
   }, err=>{
     btn.disabled = false; btn.textContent = state.startGPS ? "Actualizar mi ubicación" : "Usar mi ubicación actual";
     toast({1:"No hay permiso de ubicación. Actívalo para esta app en los ajustes del celular.",2:"No se pudo obtener la ubicación. Activa el GPS e intenta de nuevo.",3:"La ubicación tardó demasiado. Intenta de nuevo al aire libre."}[err.code] || "No se pudo obtener la ubicación.");
   }, {enableHighAccuracy:true, timeout:20000, maximumAge:0});
 };
-$("btnGpsClear").onclick = ()=>{ state.startGPS = null; save(); $("btnGps").textContent = "Usar mi ubicación actual"; quickOrder(); optimize(true); };
+$("btnGpsClear").onclick = ()=>{ state.startGPS = null; save(); $("btnGps").textContent = "Usar mi ubicación actual"; optimize(true, {estable:true}); };
 $("byZone").addEventListener("change", e=>{ state.byZone = e.target.checked; save(); optimize(true); });
 $("roundTrip").addEventListener("change", e=>{ state.roundTrip = e.target.checked; save(); optimize(true); });
 $("routeOpts").addEventListener("toggle", ()=>{ if(!!state.optsOpen !== $("routeOpts").open){ state.optsOpen = $("routeOpts").open; save(); } });
@@ -170,7 +183,7 @@ $("restoreFile").addEventListener("change", async e=>{
 /* ============ App instalable y sin conexión ============ */
 // Al bloquear: apaga la cámara y cierra ventanas abiertas para que no queden datos a la vista.
 window.RUTA_onLock = ()=>{ try{ stopScan(); }catch(e){} };
-const APP_VERSION = "2.12";
+const APP_VERSION = "2.13";
 $("ver").textContent = "Versión " + APP_VERSION + ". Funciona sin internet una vez abierta la primera vez.";
 if(navigator.storage && navigator.storage.estimate){
   navigator.storage.estimate().then(e=>{ if(e && e.usage) $("ver").textContent += ` Espacio usado en este celular: ${(e.usage/1048576).toFixed(1).replace(".",",")} MB (la mayor parte es el lector de etiquetas).`; }).catch(()=>{});

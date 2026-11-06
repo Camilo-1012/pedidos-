@@ -385,3 +385,10 @@ El optimizador ahora arma una tabla de costos una sola vez y calcula cada intent
 - Sirve la dirección completa en cualquier forma («cra 150b 14345», «KR 150B 143 45») o una parte («calle 145», «106 60»), la guía o sus últimos 4 números, el nombre, el teléfono o el conjunto.
 - Muestra primero las pendientes y luego las ya entregadas; al tocar una se puede marcar Entregado, abrir Waze o verla en la lista. «Escanear la guía con la cámara» sigue disponible ahí.
 - Solo busca en los pedidos de la jornada de este celular (no en el historial de días anteriores) y no usa internet, salvo para dictar.
+
+## Números fijos y orden estable en ruta (v2.13)
+- **Números de parada:** antes de salir siguen el orden de la lista (1, 2, 3…). Desde que se sale (ubicación GPS de salida, modo conducción, primera entrega o «No estaba») cada paquete **conserva su número**: al entregar la 1, la siguiente sigue siendo la 2. Los pedidos nuevos toman el siguiente número libre. «Ordenar ruta» antes de la primera entrega vuelve a numerar todo.
+- **Orden del vehículo:** en ruta nada se reordena solo. Al tomar la ubicación GPS, al llegar pedidos nuevos (también desde el otro celular) o con «No estaba», se respeta el orden actual de la lista y lo nuevo se inserta en el mejor hueco. Si reordenar todo ahorra 5 % o más, la app lo avisa en Ruta y el repartidor decide con «Ordenar ruta».
+- Antes, tocar «Usar mi ubicación actual» al salir reordenaba toda la ruta desde ese punto y cambiaba el orden con que se había cargado el vehículo.
+- **Ubicación actual:** muestra la dirección aproximada («Cerca de Calle 145 # 106-60») y, con internet, el barrio según OpenStreetMap.
+- El número de parada es de cada celular (no se sincroniza): escribe los números en los paquetes con el celular con el que vas a conducir.

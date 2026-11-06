@@ -72,9 +72,9 @@ test("parquea una vez: agrupa las cercanas, avisa en conducción y sigue a pie t
   await expect(page.locator("#dvAddr")).toHaveText("Calle 145 # 106-60");
   await expect(page.locator("#dvPark")).toContainText("A pie");
   await expect(page.locator("#dvPark")).toContainText("no muevas el vehículo");
-  // El número grande es el orden en la ruta (sigue siendo 1 porque la anterior ya se entregó)
-  await expect(page.locator("#dvGuia .orden")).toHaveText("1");
-  await expect(page.locator("#dvPos")).toHaveText("Parada 1 de 3");
+  // El número del paquete no se corre al entregar la anterior
+  await expect(page.locator("#dvGuia .orden")).toHaveText("2");
+  await expect(page.locator("#dvPos")).toHaveText("Faltan 3 entregas");
   expect(errs).toEqual([]);
 });
 

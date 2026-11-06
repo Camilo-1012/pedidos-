@@ -18,6 +18,7 @@ function mkStop(d){
     x:p?p.x:null, y:p?p.y:null, label:p?p.label:"", status:"pend", created: Date.now() + (mkStop.seq = (mkStop.seq||0)+1)/1000};
 }
 function save(){
+  numerar();
   store.set(KEY,state);
   // Equipo en la nube: programa la subida de los cambios (ver js/11-equipo.js).
   if(typeof onStateSaved === "function") onStateSaved();
@@ -311,20 +312,23 @@ function refinarPorTramos(origin, ordered, back, blocks){
   });
   return out;
 }
-/* Ruta en curso más estable: si ya se salió (hay entregas o salida registrada) y llegan paradas nuevas, se insertan
-   en el mejor hueco del orden actual. Solo se reordena todo si eso ahorra más de 3 %: así no se pierde el orden
-   en que se acomodó el vehículo por un ahorro mínimo. */
-const ESTABLE_MIN = 0.03;
-function rutaEnCurso(){ return !!(state.salidaAt || state.stops.some(s=>s.status==="done")); }
+/* Ruta en curso: desde que se sale (ubicación GPS de salida o modo conducción) o hay alguna entrega o «No estaba».
+   - El orden del vehículo se respeta: las paradas nuevas se insertan en el mejor hueco del orden actual (el de la lista,
+     incluidos los cambios a mano) y nada se reordena solo. Si reordenar todo ahorra 5 % o más, se avisa y el repartidor
+     decide con «Ordenar ruta».
+   - Cada paquete conserva su número (el que se le escribió al cargar); las paradas nuevas toman el siguiente número libre. */
+const MEJORA_AVISO = 0.05;
+function rutaEnCurso(){ return !!(state.salidaAt || state.stops.some(s=>s.status==="done" || s.status==="fail")); }
 function estabilizar(origin, ordered, back){
-  const prevIds = state.suggestedIds || [];
-  if(!prevIds.length || ordered.length < 2) return ordered;
+  const conocidas = new Set(state.suggestedIds || []);
+  if(!conocidas.size || ordered.length < 2) return ordered;
   const enOrden = new Set(ordered.map(s=>s.id));
-  const prev = prevIds.map(id=>ordered.find(s=>s.id===id)).filter(Boolean);
-  if(!prev.length) return ordered;
-  const nuevos = ordered.filter(s=>!prevIds.includes(s.id));
-  // Inserción más barata de cada nueva, antes de los reintentos («No estaba» siguen al final).
-  const P = prev.slice();
+  const actual = state.stops.filter(s=>enOrden.has(s.id) && conocidas.has(s.id));
+  if(!actual.length) return ordered;
+  // Orden actual de la lista, con los «No estaba» al final (en el orden en que se marcaron).
+  const P = [...actual.filter(s=>s.status!=="fail"), ...actual.filter(s=>s.status==="fail")];
+  const nuevos = ordered.filter(s=>!conocidas.has(s.id));
+  // Inserción más barata de cada nueva, antes de los reintentos.
   for(const s of nuevos){
     const lim = s.status==="fail" ? P.length : (P.findIndex(q=>q.status==="fail")+1 || P.length+1) - 1;
     let bj = lim, bc = Infinity;
@@ -333,7 +337,23 @@ function estabilizar(origin, ordered, back){
   }
   if(P.length !== enOrden.size) return ordered;
   const cP = pathLen(origin, P, back), cN = pathLen(origin, ordered, back);
-  return cN < cP * (1 - ESTABLE_MIN) ? ordered : P;
+  state.mejoraRuta = cP > 0 && cN < cP * (1 - MEJORA_AVISO)
+    ? {pct: Math.round((1 - cN/cP) * 100), min: MATRIX ? Math.round((cP - cN) / 60) : null} : null;
+  return P;
+}
+// Números de las paradas. Antes de salir siguen el orden de la lista (1, 2, 3…). En ruta quedan fijos: entregar una
+// no corre los números de las demás, y las nuevas toman el siguiente libre. «Ordenar ruta» antes de la primera entrega
+// vuelve a numerar todo (state.renumerar).
+function numerar(){
+  if(!state || !state.stops) return;
+  const fijos = rutaEnCurso() && !state.renumerar;
+  if(!fijos){ let n = 0; for(const s of state.stops) if(s.status!=="done") s.num = ++n; return; }
+  let max = 0; for(const s of state.stops) if(s.num > max) max = s.num;
+  const vistos = new Set();
+  for(const s of state.stops){
+    if(!s.num || vistos.has(s.num)) s.num = ++max;   // sin número o repetido (p. ej. llegó de otro celular)
+    vistos.add(s.num);
+  }
 }
 // Aplica un orden calculado sobre el estado actual (por si el repartidor marcó entregas mientras se calculaba).
 function applyOrder(orderIds){
@@ -365,7 +385,7 @@ function quickOrder(){
   const geo = state.stops.filter(s=>s.status!=="done" && s.x!==null);
   if(MATRIX) return;   // no interferir si justo se está usando la matriz real
   let quick = orderStops(origin, geo, back);
-  if(optEstable && rutaEnCurso()) quick = estabilizar(origin, quick, back);
+  if(optEstable && rutaEnCurso()) quick = estabilizar(origin, quick, back); else state.mejoraRuta = null;
   applyOrder(quick.map(s=>s.id));
   state.suggestedIds = quick.map(s=>s.id);
   LASTM = null;

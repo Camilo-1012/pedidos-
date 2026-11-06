@@ -211,6 +211,28 @@ function inverseEstimate(lat, lng){
   const a = solve3(AtA,bx), b = solve3(AtA,by);
   return a && b ? {x:a[0]+a[1]*lat+a[2]*lng, y:b[0]+b[1]*lat+b[2]*lng} : null;
 }
+// Dirección aproximada de un punto de la cuadrícula (x = carrera, y = calle), sobre la vía más cercana:
+// {x:106.6, y:145.1} → «Calle 145 # 106-60». Sirve para mostrar dónde quedó la ubicación GPS.
+function direccionAprox(p){
+  if(!p || p.x==null || p.y==null || p.x < 1 || p.y < 1) return "";
+  const cl = Math.round(p.y), kr = Math.round(p.x);
+  const placa = v => String(Math.min(99, Math.max(1, Math.round((v - Math.floor(v)) * 100)))).padStart(2, "0");
+  return Math.abs(p.y - cl) <= Math.abs(p.x - kr)
+    ? `Calle ${cl} # ${Math.floor(p.x)}-${placa(p.x)}`
+    : `Carrera ${kr} # ${Math.floor(p.y)}-${placa(p.y)}`;
+}
+// Con internet: barrio (y dirección, si el mapa la tiene) del punto, según OpenStreetMap. Una consulta por toque del botón.
+async function lugarDeGps(lat, lng){
+  const ctl = new AbortController(), to = setTimeout(()=>ctl.abort(), 7000);
+  try{
+    const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1&accept-language=es`, {signal: ctl.signal});
+    if(!r.ok) return null;
+    const a = (await r.json()).address || {};
+    const barrio = a.neighbourhood || a.quarter || a.suburb || "";
+    const dir = a.road && a.house_number ? `${a.road} # ${String(a.house_number).replace(/^#\s*/, "")}` : "";
+    return {barrio, dir};
+  }catch(e){ return null; } finally { clearTimeout(to); }
+}
 async function checkBarrios(onProgress){
   const pend = state.stops.filter(s=>s.status!=="done");
   // 1) Direcciones que no se entendieron pero traen barrio: se ubican en el centro del barrio.
@@ -343,7 +365,7 @@ async function realOrder(silent){
     MATRIX = SYM;  ordered = orderStops(o, geo, back);
     const blocks = lastBlocks;
     MATRIX = COST; ordered = refinarPorTramos(o, ordered, back, blocks);   // ajuste final con sentidos reales (ida ≠ vuelta), sin mezclar tramos
-    if(optEstable && rutaEnCurso()) ordered = estabilizar(o, ordered, back);
+    if(optEstable && rutaEnCurso()) ordered = estabilizar(o, ordered, back); else state.mejoraRuta = null;
   } finally { MATRIX = null; }
   // Totales reales.
   let sec = 0, m = 0, prev = o || ordered[0];

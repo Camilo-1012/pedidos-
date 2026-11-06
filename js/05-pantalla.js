@@ -112,7 +112,7 @@ function render(){
   $("realRoads").checked = state.realRoads !== false;
   // Resumen de las opciones cuando el bloque está oculto.
   const parts = [];
-  parts.push(state.startGPS ? "Desde tu ubicación" : state.start ? "Desde " + state.start : (zone().on && zone().entry ? "Entrada por " + (ZONE_ENTRIES[zone().entry]||"la zona").replace(/ \(.*\)$/,"") : "Sin punto de partida"));
+  parts.push(state.startGPS ? "Desde tu ubicación" + ((state.startGPS.dirMapa || state.startGPS.dir) ? " (≈ " + (state.startGPS.dirMapa || state.startGPS.dir) + ")" : "") : state.start ? "Desde " + state.start : (zone().on && zone().entry ? "Entrada por " + (ZONE_ENTRIES[zone().entry]||"la zona").replace(/ \(.*\)$/,"") : "Sin punto de partida"));
   parts.push(esMoto() ? "en moto" : "en carro");
   if(state.byZone) parts.push("por zona ST");
   if(state.roundTrip) parts.push("con regreso");
@@ -131,6 +131,9 @@ function render(){
     + "El orden de las paradas es el mismo para los dos: en las pruebas, el orden más corto en carro también fue el mejor en moto.";
   if(document.activeElement !== $("orsKey")) $("orsKey").value = state.orsKey || "";
   $("routeInfo").textContent = state.routeNote || "";
+  const mj = state.mejoraRuta && rutaEnCurso() ? state.mejoraRuta : null;
+  $("mejoraInfo").hidden = !mj;
+  $("mejoraInfo").textContent = mj ? `Hay un orden ${mj.pct} % más corto${mj.min ? ` (≈ ${mj.min} min menos)` : ""}. No se cambió para no revolver el vehículo; si quieres usarlo, toca «Ordenar ruta». Cada paquete conserva su número.` : "";
   $("roundTrip").checked = !!state.roundTrip;
   drawMap();
   updateComparison();
@@ -146,7 +149,8 @@ function render(){
   const g = state.startGPS;
   $("btnGpsClear").hidden = !g;
   if(g){
-    const near = g.x!=null ? ` Aproximadamente por la Calle ${Math.round(g.y)} con Carrera ${Math.round(g.x)}.` : "";
+    const d = g.dirMapa || g.dir || (g.x!=null ? direccionAprox(g) : "");
+    const near = d ? ` Cerca de ${d}${g.barrio ? " (" + g.barrio + ")" : ""}.` : (g.barrio ? ` Barrio ${g.barrio}.` : "");
     $("startInfo").textContent = `Arrancas desde tu ubicación (precisión ±${g.acc} m, tomada a las ${hhmm(g.t)}).${near}` + (g.acc>300 ? " La precisión es baja: activa el GPS del celular y vuelve a tocar el botón." : "");
   } else {
     const z = zone();
@@ -168,10 +172,10 @@ function render(){
     $("listDone").innerHTML = "";
     return;
   }
-  let n = 0;
+  numerar();
   const html = state.stops.map((s,idx)=>{
     const isDone = s.status==="done", isFail = s.status==="fail", unk = s.x===null;
-    const numTxt = isDone ? "✓" : String(++n);
+    const numTxt = isDone ? "✓" : String(s.num);
     const cls = "stop" + (isDone?" done":"") + (isFail?" fail":"") + (unk&&!isDone?" unk":"");
     return `<li class="${cls}" data-id="${s.id}">
       <div class="num" aria-label="Parada ${numTxt}${(s.qty||1)>1?", "+s.qty+" paquetes":""}">${numTxt}${(s.qty||1)>1?`<span class="qty">×${s.qty}</span>`:""}</div>
@@ -236,7 +240,7 @@ function toggleDone(s){
         const lc = legCost(from, s); s.legEst = lc ? lc.sec : null; s.legKm = lc ? lc.m : null;
       } else { delete s.doneAt; delete s.legEst; delete s.legKm; }
     }
-      if(s.status==="done"){ state.stops.splice(i,1); state.stops.push(s); if(s.x!==null) state.lastDoneId = s.id; toast((s.qty||1)>1 ? `Entregados ${s.qty} paquetes. Sigue con la parada 1.` : "Entregado. Sigue con la parada 1.");
+      if(s.status==="done"){ state.stops.splice(i,1); state.stops.push(s); if(s.x!==null) state.lastDoneId = s.id; { const nx = nextStop(); toast(((s.qty||1)>1 ? `Entregados ${s.qty} paquetes.` : "Entregado.") + (nx ? ` Sigue con la parada ${stopNum(nx)}.` : "")); }
         recordDay();
         if(state.autoWaze !== false){ const nx = nextStop(); if(nx){ save(); render(); openExternal(wazeUrl(nx)); return; } else toast("¡Terminaste! No quedan entregas pendientes."); } }
       else { if(state.lastDoneId===s.id) state.lastDoneId = null; recordDay(); }   // al deshacer, baja el acumulado
@@ -339,8 +343,9 @@ function hasGuia(g){ return !!findGuia(g); }
 // Busca la parada que tiene esa guía (exacta). «except» deja por fuera la parada que se está editando.
 function findGuia(g, except){ g = String(g||"").trim(); if(!g) return null; return state.stops.find(st=>st!==except && guias(st).includes(g)) || null; }
 // Número de parada como se ve en la lista (solo cuentan las pendientes).
-function stopNum(st){ if(st.status==="done") return 0; let n = 0; for(const x of state.stops){ if(x.status!=="done") n++; if(x===st) return n; } return 0; }
-function placeName(st){ const n = stopNum(st); return (n ? "la parada " + n : "una parada ya entregada") + " (" + (st.label||st.addr) + ")"; }
+// Número de la parada: fijo en ruta (ver numerar() en js/02-ruta.js).
+function stopNum(st){ if(!st.num) numerar(); return st.num || 0; }
+function placeName(st){ const n = stopNum(st); return (st.status!=="done" && n ? "la parada " + n : "una parada ya entregada") + " (" + (st.label||st.addr) + ")"; }
 function addOrMerge(d){
   const k = stopKey(d);
   const same = state.stops.find(st=>st.status!=="done" && stopKey(st)===k);

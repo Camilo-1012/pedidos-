@@ -46,7 +46,8 @@ function stable(v){
 }
 function huella(o){ const t = stable(o); let h = 0; for(let i=0;i<t.length;i++) h = (h*31 + t.charCodeAt(i))|0; return h.toString(36) + "." + t.length; }
 // Lo que se sube: la parada sin el texto completo leído de la etiqueta, más su posición en la ruta (para que el administrador vea el orden).
-function stopData(s, i){ const {raw, _ord, ...d} = s; d._ord = i; return d; }
+// El número de parada (num) es de cada celular: no se sube ni se toma del otro.
+function stopData(s, i){ const {raw, _ord, num, ...d} = s; d._ord = i; return d; }
 const stopHash = (s, i)=>huella(stopData(s, i));
 
 /* ---- Sincronizar: 1) traer cambios del servidor, 2) quitar las reasignadas a otro, 3) subir lo local ---- */
@@ -77,13 +78,13 @@ async function doSync(manual){
         if(!local || !tocadaAqui) delete known[r.id];
       } else if(!local){
         if(!(r.id in known)){   // nueva (la subió otro celular o el administrador te la pasó)
-          const ns = {...r.data, raw:""}; delete ns._ord;
+          const ns = {...r.data, raw:""}; delete ns._ord; delete ns.num;
           const firstDone = state.stops.findIndex(q=>q.status==="done");
           state.stops.splice(firstDone<0 ? state.stops.length : firstDone, 0, ns);
           known[r.id] = stopHash(ns, ordOf(ns)); added++;
         } // si estaba en «known» y no está aquí, se borró en este celular: abajo se marca como borrada
       } else if(!tocadaAqui && huella(r.data) !== known[r.id]){
-        const ord = ordOf(local); Object.assign(local, r.data); delete local._ord;
+        const ord = ordOf(local), num = local.num; Object.assign(local, r.data); delete local._ord; local.num = num;
         known[r.id] = stopHash(local, ord); updated++;
       }
       if(!sync.since || r.updated_at > sync.since) sync.since = r.updated_at;
