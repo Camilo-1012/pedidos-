@@ -27,10 +27,14 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # Límites de tiempo: a veces los espejos de apt o la descarga del navegador se quedan colgados.
+      # Con el límite, el paso falla en pocos minutos y el reintento de abajo lo vuelve a intentar.
       - name: Navegador de pruebas (Chromium)
-        run: npx playwright install --with-deps chromium
+        timeout-minutes: 8
+        run: npx playwright install --with-deps chromium || (sleep 20 && npx playwright install --with-deps chromium)
       - name: ffmpeg para la cámara simulada
-        run: command -v ffmpeg || (sudo apt-get update && sudo apt-get install -y ffmpeg)
+        timeout-minutes: 6
+        run: command -v ffmpeg || (sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg)
       - name: Correr las pruebas
         run: npx playwright test
         env:
