@@ -37,12 +37,20 @@ function bqVariantes(q){
   if(q.some(f=>/^\d{4,6}$/.test(f))) out.push(q.flatMap(f=>/^\d{4,6}$/.test(f) ? [String(+f.slice(0, -2)), String(+f.slice(-2))] : [f]));
   return out;
 }
+// Vía elegida con botón para buscar (Todas, Calle, Carrera…): así basta con escribir o dictar los números.
+// Por defecto es la misma del dictado; si se cambia aquí, queda guardada para la búsqueda.
+const BQ_COD = {Calle:"CL", Carrera:"KR", Diagonal:"DG", Transversal:"TV"};
+function viaBuscar(){ return state.viaBuscar != null ? state.viaBuscar : (state.viaDictado || ""); }
 // Busca en las paradas de la jornada. Devuelve [{st, g, por}] ordenado: dirección exacta, dirección, guía, otros datos.
 function buscarPedidos(texto){
   const q = String(texto||"").trim();
   if(!q) return [];
   const fichas = bqFichas(q), digitos = q.replace(/\D/g, ""), soloNumeros = /^[\d\s-]+$/.test(q);
-  const exacta = parseAddress(spokenToAddress(q));
+  // Con una vía elegida y la búsqueda empezando por un número, se busca solo en esa vía: «145 106» con Calle → Calle 145 # 106…
+  const via = viaBuscar(), cod = BQ_COD[via];
+  const conVia = !!cod && /^\d/.test(q) && !VIA_DICHA_RE.test(q.normalize("NFD").replace(/[\u0300-\u036f]/g, ""));
+  const exacta = parseAddress(spokenToAddress(conVia ? via + " " + q : q));
+  const enLaVia = dir=>{ const t = bqFichas(dir); return t[0] === cod && bqVariantes(fichas).some(v=>v[0] === t[1] && bqEnOrden(v, t.slice(1))); };
   const porGuia = new Map(searchGuia(q).map(x=>[x.st, x.g]));
   const res = [];
   for(const st of state.stops){
@@ -51,6 +59,7 @@ function buscarPedidos(texto){
     let puntos = 0, por = "";
     const pa = exacta && parseAddress(dir);
     if(pa && pa.label === exacta.label){ puntos = 100; por = "dirección"; }
+    else if(conVia){ if(enLaVia(dir)){ puntos = 80; por = "dirección"; } else if(porGuia.has(st)){ puntos = 70; por = "guía"; } else if(digitos.length >= 4 && st.phone && String(st.phone).includes(digitos)){ puntos = 50; por = "teléfono"; } }
     else if(fichas.length && !soloNumeros && bqVariantes(fichas).some(v=>bqEnOrden(v, bqFichas(dir)))){ puntos = 80; por = "dirección"; }
     else if(porGuia.has(st)){ puntos = 70; por = "guía"; }
     else if(soloNumeros && fichas.length && bqVariantes(fichas).some(v=>bqEnOrden(v, bqFichas(dir)))){ puntos = 60; por = "dirección"; }
@@ -65,7 +74,10 @@ function buscarPedidos(texto){
 }
 function renderBuscar(){
   const q = $("bqIn").value, box = $("bqList"); box.innerHTML = "";
-  if(!q.trim()){ $("bqInfo").textContent = "Escribe o dicta la dirección (también sirve parte de ella: «150b 143 45»), la guía o sus últimos 4 números, el nombre, el teléfono o el conjunto."; return; }
+  $("bqIn").placeholder = viaBuscar() ? `${viaBuscar()} … ej.: 145 106 20` : "Ej.: 150b 143 45";
+  if(!q.trim()){ $("bqInfo").textContent = viaBuscar()
+    ? `Buscando en ${viaBuscar()}: escribe o dicta solo los números (por ejemplo «145 106 20» o solo «145»). También sirve la guía, el nombre, el teléfono o el conjunto.`
+    : "Escribe o dicta la dirección (también sirve parte de ella: «150b 143 45»), la guía o sus últimos 4 números, el nombre, el teléfono o el conjunto."; return; }
   const r = buscarPedidos(q);
   const total = state.stops.filter(s=>!s.example).length;
   $("bqInfo").textContent = r.length
@@ -79,7 +91,12 @@ function renderBuscar(){
     box.appendChild(c);
   }
 }
+function pintarViaBuscar(){ for(const r of document.querySelectorAll("input[name=viaQ]")) r.checked = r.value === viaBuscar(); }
+for(const r of document.querySelectorAll("input[name=viaQ]")) r.addEventListener("change", ()=>{
+  if(!r.checked) return; state.viaBuscar = r.value; save(); renderBuscar(); $("bqIn").focus();
+});
 function abrirBuscar(texto){
+  pintarViaBuscar();
   $("bqIn").value = texto || "";
   renderBuscar();
   $("dlgBuscar").showModal();
@@ -103,6 +120,7 @@ function bqDictar(){
     }
     // «calle ciento cuarenta y cinco…» → «calle 145 …»; si no es una dirección, queda lo dicho (nombre, conjunto…).
     const conv = spokenToAddress(txt.trim()), pa = parseAddress(conv);
+    // Con vía elegida, lo dictado sin vía («ciento cuarenta y cinco ciento seis veinte») queda como números.
     $("bqIn").value = pa ? pa.label : conv;
     renderBuscar();
   };

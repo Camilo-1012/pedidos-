@@ -50,3 +50,27 @@ test("buscar pedido: por dirección completa, parcial, con cifras juntas, y por 
   await expect(page.locator("#bqIn")).toHaveValue("calle 145");
   expect(errs).toEqual([]);
 });
+
+test("buscar pedido: vía elegida con botón (por defecto la del dictado) y solo los números", async ({ page }) => {
+  const errs = vigilarErrores(page);
+  await entrar(page); await cargar(page, [...PARADAS, { addr: "Carrera 145 # 139-10", guia: "PO5550145" }]);
+  await page.evaluate(() => { state.viaDictado = "Calle"; save(); });
+  await page.click("#btnFind2");
+  await expect(page.locator("#viaQCalle")).toBeChecked();          // toma la del dictado
+  const buscar = async (q) => { await page.fill("#bqIn", q); return dirs(page); };
+  // Con Calle: «145» son las de la Calle 145, no la Carrera 145
+  expect(await buscar("145")).toEqual(["Calle 145 # 106-20", "Calle 145 # 106-60"]);
+  expect(await buscar("145 106 60")).toEqual(["Calle 145 # 106-60"]);
+  expect(await buscar("pinos")).toEqual(["Carrera 110 # 150-20"]);     // texto: busca como siempre
+  expect(await buscar("carrera 145")).toEqual(["Carrera 145 # 139-10"]); // si se escribe la vía, manda lo escrito
+  expect(await buscar("5550145")).toEqual(["Carrera 145 # 139-10"]);  // la guía también se encuentra
+  // Cambiar a Carrera: queda guardada para la búsqueda
+  await page.click("label[for=viaQCarrera]");
+  expect(await buscar("150b 14345")).toEqual(["Carrera 150B # 143-45"]);
+  expect(await buscar("145")).toEqual(["Carrera 145 # 139-10"]);
+  expect(await page.evaluate(() => [state.viaBuscar, state.viaDictado])).toEqual(["Carrera", "Calle"]);
+  // Todas: como antes
+  await page.click("label[for=viaQTodas]");
+  expect((await buscar("145")).length).toBeGreaterThanOrEqual(2);
+  expect(errs).toEqual([]);
+});

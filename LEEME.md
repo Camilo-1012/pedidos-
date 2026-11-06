@@ -432,3 +432,7 @@ El optimizador ahora arma una tabla de costos una sola vez y calcula cada intent
 ## La ruta ordenada no se desordena sola (v2.19)
 - Antes, hasta la primera entrega, cualquier recálculo automático reordenaba toda la ruta: al volver la señal (evento «online»), al editar una parada, al tomar el GPS, al llegar pedidos del otro celular, al cambiar carro/moto. Si en ese momento el servidor de rutas no respondía, quedaba el orden aproximado y se veía «desordenado».
 - Ahora, una vez ordenada la ruta, solo «Ordenar ruta» (y cambiar las opciones de la ruta: zona, sectores, ida y vuelta) reordena todo. Lo demás respeta el orden de la lista, incluidos los cambios a mano con ▲▼: los pedidos nuevos (y una parada a la que se le cambió la dirección) se insertan en su mejor lugar. Si reordenar todo ahorraría 5 % o más, se avisa en Ruta.
+
+## Buscar con vía elegida (v2.20)
+- En «Buscar pedido» hay botones **Todas · Calle · Carrera · Diag. · Transv.** Con una elegida, basta escribir o dictar los números: «145» muestra las de la Calle 145 (no la Carrera 145); «145 106 60» va directo a Calle 145 # 106-60.
+- Por defecto toma la vía del dictado; si se cambia en la búsqueda, queda guardada aparte. Si se escribe la vía («carrera 145») manda lo escrito. Nombre, conjunto, guía y teléfono se siguen encontrando igual.
