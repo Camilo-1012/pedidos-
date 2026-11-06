@@ -62,6 +62,7 @@ Los celulares descargan la versión nueva en segundo plano y muestran «Hay una 
 | `js/10-conduccion.js` | Modo conducción. |
 | `js/11-equipo.js` | Equipo en la nube (Supabase). |
 | `js/12-aviso.js` | Aviso a los próximos clientes (WhatsApp/SMS con hora) y «Parquea una vez». |
+| `js/13-buscar.js` | Buscar pedido por dirección (completa o parcial), guía, nombre, teléfono o conjunto. |
 | `supabase/equipo.sql` | Tablas y reglas de seguridad de Supabase. |
 | `sw.js` | Service worker: uso sin señal, actualizaciones y mapas guardados. |
 | `tests/` | Pruebas automáticas (no se publican). |
@@ -378,3 +379,9 @@ El optimizador ahora arma una tabla de costos una sola vez y calcula cada intent
 
 ### Ajuste v2.11.3: dictado con cifras juntas
 - El reconocimiento de voz a veces omite «número» y «guion» y junta las cifras («carrera 150 B 14345»). Ahora se separa solo en «Carrera 150B # 143-45» (placa de 2 cifras; 3 si la vía quedaría mayor que 250). Si aun así no es una dirección, queda en REVISAR como antes.
+
+## Buscar pedido por dirección (v2.12)
+- El botón **Buscar** (barra de abajo) y **Buscar pedido** (en Ruta) abren una búsqueda que filtra mientras se escribe o se dicta.
+- Sirve la dirección completa en cualquier forma («cra 150b 14345», «KR 150B 143 45») o una parte («calle 145», «106 60»), la guía o sus últimos 4 números, el nombre, el teléfono o el conjunto.
+- Muestra primero las pendientes y luego las ya entregadas; al tocar una se puede marcar Entregado, abrir Waze o verla en la lista. «Escanear la guía con la cámara» sigue disponible ahí.
+- Solo busca en los pedidos de la jornada de este celular (no en el historial de días anteriores) y no usa internet, salvo para dictar.

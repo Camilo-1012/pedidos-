@@ -106,7 +106,7 @@
     <button type="button" class="primary" id="btnDrive">Modo conducción</button>
     <button type="button" class="dark" id="btnAviso">Avisar a los próximos clientes (WhatsApp)</button>
     <div class="row">
-      <button type="button" id="btnFind">Buscar paquete por guía</button>
+      <button type="button" id="btnFind">Buscar pedido</button>
       <button type="button" id="btnLoad">Revisar cargue</button>
     </div>
     <div class="row">
@@ -210,7 +210,7 @@
 <div class="toolbar"><div class="wrap three">
   <button type="button" class="primary" id="btnNext">Waze: siguiente</button>
   <button type="button" id="btnScan2">Escanear</button>
-  <button type="button" id="btnFind2">Buscar guía</button>
+  <button type="button" id="btnFind2">Buscar</button>
 </div></div>
 
 <dialog id="dlgEdit">
@@ -387,6 +387,20 @@
     <input id="avEmpresa" type="text" maxlength="30" autocomplete="off" placeholder="Temu">
     <div id="avList" style="display:flex;flex-direction:column;gap:8px"></div>
     <p class="hint" id="avInfo" style="margin:0"></p>
+  </form>
+</dialog>
+
+<dialog id="dlgBuscar" aria-labelledby="bqTitle">
+  <form method="dialog">
+    <div class="dlgHead"><h2 id="bqTitle">Buscar pedido</h2><button type="submit" class="small">Cerrar</button></div>
+    <label for="bqIn" class="hint" style="margin:0">Dirección, guía, nombre, teléfono o conjunto</label>
+    <div class="addrRow">
+      <input id="bqIn" type="search" autocomplete="off" enterkeyhint="search" placeholder="Ej.: 150b 143 45">
+      <button type="button" class="mic" id="bqMic" aria-label="Dictar lo que buscas">Dictar</button>
+    </div>
+    <button type="button" id="bqScan">Escanear la guía con la cámara</button>
+    <p class="hint" id="bqInfo" style="margin:0" aria-live="polite"></p>
+    <div id="bqList" style="display:flex;flex-direction:column;gap:8px"></div>
   </form>
 </dialog>
 

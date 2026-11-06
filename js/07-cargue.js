@@ -46,16 +46,8 @@ function flashStop(st){
 function showFind(q){
   const r = searchGuia(q), body = $("fdBody"); body.innerHTML = "";
   if(r.length && r.every(x=>x.st===r[0].st)){
-    const {st, g} = r[0], done = st.status==="done";
-    $("fdTitle").textContent = "Paquete encontrado";
-    body.appendChild(stopCard(st, g));
-    if(navigator.vibrate) navigator.vibrate(60);
-    foundButtons([
-      [done ? "Deshacer entregado" : "Entregado", done ? "" : "primary", ()=>toggleDone(st)],
-      ...(done ? [] : [["Waze", "dark", ()=>openExternal(wazeUrl(st))]]),
-      ["Ver en la lista", "", ()=>flashStop(st)],
-      ["Buscar otro", "", ()=>startScan("find")]
-    ]);
+    showStopFound(r[0].st, r[0].g, ()=>startScan("find"));
+    return;
   } else if(r.length){
     $("fdTitle").textContent = "Varias guías terminan así";
     const p = document.createElement("p"); p.className = "hint"; p.textContent = "Toca el paquete que buscas:"; body.appendChild(p);
@@ -70,6 +62,21 @@ function showFind(q){
     if(navigator.vibrate) navigator.vibrate([200,100,200]);
     foundButtons([["Agregar paquete", "primary", ()=>startScan("label")], ["Buscar otro", "", ()=>startScan("find")], ["Cerrar", "", null]]);
   }
+  $("dlgFound").showModal();
+}
+// Una parada encontrada (por guía o por dirección) con sus acciones. «otra» = qué hace «Buscar otro».
+function showStopFound(st, g, otra){
+  const done = st.status==="done";
+  $("fdTitle").textContent = "Paquete encontrado";
+  const body = $("fdBody"); body.innerHTML = "";
+  body.appendChild(stopCard(st, g));
+  if(navigator.vibrate) navigator.vibrate(60);
+  foundButtons([
+    [done ? "Deshacer entregado" : "Entregado", done ? "" : "primary", ()=>toggleDone(st)],
+    ...(done ? [] : [["Waze", "dark", ()=>openExternal(wazeUrl(st))]]),
+    ["Ver en la lista", "", ()=>flashStop(st)],
+    ["Buscar otro", "", otra || (()=>abrirBuscar())]
+  ]);
   $("dlgFound").showModal();
 }
 // Aviso fuerte cuando se intenta cargar una guía que ya está en la lista.
@@ -110,8 +117,6 @@ $("scanFindBtn").onclick = ()=>{
   stopScan(); showFind(v);
 };
 $("scanFindIn").addEventListener("keydown", e=>{ if(e.key==="Enter"){ e.preventDefault(); $("scanFindBtn").click(); } });
-$("btnFind").onclick = ()=>startScan("find");
-$("btnFind2").onclick = ()=>startScan("find");
 
 /* ---- Escanear guías de paradas que quedaron sin código (dictadas, pegadas o escritas) ----
    La app propone la parada (en el orden de la ruta) y se escanea el código de ese paquete; si se tiene otro paquete

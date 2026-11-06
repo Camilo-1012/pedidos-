@@ -13,7 +13,7 @@ test("buscar escribiendo los últimos números y entregar desde el resultado", a
   const errs = vigilarErrores(page);
   await sinCamara(page);
   await entrar(page); await cargar(page, PARADAS);
-  await page.click("#btnFind2");
+  await page.click("#btnFind2"); await page.click("#bqScan");
   await expect(page.locator("#scanMsg")).toContainText("No se pudo abrir la cámara");
   await expect(page.locator("#dlgScan")).toHaveAttribute("open", "");
   await page.fill("#scanFindIn", "8888"); await page.click("#scanFindBtn");
@@ -21,7 +21,7 @@ test("buscar escribiendo los últimos números y entregar desde el resultado", a
   await expect(page.locator("#fdBody")).toContainText("Parada 2 · 3 paquetes");
   await page.click('#fdActs button:has-text("Entregado")');
   expect(await page.evaluate(() => state.stops.find(s => s.guia.includes("5555")).status)).toBe("done");
-  await page.click("#btnFind");
+  await page.click("#btnFind"); await page.click("#bqScan");
   await page.fill("#scanFindIn", "4321"); await page.click("#scanFindBtn");
   await expect(page.locator("#fdTitle")).toHaveText("No está en tu ruta");
   expect(errs).toEqual([]);
@@ -60,7 +60,7 @@ test("cámara: encuentra el paquete por el código de barras", async ({ page }) 
   test.skip(!CAMARA, "sin ffmpeg no hay cámara simulada");
   await page.context().grantPermissions(["camera"]);
   await entrar(page); await cargar(page, PARADAS);
-  await page.click("#btnFind");
+  await page.click("#btnFind"); await page.click("#bqScan");
   await expect(page.locator("#fdTitle")).toHaveText("Paquete encontrado", { timeout: 30000 });
   await expect(page.locator("#fdBody")).toContainText("Parada 1");
 });
