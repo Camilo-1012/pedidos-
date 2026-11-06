@@ -407,3 +407,9 @@ El optimizador ahora arma una tabla de costos una sola vez y calcula cada intent
 ### Ajuste v2.16: dirección completa de la ubicación
 - Al tomar la ubicación muestra la dirección según el mapa, con placa: «Estás en Carrera 149C # 137-40». La vía es la más cercana; el número es la vía cruzada de atrás y la placa, los metros desde esa esquina (como se numera en Bogotá), por eso se marca «placa aproximada». Si el mapa (Nominatim) tiene la placa exacta en ese punto sobre la misma vía, se usa esa.
 - Esa dirección se usa como punto de partida en la cuadrícula.
+
+## Escribir teléfonos a mano (v2.17)
+- Después de dictar o pegar varias direcciones, la app pregunta «¿Escribir los teléfonos?». Sale una lista con un campo por cada dirección sin teléfono (teclado numérico). Se guarda al pasar al siguiente con Enter o al tocar «Listo».
+- Acepta celular de 10 dígitos (con o sin +57 y espacios), fijo 601… o fijo de 7 dígitos; si está incompleto avisa «Revisa» y no lo guarda. Vacío = sin teléfono.
+- Al terminar, «Seguir con las guías (escanear)». Si responde que no a los teléfonos, igual ofrece las guías.
+- También desde «Revisar cargue» → «Escribir teléfonos faltantes (N)».

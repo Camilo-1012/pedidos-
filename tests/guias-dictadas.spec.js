@@ -14,6 +14,9 @@ test("después de pegar varias, asocia la guía de cada paquete", async ({ page 
   await entrar(page);
   await page.evaluate(() => { state.stops = []; save(); render(); });
   await pegarVarias(page, "Calle 145 # 103B-90\nCarrera 110 # 152-30 x2\nCalle 139 # 112-15");
+  // Primero ofrece escribir los teléfonos; si responde que no, sigue con las guías
+  await expect(page.locator("#cfTitle")).toHaveText("Escribir los teléfonos");
+  await page.click("#cfNo");
   await expect(page.locator("#cfTitle")).toHaveText("Escanear las guías");
   await expect(page.locator("#cfMsg")).toContainText("4 paquete(s) quedaron sin guía");
   await page.click("#cfYes");

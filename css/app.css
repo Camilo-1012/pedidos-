@@ -332,3 +332,14 @@ details.sec[open] > summary .secSum{display:none}
 .route li.stop.inPark{border-left-color:var(--ink);margin-left:12px}
 .dvPark:not([hidden]){display:flex;flex-direction:column;gap:2px;background:var(--accent);color:var(--accent-ink);border-radius:10px;padding:8px 10px;font-weight:600;font-size:15px}
 .dvPark small{font-weight:500;font-size:13px}
+
+/* Escribir teléfonos */
+.telRow{display:flex;flex-direction:column;gap:6px;padding:10px;border:1px solid var(--line);border-radius:12px}
+.telRow label{display:flex;flex-direction:column;gap:2px}
+.telRow label .hint{margin:0}
+.telIn{display:flex;align-items:center;gap:8px}
+.telIn input{flex:1;font-size:20px;letter-spacing:.5px}
+.telIn input.bad{border-color:var(--warn)}
+.telOk{font-size:13px;flex:0 0 auto;max-width:45%}
+.telOk.ok{color:var(--accent);font-size:20px;font-weight:700}
+.telOk.bad{color:var(--warn)}

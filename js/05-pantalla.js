@@ -441,17 +441,24 @@ $("frmText").addEventListener("submit", e=>{
     });
     save(); render(); optimize(true, {estable:true});
     toast(`${ok} ubicadas${bad?`, ${bad} para revisar`:""}${merged?`, ${merged} sumadas a una dirección repetida`:""}. Ruta ordenada.`);
-    // Lo dictado o pegado no trae guía: se ofrece escanear el código de cada paquete ya mismo.
-    const falt = guiasFaltantes([...new Set(ids)]);
-    if(falt.length) setTimeout(()=>confirmBox("Escanear las guías",
+    // Lo dictado o pegado suele venir sin teléfono ni guía: primero se ofrece escribir los teléfonos y luego escanear las guías.
+    const unicos = [...new Set(ids)];
+    const sinTel = unicos.filter(id=>{ const s = state.stops.find(x=>x.id===id); return s && !s.phone; });
+    const falt = guiasFaltantes(unicos);
+    const guiasLuego = falt.length ? ()=>setTimeout(()=>confirmBox("Escanear las guías",
       `${falt.length} paquete(s) quedaron sin guía. ¿Escaneas ahora el código de barras o QR de cada uno? La app te dice a qué dirección corresponde, y si tienes otro paquete en la mano eliges su dirección en la lista.`,
-      ()=>startAssign([...new Set(ids)])), 400);
+      ()=>startAssign(unicos)), 300) : null;
+    if(sinTel.length) setTimeout(()=>confirmBox("Escribir los teléfonos",
+      `${sinTel.length} parada(s) quedaron sin teléfono. ¿Los escribes ahora? Sale una lista con un campo por dirección.`,
+      ()=>abrirTelefonos(sinTel, guiasLuego), guiasLuego), 400);
+    else if(guiasLuego) setTimeout(guiasLuego, 100);
   }
 });
 
-let cfCb = null;
-function confirmBox(title,msg,cb){ $("cfTitle").textContent=title; $("cfMsg").textContent=msg; cfCb=cb; $("dlgConfirm").showModal(); }
-$("cfNo").onclick = ()=>$("dlgConfirm").close();
-$("frmConfirm").addEventListener("submit", e=>{ e.preventDefault(); $("dlgConfirm").close(); if(cfCb) cfCb(); cfCb=null; });
+let cfCb = null, cfNoCb = null;
+// noCb (opcional): qué hacer si responde que no.
+function confirmBox(title,msg,cb,noCb){ $("cfTitle").textContent=title; $("cfMsg").textContent=msg; cfCb=cb; cfNoCb=noCb||null; $("dlgConfirm").showModal(); }
+$("cfNo").onclick = ()=>{ $("dlgConfirm").close(); const f = cfNoCb; cfNoCb = null; if(f) f(); };
+$("frmConfirm").addEventListener("submit", e=>{ e.preventDefault(); $("dlgConfirm").close(); cfNoCb = null; if(cfCb) cfCb(); cfCb=null; });
 
 let tt; function toast(m){ const t=$("toast"); t.textContent=m; t.classList.add("show"); clearTimeout(tt); tt=setTimeout(()=>t.classList.remove("show"),3200); }

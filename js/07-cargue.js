@@ -286,6 +286,8 @@ function renderLoad(){
   $("ldReset").hidden = !state.loadOn;
   const faltG = guiasFaltantes().length;
   $("ldGuias").hidden = !faltG; $("ldGuias").textContent = `Escanear guías faltantes (${faltG})`;
+  const faltT = state.stops.filter(st=>!st.example && st.status!=="done" && !st.phone).length;
+  $("ldTel").hidden = !faltT; $("ldTel").textContent = `Escribir teléfonos faltantes (${faltT})`;
   // Orden de cargue: el inverso de la ruta (la última parada entra primero, al fondo).
   $("ldOrderList").innerHTML = ps.slice().reverse().map((st,i)=>`<li class="corder"><b>${stopNum(st)}</b><div>${esc(st.label||st.addr)}${(st.qty||1)>1?` <strong>×${st.qty}</strong>`:""}<span>${i===0?"Entra primero (al fondo) · ":i===ps.length-1?"Entra de último (a la mano) · ":""}${guias(st).map(g=>"…"+esc(g.slice(-4))).join(" ") || "Sin guía"}</span></div></li>`).join("");
   const box = $("ldList"); box.innerHTML = "";
@@ -343,3 +345,70 @@ $("ldReset").onclick = ()=>{ $("dlgLoad").close(); confirmBox("Verificar de nuev
 }); };
 // Al cerrar la cámara en modo verificación se vuelve a «Revisar cargue» con el resultado.
 $("dlgScan").addEventListener("close", ()=>{ if(scanMode==="verify"){ scanMode = "label"; render(); renderLoad(); $("dlgLoad").showModal(); } });
+
+/* ============ Escribir teléfonos a mano ============ */
+// Lista de paradas con un campo de teléfono cada una (teclado numérico). Se guarda al salir de cada campo.
+// Se abre después de dictar o pegar varias direcciones, o desde «Revisar cargue» (las que no tienen teléfono).
+let telIds = [], telLuego = null;
+function telValido(v){
+  const d = String(v||"").replace(/\D/g, ""), t = d.length===12 && d.startsWith("57") ? d.slice(2) : d;
+  if(/^3\d{9}$/.test(t) || /^60\d{8}$/.test(t)) return t;   // celular o fijo con indicativo 601…
+  if(/^\d{7}$/.test(t)) return t;                            // fijo de Bogotá sin indicativo
+  return null;
+}
+function telFormato(t){ return t.length===10 ? `${t.slice(0,3)} ${t.slice(3,6)} ${t.slice(6)}` : t; }
+function abrirTelefonos(ids, luego){
+  telIds = (ids && ids.length ? ids : state.stops.filter(s=>!s.example && s.status!=="done" && !s.phone).map(s=>s.id));
+  telLuego = luego || null;
+  const paradas = telIds.map(id=>state.stops.find(s=>s.id===id)).filter(Boolean).sort((a,b)=>stopNum(a)-stopNum(b));
+  if(!paradas.length){ toast("Todas las paradas ya tienen teléfono."); if(luego) luego(); return; }
+  const box = $("telList"); box.innerHTML = "";
+  paradas.forEach((st, i)=>{
+    const r = document.createElement("div"); r.className = "telRow";
+    const id = "tel-" + st.id;
+    r.innerHTML = `<label for="${id}"><b></b><span class="hint"></span></label>
+      <div class="telIn"><input id="${id}" type="tel" inputmode="numeric" autocomplete="off" maxlength="16" placeholder="300 123 4567" enterkeyhint="${i===paradas.length-1 ? "done" : "next"}"><span class="telOk" aria-live="polite"></span></div>`;
+    r.querySelector("b").textContent = `${stopNum(st)}. ${st.label||st.addr}`;
+    r.querySelector(".hint").textContent = [unitText(st), st.name].filter(Boolean).join(" · ");
+    const inp = r.querySelector("input"), ok = r.querySelector(".telOk");
+    if(st.phone) inp.value = telFormato(st.phone);
+    const marcar = ()=>{
+      const v = inp.value.trim();
+      if(!v){ ok.textContent = ""; inp.classList.remove("bad"); return null; }
+      const t = telValido(v);
+      ok.textContent = t ? "✓" : "Revisa: 10 dígitos (celular) o 7 (fijo)";
+      ok.className = "telOk" + (t ? " ok" : " bad");
+      inp.classList.toggle("bad", !t);
+      return t;
+    };
+    const guardar = ()=>{
+      const v = inp.value.trim(), t = marcar();
+      if(!v){ if(st.phone){ st.phone = ""; save(); render(); } }
+      else if(t && t !== st.phone){ st.phone = t; inp.value = telFormato(t); save(); render(); }
+      telResumen();
+    };
+    inp.addEventListener("input", ()=>{ const d = inp.value.replace(/\D/g, ""); if(d.length >= 10) marcar(); else { ok.textContent = ""; inp.classList.remove("bad"); } });
+    inp.addEventListener("change", guardar);
+    inp.addEventListener("keydown", e=>{
+      if(e.key !== "Enter") return;
+      e.preventDefault(); guardar();
+      const sig = box.querySelectorAll("input")[i+1];
+      if(sig) sig.focus(); else inp.blur();
+    });
+    marcar();
+    box.appendChild(r);
+  });
+  telResumen();
+  $("telGuias").hidden = !telLuego;
+  $("dlgTel").showModal();
+  setTimeout(()=>{ const v = [...box.querySelectorAll("input")].find(x=>!x.value); (v || box.querySelector("input")).focus(); }, 80);
+}
+function telResumen(){
+  const paradas = telIds.map(id=>state.stops.find(s=>s.id===id)).filter(Boolean);
+  const con = paradas.filter(s=>s.phone).length;
+  $("telInfo").textContent = `${con} de ${paradas.length} con teléfono. Escribe solo los números (celular de 10 dígitos o fijo); se guarda al pasar al siguiente. Si alguno no lo tiene, déjalo vacío.`;
+}
+// Al cerrar se guarda también lo que quedó escrito en el campo activo.
+$("dlgTel").addEventListener("close", ()=>{ const a = document.activeElement; if(a && a.closest && a.closest("#telList")) a.dispatchEvent(new Event("change")); });
+$("telGuias").onclick = ()=>{ const f = telLuego; telLuego = null; $("dlgTel").close(); if(f) f(); };
+$("ldTel").onclick = ()=>{ $("dlgLoad").close(); abrirTelefonos(); };

@@ -413,11 +413,21 @@
   </form>
 </dialog>
 
+<dialog id="dlgTel" aria-labelledby="telTitle">
+  <form method="dialog" id="frmTel">
+    <div class="dlgHead"><h2 id="telTitle">Escribir teléfonos</h2><button type="submit" class="small">Listo</button></div>
+    <p class="hint" id="telInfo" style="margin:0" aria-live="polite"></p>
+    <div id="telList" style="display:flex;flex-direction:column;gap:10px"></div>
+    <button type="button" class="dark" id="telGuias" hidden>Seguir con las guías (escanear)</button>
+  </form>
+</dialog>
+
 <dialog id="dlgLoad" aria-labelledby="ldTitle">
   <form method="dialog">
     <div class="dlgHead"><h2 id="ldTitle">Revisar cargue</h2><button type="submit" class="small">Cerrar</button></div>
     <div class="lsum" id="ldSum"></div>
     <button type="button" class="dark" id="ldGuias" hidden>Escanear guías faltantes</button>
+    <button type="button" id="ldTel" hidden>Escribir teléfonos faltantes</button>
     <button type="button" class="primary" id="ldScan">Verificar paquetes escaneando la guía</button>
     <p class="hint" id="ldHint" style="margin:0"></p>
     <div id="ldList" style="display:flex;flex-direction:column;gap:8px"></div>
