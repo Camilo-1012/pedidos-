@@ -416,3 +416,8 @@ El optimizador ahora arma una tabla de costos una sola vez y calcula cada intent
 
 ### Ajuste v2.17.1: «bis» dictado
 - El reconocimiento de voz escribe «bis» como «Avis», «vis», «biz»… Justo después de un número (o de su letra) se corrige a «Bis»: «carrera 141 Avis B 143b 59» → «Carrera 141 Bis B # 143B-59».
+
+## Vía elegida con botón al dictar (v2.18)
+- En «Varias direcciones» y en el formulario de una dirección hay botones de vía: **Dicha · Calle · Carrera · Diag. · Transv.** Con una elegida, solo se dicta el resto: «ciento cuarenta y uno bis be ciento cuarenta y tres be cincuenta y nueve» → «Carrera 141 Bis B # 143B-59».
+- Si en una dirección sí se dice la vía («calle…», «avenida…»), manda lo dicho. «Dicha» = como antes. La opción queda guardada y es la misma en los dos lugares.
+- También se corrigió que la letra después de «bis» («bis be») no se entendía en el dictado.

@@ -33,11 +33,12 @@ function spokenToAddress(text){
     out.push(t);
   }
   flush();
-  // Letras habladas ("be", "a") solo cuentan como letra si van justo después de un número.
+  // Letras habladas ("be", "a") solo cuentan como letra si van justo después de un número (o de «número bis»: «141 bis be»).
   for(let i=1;i<out.length;i++){
     const L = SPOKEN_LETTER[out[i]];
     const nxt = out[i+1];
-    if(L && /^\d+$/.test(out[i-1]) && (nxt===undefined || /^\d+$/.test(nxt) || ["#","-","bis","sur","este"].includes(nxt))) out[i] = L;
+    const trasNumero = /^\d+$/.test(out[i-1]) || (out[i-1]==="bis" && /^\d+$/.test(out[i-2]||""));
+    if(L && trasNumero && (nxt===undefined || /^\d+$/.test(nxt) || ["#","-","bis","sur","este"].includes(nxt))) out[i] = L;
   }
   // "guion cero ocho" → "-08"
   return repararPlaca(out.join(" ").replace(/- 0 (\d)\b/g,"- 0$1").replace(/\s+/g," ").trim());
@@ -92,6 +93,23 @@ function splitPhone(text){
   }
   return {addrConv: conv, tel: "", telMal: ""};
 }
+/* Vía elegida con botón (Calle, Carrera, Diagonal, Transversal): así no hay que decirla en cada dirección.
+   Si en lo dictado sí se dice una vía («calle…», «avenida…»), manda lo dicho. «Dicha» = sin vía elegida. */
+const VIA_DICHA_RE = /^\s*(calle|cll?|carrera|carerra|cra|kra|kr|k|diagonal|diag|dg|transversal|transv|tv|avenida|av|ac|ak|autopista)\b/i;
+function viaElegida(){ return state.viaDictado || ""; }
+function conViaElegida(t){
+  const v = viaElegida(), x = String(t||"").trim();
+  if(!v || !x || VIA_DICHA_RE.test(x.normalize("NFD").replace(/[\u0300-\u036f]/g,""))) return x;
+  return v + " " + x;
+}
+function pintarVia(){
+  for(const nm of ["viaB", "viaS"]) for(const r of document.querySelectorAll(`input[name=${nm}]`)) r.checked = r.value === viaElegida();
+}
+for(const r of document.querySelectorAll("input[name=viaB], input[name=viaS]")){
+  r.addEventListener("change", ()=>{ if(!r.checked) return; state.viaDictado = r.value; save(); pintarVia();
+    toast(r.value ? `Dicta sin decir «${r.value.toLowerCase()}»: solo el número y el resto de la dirección.` : "Di la vía en cada dirección (calle, carrera…)."); });
+}
+pintarVia();
 let rec = null, recOn = false;
 function micUI(on, msg){
   recOn = on;
@@ -107,7 +125,9 @@ function startDictation(){
   rec = new SR();
   rec.lang = "es-CO"; rec.interimResults = true; rec.maxAlternatives = 3; rec.continuous = false;
   let finalTxt = "";
-  rec.onstart = ()=>micUI(true, "Escuchando… di la dirección, por ejemplo: «calle ciento cuarenta y tres número ciento cincuenta y uno be guion veintitrés». Si quieres, al final di «teléfono» y el número.");
+  rec.onstart = ()=>micUI(true, viaElegida()
+    ? `Escuchando… vía: ${viaElegida()}. Di solo el resto, por ejemplo: «ciento cuarenta y tres número ciento cincuenta y uno be guion veintitrés». Si quieres, al final di «teléfono» y el número.`
+    : "Escuchando… di la dirección, por ejemplo: «calle ciento cuarenta y tres número ciento cincuenta y uno be guion veintitrés». Si quieres, al final di «teléfono» y el número.");
   rec.onresult = ev=>{
     let interim = "";
     for(let i=ev.resultIndex;i<ev.results.length;i++){
@@ -115,11 +135,11 @@ function startDictation(){
       if(r.isFinal){
         // De las alternativas, se prefiere la que se entiende como dirección válida.
         let best = r[0].transcript;
-        for(let k=0;k<r.length;k++){ if(parseAddress(spokenToAddress(r[k].transcript))){ best = r[k].transcript; break; } }
+        for(let k=0;k<r.length;k++){ if(parseAddress(spokenToAddress(conViaElegida(r[k].transcript)))){ best = r[k].transcript; break; } }
         finalTxt += " " + best;
       } else interim += r[0].transcript;
     }
-    const sp = splitPhone((finalTxt + " " + interim).trim());
+    const sp = splitPhone(conViaElegida((finalTxt + " " + interim).trim()));
     const conv = sp.addrConv;
     const pa = parseAddress(conv);
     if(sp.tel){ $("fPhone").value = sp.tel; if(typeof updPhone === "function") updPhone(); }
@@ -165,7 +185,8 @@ function bulkUI(on, msg){
 }
 function addDictatedLines(text){
   const parts = text.split(/\b(?:siguiente|otra direcci[oó]n|nueva l[ií]nea|punto y aparte)\b/i).map(x=>x.trim()).filter(Boolean);
-  for(const part of parts){
+  for(const raw of parts){
+    const part = conViaElegida(raw);
     const sp = splitPhone(part), conv = sp.addrConv;
     const pa = parseAddress(conv);
     // Lo no entendido queda tal cual se dijo, para corregirlo. El teléfono va al final como «Tel 3112223344».
@@ -190,7 +211,7 @@ function startBulkDictation(){
     for(let i=ev.resultIndex;i<ev.results.length;i++){
       const r = ev.results[i]; if(!r.isFinal) continue;
       let best = r[0].transcript;
-      for(let k=0;k<r.length;k++){ if(parseAddress(spokenToAddress(r[k].transcript))){ best = r[k].transcript; break; } }
+      for(let k=0;k<r.length;k++){ if(parseAddress(spokenToAddress(conViaElegida(r[k].transcript)))){ best = r[k].transcript; break; } }
       addDictatedLines(best);
     }
   };

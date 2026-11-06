@@ -46,3 +46,25 @@ test("dictado: «bis» mal escrito por el reconocimiento («Avis», «vis») se 
   // «Avis» lejos de un número no se toca (p. ej. un nombre)
   expect(await page.evaluate(() => spokenToAddress("conjunto avis torre 2"))).toBe("conjunto avis torre 2");
 });
+
+test("dictado: vía elegida con botón, sin decirla en cada dirección", async ({ page }) => {
+  await entrar(page);
+  await page.click("text=Más opciones"); await page.click("#btnBulk");
+  await expect(page.locator("#viaBulkBox")).toBeVisible();
+  await page.click("label[for=viaBCarrera]");
+  expect(await page.evaluate(() => state.viaDictado)).toBe("Carrera");
+  await page.evaluate(() => {
+    addDictatedLines("ciento cuarenta y uno bis be ciento cuarenta y tres be cincuenta y nueve siguiente 150 B 14345");
+    addDictatedLines("calle 139 112 15");                     // si dice la vía, manda lo dicho
+    addDictatedLines("110 152 30 teléfono 311 222 3344");
+  });
+  expect((await page.inputValue("#txtArea")).split("\n")).toEqual([
+    "Carrera 141 Bis B # 143B-59", "Carrera 150B # 143-45", "Calle 139 # 112-15", "Carrera 110 # 152-30 Tel 3112223344"
+  ]);
+  // Calle: en el formulario de una sola dirección queda marcada igual (es la misma opción)
+  await page.click("label[for=viaBCalle]");
+  expect(await page.evaluate(() => [conViaElegida("145 106 20"), document.getElementById("viaSCalle").checked])).toEqual(["Calle 145 106 20", true]);
+  // «Dicha»: sin vía, como antes
+  await page.click("label[for=viaBDicha]");
+  expect(await page.evaluate(() => conViaElegida("145 106 20"))).toBe("145 106 20");
+});

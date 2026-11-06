@@ -417,7 +417,7 @@ function openText(mode){
   $("txtTitle").textContent = mode==="one" ? "Pegar texto de la etiqueta" : "Pegar varias direcciones";
   $("txtHint").textContent = mode==="one" ? "En la galería o Google Lens toca «Copiar texto» sobre la etiqueta y pégalo aquí." :
     "Una dirección por línea. Puedes agregar al final el teléfono, la zona y la cantidad, por ejemplo: Calle 143 # 151B-23 3001234567 ST 49 x3. Si una dirección se repite, se suma a la misma parada.";
-  $("micBulk").hidden = mode!=="bulk"; $("micBulkMsg").hidden = true;
+  $("micBulk").hidden = mode!=="bulk"; $("micBulkMsg").hidden = true; $("viaBulkBox").hidden = mode!=="bulk";
   $("dlgText").showModal(); if(mode!=="bulk") setTimeout(()=>$("txtArea").focus(),50);
 }
 $("txtCancel").onclick = ()=>$("dlgText").close();

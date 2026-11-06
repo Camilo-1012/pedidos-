@@ -225,6 +225,10 @@
       <input id="fAddr" required autocomplete="off" aria-describedby="fParsed">
       <button type="button" class="mic" id="micAddr" aria-label="Dictar la dirección">Dictar</button>
     </div>
+    <div id="viaOneBox">
+      <span class="hint" style="display:block;margin:2px 0 6px">Vía al dictar (para no decirla)</span>
+      <div class="seg seg5" role="radiogroup" aria-label="Vía para el dictado"><input type="radio" name="viaS" id="viaSDicha" value=""><label for="viaSDicha">Dicha</label><input type="radio" name="viaS" id="viaSCalle" value="Calle"><label for="viaSCalle">Calle</label><input type="radio" name="viaS" id="viaSCarrera" value="Carrera"><label for="viaSCarrera">Carrera</label><input type="radio" name="viaS" id="viaSDiagonal" value="Diagonal"><label for="viaSDiagonal">Diag.</label><input type="radio" name="viaS" id="viaSTransversal" value="Transversal"><label for="viaSTransversal">Transv.</label></div>
+    </div>
     <p class="hint" id="micMsg" hidden aria-live="polite"></p>
     <div id="fParsed" class="preview"></div>
     <div>
@@ -446,6 +450,10 @@
   <form id="frmText">
     <h2 id="txtTitle">Pegar texto</h2>
     <p class="hint" id="txtHint">Pega el texto copiado de la etiqueta.</p>
+    <div id="viaBulkBox" hidden>
+      <span class="hint" style="display:block;margin-bottom:6px;font-weight:600;color:var(--ink)">Vía (para no decirla en cada dirección)</span>
+      <div class="seg seg5" role="radiogroup" aria-label="Vía para el dictado"><input type="radio" name="viaB" id="viaBDicha" value=""><label for="viaBDicha">Dicha</label><input type="radio" name="viaB" id="viaBCalle" value="Calle"><label for="viaBCalle">Calle</label><input type="radio" name="viaB" id="viaBCarrera" value="Carrera"><label for="viaBCarrera">Carrera</label><input type="radio" name="viaB" id="viaBDiagonal" value="Diagonal"><label for="viaBDiagonal">Diag.</label><input type="radio" name="viaB" id="viaBTransversal" value="Transversal"><label for="viaBTransversal">Transv.</label></div>
+    </div>
     <button type="button" class="mic" id="micBulk" hidden>Dictar direcciones</button>
     <p class="hint" id="micBulkMsg" hidden aria-live="polite"></p>
     <textarea id="txtArea"></textarea>

@@ -343,3 +343,7 @@ details.sec[open] > summary .secSum{display:none}
 .telOk{font-size:13px;flex:0 0 auto;max-width:45%}
 .telOk.ok{color:var(--accent);font-size:20px;font-weight:700}
 .telOk.bad{color:var(--warn)}
+
+/* Vía elegida para el dictado */
+.seg.seg5{grid-template-columns:repeat(5,minmax(0,1fr));gap:4px}
+.seg.seg5 label{min-height:40px;font-size:13px;padding:0 2px}
