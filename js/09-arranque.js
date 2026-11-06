@@ -37,18 +37,22 @@ $("btnGps").onclick = ()=>{
     // En ruta no se revuelve el orden del vehículo (ver estabilizar en js/02-ruta.js); si conviene reordenar, se avisa.
     optimize(true, {estable:true});
     if(!navigator.onLine) return;
-    // Calle y carrera reales según el mapa (corrige la estimación) y barrio.
-    cruceDeGps(lat, lng).then(c=>{
+    // Dirección según el mapa (calle, carrera y placa) y barrio. Corrige la estimación de la cuadrícula.
+    Promise.all([cruceDeGps(lat, lng).catch(()=>undefined), lugarDeGps(lat, lng)]).then(([c, l])=>{
       const g = state.startGPS; if(!g || g.t !== t) return;
-      if(!c){ toast(`No encontré el nombre de la calle en el mapa. Aproximado: ${g.dir || "sin dato"}.`); return; }
-      g.cruce = c.texto;
-      if(c.x != null){ g.x = c.x; g.y = c.y; g.dir = ""; }
-      save(); render(); toast("Estás en " + c.texto + ".");
-      if(c.x != null) optimize(true, {estable:true});
-    }).catch(()=>{ const g = state.startGPS; if(g && g.t === t) toast(`El mapa no respondió. Ubicación aproximada: ${g.dir || "sin dato"}.`); });
-    lugarDeGps(lat, lng).then(l=>{
-      const g = state.startGPS; if(!l || !g || g.t !== t || !l.barrio) return;
-      g.barrio = l.barrio; save(); render();
+      if(l && l.barrio) g.barrio = l.barrio;
+      if(c === undefined && !(l && l.dir)){ save(); render(); toast(`El mapa no respondió. Ubicación aproximada: ${g.dir || "sin dato"}.`); return; }
+      if(!c && !(l && l.dir)){ save(); render(); toast(`No encontré el nombre de la calle en el mapa. Aproximado: ${g.dir || "sin dato"}.`); return; }
+      // Si el mapa tiene la placa exacta sobre la misma vía, se usa esa; si no, la calculada.
+      const exacta = l && l.dir && (!c || l.dir.startsWith(c.via + " #")) ? l.dir : "";
+      g.dirMapa = exacta || (c && c.dir) || "";
+      g.placaExacta = !!exacta;
+      g.cruce = c ? c.texto : "";
+      const pa = g.dirMapa ? parseAddress(g.dirMapa) : null;
+      if(pa){ g.x = pa.x; g.y = pa.y; } else if(c && c.x != null){ g.x = c.x; g.y = c.y; }
+      g.dir = "";
+      save(); render(); toast("Estás en " + (g.dirMapa || g.cruce) + ".");
+      optimize(true, {estable:true});
     });
   }, err=>{
     btn.disabled = false; btn.textContent = state.startGPS ? "Actualizar mi ubicación" : "Usar mi ubicación actual";
@@ -196,7 +200,7 @@ $("restoreFile").addEventListener("change", async e=>{
 /* ============ App instalable y sin conexión ============ */
 // Al bloquear: apaga la cámara y cierra ventanas abiertas para que no queden datos a la vista.
 window.RUTA_onLock = ()=>{ try{ stopScan(); }catch(e){} };
-const APP_VERSION = "2.15";
+const APP_VERSION = "2.16";
 $("ver").textContent = "Versión " + APP_VERSION + ". Funciona sin internet una vez abierta la primera vez.";
 if(navigator.storage && navigator.storage.estimate){
   navigator.storage.estimate().then(e=>{ if(e && e.usage) $("ver").textContent += ` Espacio usado en este celular: ${(e.usage/1048576).toFixed(1).replace(".",",")} MB (la mayor parte es el lector de etiquetas).`; }).catch(()=>{});

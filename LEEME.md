@@ -403,3 +403,7 @@ El optimizador ahora arma una tabla de costos una sola vez y calcula cada intent
 - Sin internet se muestra la estimación marcada como «aproximado»; ahora usa también las esquinas ya ubicadas y las direcciones aprendidas cercanas.
 - **Dirección escrita:** se valida al escribirla. Si se entiende: «✓ Se usa como punto de partida: …». Si no: «✗ No reconozco…: no se está usando», en rojo.
 - Si se escribe (o se toma el GPS) **después** de la última entrega, manda sobre ella. Si la ruta está saliendo de la última entrega, se avisa debajo del punto de partida.
+
+### Ajuste v2.16: dirección completa de la ubicación
+- Al tomar la ubicación muestra la dirección según el mapa, con placa: «Estás en Carrera 149C # 137-40». La vía es la más cercana; el número es la vía cruzada de atrás y la placa, los metros desde esa esquina (como se numera en Bogotá), por eso se marca «placa aproximada». Si el mapa (Nominatim) tiene la placa exacta en ese punto sobre la misma vía, se usa esa.
+- Esa dirección se usa como punto de partida en la cuadrícula.

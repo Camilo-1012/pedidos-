@@ -236,32 +236,51 @@ function viaDeNombre(n){
   const pa = parseAddress(`${m[1]} ${m[2]}${m[3] ? " " + m[3] : ""} # 1-01`);
   return pa ? {axis: v.axis, nombre: pa.label.split(" # ")[0], num: m[2] + (m[3] ? " " + m[3] : "")} : null;
 }
+// Distancia en metros del punto a una vía (polilínea) y el punto de la vía más cercano.
 function metrosAVia(p, geom){
   const kx = 111320*Math.cos(p.lat*Math.PI/180), ky = 110540;
-  let best = Infinity;
+  let best = {d: Infinity, lat: p.lat, lng: p.lng};
   for(let i=1;i<geom.length;i++){
     const ax = (geom[i-1].lon-p.lng)*kx, ay = (geom[i-1].lat-p.lat)*ky, bx = (geom[i].lon-p.lng)*kx, by = (geom[i].lat-p.lat)*ky;
     const dx = bx-ax, dy = by-ay, L = dx*dx+dy*dy, u = L ? Math.max(0, Math.min(1, -(ax*dx+ay*dy)/L)) : 0;
-    best = Math.min(best, Math.hypot(ax+u*dx, ay+u*dy));
+    const px = ax+u*dx, py = ay+u*dy, d = Math.hypot(px, py);
+    if(d < best.d) best = {d, lat: p.lat + py/ky, lng: p.lng + px/kx};
   }
   return best;
 }
+/* Dirección del GPS según el mapa: la vía más cercana es sobre la que se está («Carrera 149C»); la placa es la vía
+   cruzada de número menor que queda justo antes («137») y los metros desde esa esquina («-24»), como se numera en
+   Bogotá. Las calles crecen hacia el norte (hacia el sur si son Sur) y las carreras hacia el occidente (oriente si son Este). */
 async function cruceDeGps(lat, lng){
-  const j = await overpass(`[out:json][timeout:12];way(around:180,${lat},${lng})["highway"]["name"];out tags geom;`);
-  let calle = null, carrera = null;
+  const j = await overpass(`[out:json][timeout:12];way(around:250,${lat},${lng})["highway"]["name"];out tags geom;`);
+  const vias = [];
   for(const w of j.elements||[]){
     if(!w.geometry || w.geometry.length < 2) continue;
     const tg = w.tags||{};
     const v = [tg.name, tg.alt_name, tg.official_name, tg.old_name].map(viaDeNombre).find(Boolean);
     if(!v) continue;
-    const d = metrosAVia({lat,lng}, w.geometry);
-    if(v.axis==="calle"){ if(!calle || d < calle.d) calle = {...v, d}; }
-    else if(!carrera || d < carrera.d) carrera = {...v, d};
+    const m = metrosAVia({lat,lng}, w.geometry);
+    const prev = vias.find(x=>x.nombre===v.nombre);   // una calle suele venir partida en varios tramos
+    if(prev){ if(m.d < prev.d) Object.assign(prev, m); } else vias.push({...v, ...m});
   }
-  if(!calle && !carrera) return null;
-  const pa = calle && carrera ? parseAddress(`${carrera.nombre} # ${calle.num}-01`) : null;
-  const pri = !calle ? carrera : !carrera ? calle : (calle.d <= carrera.d ? calle : carrera), otro = pri===calle ? carrera : calle;
-  return {texto: otro ? `${pri.nombre} con ${otro.nombre}` : pri.nombre, x: pa ? pa.x : null, y: pa ? pa.y : null};
+  if(!vias.length) return null;
+  vias.sort((a,b)=>a.d-b.d);
+  const pri = vias[0];
+  if(pri.d > 120) return null;   // ninguna vía con nombre lo bastante cerca
+  const cruces = vias.filter(v=>v.axis !== pri.axis);
+  const otro = cruces[0] && cruces[0].d < 200 ? cruces[0] : null;
+  // Vía cruzada «de atrás»: el punto queda del lado de los números mayores.
+  const adelante = v => v.axis === "calle" ? (/ Sur$/.test(v.nombre) ? lat < v.lat : lat > v.lat)
+                                           : (/ Este$/.test(v.nombre) ? lng > v.lng : lng < v.lng);
+  const base = cruces.filter(adelante)[0];
+  let dir = "", pa = null;
+  if(base){
+    const placa = String(Math.max(1, Math.round(base.d))).padStart(2, "0");
+    pa = parseAddress(`${pri.nombre} # ${base.num}-${placa}`);
+    if(pa) dir = pa.label;
+  }
+  if(!pa && otro) pa = parseAddress(pri.axis === "carrera" ? `${pri.nombre} # ${otro.num}-01` : `${pri.nombre} # ${otro.num}-01`);
+  return {texto: otro ? `${pri.nombre} con ${otro.nombre}` : pri.nombre, dir, via: pri.nombre, x: pa ? pa.x : null, y: pa ? pa.y : null};
 }
 // Con internet: barrio del punto, según OpenStreetMap. Una consulta por toque del botón.
 async function lugarDeGps(lat, lng){
@@ -270,7 +289,10 @@ async function lugarDeGps(lat, lng){
     const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1&accept-language=es`, {signal: ctl.signal});
     if(!r.ok) return null;
     const a = (await r.json()).address || {};
-    return {barrio: a.neighbourhood || a.quarter || a.suburb || ""};
+    // Placa exacta si el mapa la tiene en ese punto (p. ej. «137-20» en la «Carrera 149C»).
+    const hn = String(a.house_number||"").replace(/^(#|N[O°º]\.?)\s*/i, "").trim();
+    const pa = a.road && /^\d{1,3}\s*[A-H]?\s*(BIS)?\s*[A-H]?\s*-\s*\d{1,3}$/i.test(hn) ? parseAddress(`${a.road} # ${hn}`) : null;
+    return {barrio: a.neighbourhood || a.quarter || a.suburb || "", dir: pa ? pa.label : ""};
   }catch(e){ return null; } finally { clearTimeout(to); }
 }
 async function checkBarrios(onProgress){

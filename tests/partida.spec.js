@@ -24,11 +24,19 @@ test("GPS: muestra la calle y la carrera reales del mapa y las usa como punto de
   expect(await page.evaluate(() => ["Carrera 149C", "CALLE 136A BIS", "Avenida Calle 145", "Calle 23 Sur", "Avenida Ciudad de Cali"].map(n => (viaDeNombre(n) || {}).nombre || null)))
     .toEqual(["Carrera 149C", "Calle 136A Bis", "Avenida Calle 145", "Calle 23 Sur", null]);
   await page.click("#btnGps");
-  await expect(page.locator("#startInfo")).toContainText("Estás en Carrera 149C con Calle 137 (según el mapa), barrio Tibabuyes");
+  // Sobre la Carrera 149C (la más cercana), a ~40 m de la Calle 137 hacia el norte: placa 137-40
+  await expect(page.locator("#startInfo")).toContainText("Estás en Carrera 149C # 137-40 (según el mapa; la placa es aproximada), cerca de la esquina con Calle 137, barrio Tibabuyes");
+  await expect(page.locator("#toast")).toContainText("Estás en Carrera 149C # 137-40.");
   const g = await page.evaluate(() => state.startGPS);
-  expect(g.x).toBeCloseTo(149.45, 1); expect(Math.floor(g.y)).toBe(137);
+  expect(g.x).toBeCloseTo(149.45, 2); expect(g.y).toBeCloseTo(137.40, 2);
   expect(await page.evaluate(() => currentOrigin().label)).toBe("Mi ubicación");
-  await expect(page.locator("#routeSum")).toContainText("Desde Carrera 149C con Calle 137");
+  await expect(page.locator("#routeSum")).toContainText("Desde Carrera 149C # 137-40");
+  // Si el mapa tiene la placa exacta en ese punto, se usa esa
+  await context.unroute(/nominatim/);
+  await context.route(/nominatim/, r => r.fulfill({ status: 200, contentType: "application/json", headers: { "Access-Control-Allow-Origin": "*" },
+    body: JSON.stringify({ address: { road: "Carrera 149C", house_number: "137-22", neighbourhood: "Tibabuyes" } }) }));
+  await page.click("#btnGps");
+  await expect(page.locator("#startInfo")).toContainText("Estás en Carrera 149C # 137-22 (según el mapa), cerca de la esquina con Calle 137");
   expect(errs).toEqual([]);
 });
 
@@ -53,4 +61,18 @@ test("dirección escrita: se valida, se usa y manda sobre la última entrega si 
   await page.evaluate(() => toggleDone(state.stops.find(s => s.status !== "done")));
   await expect(page.locator("#startInfo")).toContainText("la ruta sigue desde tu última entrega");
   expect(errs).toEqual([]);
+});
+
+test("GPS sobre una calle: placa desde la carrera de atrás (las carreras crecen hacia el occidente)", async ({ page, context }) => {
+  await entrar(page);
+  const lat = 4.7420, lng = -74.0950;
+  const els = { elements: [
+    via("Calle 145", [[lat - 0.00015, lng - 0.003], [lat - 0.00015, lng + 0.003]]),        // ~17 m al sur: sobre esta
+    via("Carrera 106", [[lat - 0.003, lng + 0.00055], [lat + 0.003, lng + 0.00055]]),      // ~60 m al oriente (atrás)
+    via("Carrera 107", [[lat - 0.003, lng - 0.0006], [lat + 0.003, lng - 0.0006]])         // ~66 m al occidente (adelante)
+  ] };
+  await context.route(/overpass/, r => r.fulfill({ status: 200, contentType: "application/json", headers: { "Access-Control-Allow-Origin": "*" }, body: JSON.stringify(els) }));
+  const c = await page.evaluate(([a, b]) => cruceDeGps(a, b), [lat, lng]);
+  expect(c.dir).toBe("Calle 145 # 106-61");
+  expect(c.texto).toBe("Calle 145 con Carrera 106");
 });
