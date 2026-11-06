@@ -1,5 +1,5 @@
 // Hasta la primera entrega la lista es el orden de entrega numerado 1, 2, 3… (aunque se haya tomado el GPS antes de cargar).
-// Desde la primera entrega o «No estaba»: cada paquete conserva su número y el orden no se revuelve solo.
+// Desde la primera entrega: cada paquete conserva su número y el orden no se revuelve solo.
 const { test, expect } = require("@playwright/test");
 const { entrar, cargar, vigilarErrores, sinInternetExterno } = require("./ayuda");
 
@@ -83,4 +83,17 @@ test("GPS tomado antes de cargar: los números siguen el orden de entrega, no el
   expect(await numsLista(page)).toEqual(["1", "2", "3", "4", "5"]);
   const orden = await page.evaluate(() => state.stops.map(s => s.addr));
   expect(orden[0]).toBe("Calle 145 # 106-20");           // la más cercana a la salida va primero
+});
+
+test("lista con números de cargue (versión anterior) y un «No estaba» sin entregas: se renumera 1, 2, 3…", async ({ page }) => {
+  await sinInternetExterno(page);
+  await entrar(page);
+  await page.evaluate(() => {
+    const a = ["Calle 144 # 136A-45", "Carrera 141 Bis B # 143B-66", "Carrera 141A Bis # 143B-40", "Carrera 141A Bis C # 143B-14", "Carrera 141A # 144-58"];
+    state.stops = a.map((x, i) => Object.assign(mkStop({ addr: x }), { num: [29, 30, 26, 27, 24][i] }));
+    state.stops[4].status = "fail"; state.stops[4].failAt = Date.now();
+    state.salidaAt = Date.now(); state.startGPS = { lat: 4.74, lng: -74.1, acc: 10, t: Date.now(), x: 136, y: 144 };
+    save(); render();
+  });
+  expect(await numsLista(page)).toEqual(["1", "2", "3", "4", "5"]);
 });

@@ -314,14 +314,14 @@ function refinarPorTramos(origin, ordered, back, blocks){
   });
   return out;
 }
-/* Ruta en curso: desde la primera entrega o «No estaba».
+/* Ruta en curso: desde la primera entrega (un «No estaba» solo no cuenta: la ruta se sigue ordenando y numerando completa).
    - Antes de eso, la lista es el orden de entrega y se numera 1, 2, 3… (se reordena todo al cargar o al tomar el GPS).
    - Después, el orden del vehículo se respeta: las paradas nuevas se insertan en el mejor hueco del orden actual (el de
      la lista, incluidos los cambios a mano) y nada se reordena solo. Si reordenar todo ahorra 5 % o más, se avisa y el
      repartidor decide con «Ordenar ruta».
    - Cada paquete conserva su número; las paradas nuevas toman el siguiente número libre. */
 const MEJORA_AVISO = 0.05;
-function rutaEnCurso(){ return state.stops.some(s=>s.status==="done" || s.status==="fail"); }
+function rutaEnCurso(){ return state.stops.some(s=>s.status==="done"); }
 function estabilizar(origin, ordered, back){
   const conocidas = new Set(state.suggestedIds || []);
   if(!conocidas.size || ordered.length < 2) return ordered;
