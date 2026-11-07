@@ -57,6 +57,13 @@ $("btnGps").onclick = ()=>{
   }, {enableHighAccuracy:true, timeout:20000, maximumAge:0});
 };
 $("btnGpsClear").onclick = ()=>{ state.startGPS = null; save(); $("btnGps").textContent = "Usar mi ubicación actual"; optimize(true, {estable:true}); };
+// Cómo ordenar: automático con el mapa o por direcciones (carreras/calles de mayor a menor).
+for(const r of document.querySelectorAll("input[name=ordenModo], input[name=ordPrim]")) r.addEventListener("change", ()=>{
+  if(!r.checked) return;
+  if(r.name === "ordenModo") state.ordenModo = r.value; else state.ordenPrimero = r.value;
+  save(); render(); optimize(false);
+});
+$("ordAsc").addEventListener("change", e=>{ state.ordenAsc = e.target.checked; save(); render(); optimize(false); });
 $("byZone").addEventListener("change", e=>{ state.byZone = e.target.checked; save(); optimize(true); });
 $("roundTrip").addEventListener("change", e=>{ state.roundTrip = e.target.checked; save(); optimize(true); });
 $("routeOpts").addEventListener("toggle", ()=>{ if(!!state.optsOpen !== $("routeOpts").open){ state.optsOpen = $("routeOpts").open; save(); } });
@@ -197,7 +204,7 @@ $("restoreFile").addEventListener("change", async e=>{
 /* ============ App instalable y sin conexión ============ */
 // Al bloquear: apaga la cámara y cierra ventanas abiertas para que no queden datos a la vista.
 window.RUTA_onLock = ()=>{ try{ stopScan(); }catch(e){} };
-const APP_VERSION = "2.22";
+const APP_VERSION = "2.23";
 $("ver").textContent = "Versión " + APP_VERSION + ". Funciona sin internet una vez abierta la primera vez.";
 if(navigator.storage && navigator.storage.estimate){
   navigator.storage.estimate().then(e=>{ if(e && e.usage) $("ver").textContent += ` Espacio usado en este celular: ${(e.usage/1048576).toFixed(1).replace(".",",")} MB (la mayor parte es el lector de etiquetas).`; }).catch(()=>{});

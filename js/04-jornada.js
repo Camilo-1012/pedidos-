@@ -47,7 +47,8 @@ function updateComparison(){
   const back = !!state.roundTrip && !!parseAddress(state.start);
   // Se comparan solo las paradas pendientes (las de «No estaba» quedan al final a propósito y no cuentan como cambio a mano).
   const pend = state.stops.filter(s=>s.status==="pend" && s.x!==null);
-  if(pend.length < 2 || !state.suggestedIds){ box.hidden = true; return; }
+  // En «Por direcciones» el orden lo decide el repartidor: no se compara con el cargue.
+  if(pend.length < 2 || !state.suggestedIds || modoDirecciones()){ box.hidden = true; return; }
   const byId = new Map(pend.map(s=>[s.id,s]));
   const sug = state.suggestedIds.map(id=>byId.get(id)).filter(Boolean);
   pend.forEach(s=>{ if(!sug.includes(s)) sug.push(s); });

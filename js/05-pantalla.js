@@ -111,12 +111,19 @@ function render(){
   $("stKmLbl").textContent = real ? "km reales" : "km aprox.";
   $("realRoads").checked = state.realRoads !== false;
   // Resumen de las opciones cuando el bloque está oculto.
+  // Cómo ordenar
+  $("ordAuto").checked = !modoDirecciones(); $("ordDir").checked = modoDirecciones();
+  $("ordPrimKr").checked = state.ordenPrimero !== "calles"; $("ordPrimCl").checked = state.ordenPrimero === "calles";
+  $("ordAsc").checked = !!state.ordenAsc;
+  $("ordDirBox").hidden = !modoDirecciones();
+  $("ordInfo").textContent = modoDirecciones() ? "Los pedidos nuevos entran en su lugar. Puedes mover a mano con ▲▼; para volver a este orden, toca «Ordenar ruta»." :
+    "La app calcula el recorrido más corto con el mapa. Waze solo navega a cada parada: no recibe la lista completa.";
   const parts = [];
   parts.push(currentOrigin() && currentOrigin().id ? "Desde tu última entrega" : state.startGPS ? "Desde " + (state.startGPS.dirMapa || state.startGPS.cruce || (state.startGPS.dir ? "≈ " + state.startGPS.dir : "tu ubicación")) : state.start ? "Desde " + state.start : (zone().on && zone().entry ? "Entrada por " + (ZONE_ENTRIES[zone().entry]||"la zona").replace(/ \(.*\)$/,"") : "Sin punto de partida"));
   parts.push(esMoto() ? "en moto" : "en carro");
   if(state.byZone) parts.push("por zona ST");
   if(state.roundTrip) parts.push("con regreso");
-  parts.push(state.realRoads !== false ? "calles reales" : "orden aproximado");
+  parts.push(modoDirecciones() ? "por direcciones" : state.realRoads !== false ? "calles reales" : "orden aproximado");
   if(state.autoWaze !== false) parts.push("Waze automático");
   $("optsSum").textContent = parts.join(" · ");
   // Ruta desplegable: cerrada muestra paradas, km y desde dónde arranca. Abierta por defecto la primera vez.

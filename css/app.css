@@ -106,8 +106,8 @@ dialog.scan{width:min(640px,calc(100% - 16px))}
 .mic.on{background:var(--bad);color:#fff;border-color:var(--bad);animation:pulse 1.2s infinite}
 @keyframes pulse{50%{opacity:.6}}
 @media (prefers-reduced-motion: reduce){.mic.on{animation:none}}
-.seg{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
-.seg input{position:absolute;opacity:0;pointer-events:none}
+.seg{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;position:relative}
+.seg input{position:absolute;opacity:0;pointer-events:none;width:1px;height:1px;margin:0;left:0;top:0}
 .seg label{display:flex;align-items:center;justify-content:center;min-height:44px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--ink);font:600 14px var(--body);cursor:pointer}
 .seg input:checked + label{background:var(--ink);color:var(--bg);border-color:var(--ink)}
 .seg input:focus-visible + label{outline:3px solid var(--accent);outline-offset:2px}

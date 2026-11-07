@@ -446,3 +446,9 @@ El optimizador ahora arma una tabla de costos una sola vez y calcula cada intent
 ## Buscar por partes (v2.22)
 - En «Buscar pedido», además del texto, hay campos **[Vía] # [Cruce] - [Placa]** con la vía de los botones (Todas, Calle, Carrera…). No hace falta llenar todo: «145» solo, o «106» # «60». Cada parte compara por el comienzo (la placa «5» encuentra 59).
 - «#» y «-» saltan al siguiente campo. Escribir en el texto limpia las partes y al revés. «Buscar otro» vuelve con las mismas partes.
+
+## Ordenar por direcciones (v2.23)
+- En Ruta, «Cómo ordenar la ruta»: **Automático (mapa)** (como siempre: recorrido más corto con el mapa) o **Por direcciones**.
+- Por direcciones: **Carreras primero** = carreras de mayor a menor y, en cada carrera, las calles de mayor a menor; **Calles primero** = al revés. «De menor a mayor» invierte. Una carrera agrupa sus letras y bis (141, 141A, 141 Bis B) y las direcciones sobre calles que caen en esa franja (Calle 144 # 141-20 va con la carrera 141).
+- Los «No estaba» van al final; los pedidos nuevos entran en su lugar sin mover los demás; ▲▼ sigue funcionando y «Ordenar ruta» vuelve al orden por direcciones. Los números siguen la lista (1, 2, 3…) hasta la primera entrega.
+- Waze no recibe listas de paradas (solo navega a una a la vez), por eso el modo automático lo calcula la app con el mapa.

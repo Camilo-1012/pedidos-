@@ -367,6 +367,38 @@ function applyOrder(orderIds){
   const done = state.stops.filter(s=>s.status==="done");
   state.stops = [...out, ...restGeo, ...unk, ...done];
 }
+/* Orden «Por direcciones» (en vez del automático con el mapa): carreras de mayor a menor y, en cada carrera, las
+   calles de mayor a menor (o al revés con «Calles primero»; «De menor a mayor» invierte). Una carrera agrupa sus
+   letras y bis (141, 141A, 141 Bis B) y las direcciones sobre calles que caen en esa franja (Calle 144 # 141-20).
+   Los «No estaba» van al final y las que no se reconocen, después. */
+const modoDirecciones = ()=>state.ordenModo === "direcciones";
+function cmpDirecciones(a, b){
+  const s = state.ordenAsc ? 1 : -1;
+  const [p, q] = state.ordenPrimero === "calles" ? ["y", "x"] : ["x", "y"];
+  const ka = Math.floor(a[p] + 1e-9), kb = Math.floor(b[p] + 1e-9);
+  if(ka !== kb) return s * (ka - kb);
+  return s * (a[q] - b[q]) || s * (a[p] - b[p]);
+}
+function ordenDirecciones(lista, estable){
+  const falla = s=>s.status === "fail";
+  const ordenada = [...lista.filter(s=>!falla(s)).sort(cmpDirecciones), ...lista.filter(falla).sort(cmpDirecciones)];
+  const conocidas = new Set(estable ? (baseConocidas || state.suggestedIds || []) : []);
+  const ids = new Set(lista.map(s=>s.id));
+  const actual = state.stops.filter(s=>ids.has(s.id) && conocidas.has(s.id));
+  if(!actual.length) return ordenada;
+  // Ya estaba ordenada: se respeta (incluidos los cambios a mano) y cada nueva entra donde le toca.
+  const P = [...actual.filter(s=>!falla(s)), ...actual.filter(falla)];
+  for(const s of ordenada.filter(x=>!conocidas.has(x.id))){
+    const i = P.findIndex(q=>falla(q) !== falla(s) ? falla(q) : cmpDirecciones(s, q) < 0);
+    if(i < 0) P.push(s); else P.splice(i, 0, s);
+  }
+  return P;
+}
+function textoOrdenDirecciones(){
+  const asc = state.ordenAsc, cl = state.ordenPrimero === "calles";
+  const dir = asc ? "de menor a mayor" : "de mayor a menor";
+  return cl ? `Por direcciones: calles ${dir} y, en cada calle, las carreras ${dir}.` : `Por direcciones: carreras ${dir} y, en cada carrera, las calles ${dir}.`;
+}
 let optimizing = null, pendingOpt = false, optEstable = false, baseConocidas = null;
 // optimize(silent, {estable:true}): lo que pasa solo (pedido nuevo, editar, GPS, volver la señal, llegó algo del otro
 // celular). Si la ruta ya estaba ordenada, se respeta ese orden y lo nuevo se inserta (ver estabilizar).
@@ -387,6 +419,15 @@ function quickOrder(){
   const back = !!state.roundTrip && !!parseAddress(state.start);
   const geo = state.stops.filter(s=>s.status!=="done" && s.x!==null);
   if(MATRIX) return;   // no interferir si justo se está usando la matriz real
+  if(modoDirecciones()){
+    const ord = ordenDirecciones(geo, optEstable);
+    applyOrder(ord.map(s=>s.id));
+    state.suggestedIds = ord.map(s=>s.id);
+    state.mejoraRuta = null; LASTM = null; ROUTE_GEOM = null;
+    state.route = {mode:"direcciones", km: pathLen(origin, ord, back)*KM_PER_UNIT};
+    save(); render();
+    return;
+  }
   let quick = orderStops(origin, geo, back);
   if(optEstable) quick = estabilizar(origin, quick, back); else state.mejoraRuta = null;
   applyOrder(quick.map(s=>s.id));
@@ -403,6 +444,11 @@ async function optimizeNow(silent){
   const geo = pend.filter(s=>s.x!==null), unk = pend.filter(s=>s.x===null);
   // 1) Orden inmediato con la cuadrícula.
   quickOrder();
+  if(modoDirecciones()){
+    setRouteInfo(geo.length ? textoOrdenDirecciones() : "");
+    if(!silent) toast(unk.length ? `Ruta ordenada por direcciones. ${unk.length} dirección(es) para revisar al final.` : "Ruta ordenada por direcciones.");
+    return;
+  }
   // 2) Con internet: ubicar en el mapa y ordenar con tiempos reales en carro.
   if(state.realRoads !== false && navigator.onLine && geo.length >= 1){
     try{
