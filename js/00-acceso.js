@@ -74,7 +74,13 @@ function enter(u){
   window.RUTA_USER = {id:u.id, name:u.name, admin:!!u.admin};
   q("btnUserName").textContent = u.name;
   // Los archivos de la app se cargan en orden y solo después de entrar con el PIN.
-  for(const f of APP_FILES){ const s = document.createElement("script"); s.src = f; s.async = false; document.body.appendChild(s); }
+  // Cuando carga el último, la app está completa: se vuelve a pintar (lo de los archivos finales, como «Parquea una vez»)
+  // y se marca RUTA_LISTA (la usan las pruebas automáticas).
+  APP_FILES.forEach((f, i)=>{
+    const s = document.createElement("script"); s.src = f; s.async = false;
+    if(i === APP_FILES.length - 1) s.onload = ()=>{ window.RUTA_LISTA = true; window.dispatchEvent(new Event("ruta-lista")); };
+    document.body.appendChild(s);
+  });
 }
 function lock(){
   if(typeof window.RUTA_onLock === "function"){ try{ window.RUTA_onLock(); }catch(e){} }

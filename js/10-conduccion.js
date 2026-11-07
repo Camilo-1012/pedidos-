@@ -46,7 +46,7 @@ function renderDrive(){
   const gr = typeof gruposParqueo === "function" ? gruposParqueo().find(g=>g.miembros.some(m=>m.id===s.id)) : null;
   // ¿Acaba de entregar muy cerca? Entonces ya está parqueado: sigue a pie.
   const ld = state.lastDoneId ? state.stops.find(x=>x.id===state.lastDoneId && x.status==="done") : null;
-  const aPie = ld && ld.doneAt && Date.now() - ld.doneAt < 20*60000 && metrosEntre(ld, s) <= PARQUEO_M;
+  const aPie = typeof metrosEntre === "function" && ld && ld.doneAt && Date.now() - ld.doneAt < 20*60000 && metrosEntre(ld, s) <= PARQUEO_M;
   $("dvPark").hidden = !gr && !aPie;
   if(aPie){
     const resto = gr ? gr.miembros.filter(m=>m.id!==s.id) : [];

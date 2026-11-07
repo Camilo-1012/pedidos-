@@ -261,5 +261,6 @@ $("btnUpdCheck").onclick = ()=>checkUpdate(true);
 if("requestIdleCallback" in window){ requestIdleCallback(()=>{ if(navigator.onLine) getWorker().catch(()=>{}); }, {timeout:8000}); }
 
 render();
-// Señal de que todos los archivos cargaron (la usan las pruebas automáticas).
-window.RUTA_LISTA = true;
+// Con todos los archivos cargados (ver js/00-acceso.js) se pinta de nuevo: la lista y el modo conducción usan funciones
+// de los archivos que cargan después de este.
+addEventListener("ruta-lista", ()=>{ render(); if(state.driveOn && typeof renderDrive === "function") renderDrive(); });
