@@ -436,3 +436,8 @@ El optimizador ahora arma una tabla de costos una sola vez y calcula cada intent
 ## Buscar con vía elegida (v2.20)
 - En «Buscar pedido» hay botones **Todas · Calle · Carrera · Diag. · Transv.** Con una elegida, basta escribir o dictar los números: «145» muestra las de la Calle 145 (no la Carrera 145); «145 106 60» va directo a Calle 145 # 106-60.
 - Por defecto toma la vía del dictado; si se cambia en la búsqueda, queda guardada aparte. Si se escribe la vía («carrera 145») manda lo escrito. Nombre, conjunto, guía y teléfono se siguen encontrando igual.
+
+## Dirección por partes (v2.21)
+- En «Revisa y guarda» / «Editar paquete» la dirección se escribe por partes: **[Vía ▾] [150B] # [143B] - [45]**. «#» y «-» del teclado (o Enter) saltan al siguiente campo; la placa usa teclado numérico. Abajo se arma la dirección completa y se valida («Reconocida»).
+- La dirección completa sigue disponible para pegar, dictar o escanear: al llenarse se reparte sola en las partes (lo que va después de la placa, como Torre/apto o Sur, se conserva).
+- La vía de las partes también es la que se usa al dictar en este formulario. Para paquetes nuevos viene la última elegida a mano (o la del dictado).

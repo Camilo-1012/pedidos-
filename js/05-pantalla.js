@@ -300,14 +300,53 @@ function openEdit(s, isNew){
   $("fRaw").textContent = s.raw||""; $("rawWrap").hidden = !s.raw;
   updParsed();
   $("dlgEdit").showModal();
+  if(isNew && !s.addr) setTimeout(()=>$("pN1").focus(), 60);   // «Escribir»: se empieza por el número de la vía
 }
-function updParsed(){
+// Dirección por partes ⇄ dirección completa. Al escribir en las partes se arma la completa; al pegar, dictar,
+// escanear o abrir una parada, la completa se reparte en las partes. Lo que va después de la placa (Sur, apto…) se conserva.
+let partesCola = "";
+function partesDe(txt){
+  const p = parseAddress(txt);
+  if(!p) return null;
+  const m = /^(\D+?) (\d.*?) # (.+?)-(\d+)(.*)$/.exec(p.label);
+  if(!m) return null;
+  return {via: m[1], n1: m[2], n2: m[3], n3: m[4], cola: m[5] + (typeof rest === "function" ? rest(txt) : "")};
+}
+function llenarPartes(){
+  const t = $("fAddr").value.trim(), d = partesDe(t);
+  if(d){
+    if(![...$("pVia").options].some(o=>o.value===d.via)) $("pVia").add(new Option(d.via));
+    $("pVia").value = d.via; $("pN1").value = d.n1; $("pN2").value = d.n2; $("pN3").value = d.n3; partesCola = d.cola;
+  } else if(!t){
+    $("pN1").value = $("pN2").value = $("pN3").value = ""; partesCola = "";
+    $("pVia").value = state.viaParte || state.viaDictado || "Calle";
+  }
+}
+function armarDesdePartes(){
+  const via = $("pVia").value, n1 = $("pN1").value.trim(), n2 = $("pN2").value.trim(), n3 = $("pN3").value.replace(/\D/g,"");
+  if(!n1 && !n2 && !n3) return;
+  $("fAddr").value = `${via} ${n1}` + (n2 || n3 ? ` # ${n2}` + (n3 ? `-${n3}` : "") : "") + partesCola;
+  updParsed(true); if(typeof updPhone === "function") updPhone();
+}
+for(const id of ["pN1","pN2","pN3"]) $(id).addEventListener("input", armarDesdePartes);
+$("pVia").addEventListener("change", ()=>{ state.viaParte = $("pVia").value; save(); armarDesdePartes(); $("pN1").focus(); });
+// «#» en el primer número salta al segundo; «-» en el segundo salta a la placa; Enter pasa al siguiente campo.
+const sigParte = {pN1:"pN2", pN2:"pN3", pN3:"fQty"};
+for(const id of ["pN1","pN2","pN3"]) $(id).addEventListener("keydown", e=>{
+  if(e.key==="Enter" || (id==="pN1" && e.key==="#") || (id==="pN2" && e.key==="-")){ e.preventDefault(); $(sigParte[id]).focus(); }
+});
+for(const id of ["pN1","pN2"]) $(id).addEventListener("input", e=>{   // si pegan o el teclado mete el símbolo igual
+  const el = e.target, ch = id==="pN1" ? "#" : "-";
+  if(el.value.includes(ch)){ const [a, b] = el.value.split(ch); el.value = a.trim(); const sig = $(sigParte[id]); if(b && !sig.value) sig.value = b.trim(); armarDesdePartes(); sig.focus(); }
+});
+function updParsed(desdePartes){
+  if(desdePartes !== true) llenarPartes();
   const p = parseAddress($("fAddr").value);
   const zi = p ? zoneIssue(p) : null;
   $("fParsed").innerHTML = p ? `<span class="chip ok">Reconocida</span> ${esc(p.label)}` + (zi ? ` <span class="chip warn">Fuera de tu zona: ${esc(zi)}</span>` : "") :
     `<span class="chip warn">No reconocida</span> Escríbela así: Calle 143 # 151B-23 (o Cra, Dg, Tv; agrega Sur o Este si aplica).`;
 }
-$("fAddr").addEventListener("input", updParsed);
+$("fAddr").addEventListener("input", ()=>updParsed());
 // Llamar o escribir por WhatsApp al cliente desde el formulario (apenas se escanea la etiqueta).
 // Número para marcar: celular (10 dígitos), fijo con indicativo (601…) o fijo de 7 dígitos. Si trae +57 se quita.
 function dialNumber(v){

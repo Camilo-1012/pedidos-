@@ -347,3 +347,10 @@ details.sec[open] > summary .secSum{display:none}
 /* Vía elegida para el dictado */
 .seg.seg5{grid-template-columns:repeat(5,minmax(0,1fr));gap:4px}
 .seg.seg5 label{min-height:40px;font-size:13px;padding:0 2px}
+
+/* Dirección por partes: [Vía] [150B] # [143B] - [45] */
+.lblTxt{font-size:14px;font-weight:600;color:var(--ink)}
+.addrParts{display:grid;grid-template-columns:minmax(74px,.8fr) minmax(0,1.3fr) auto minmax(0,1.1fr) auto minmax(0,.7fr);gap:5px;align-items:center}
+.addrParts select,.addrParts input{min-width:0;width:100%;font-size:18px;padding-left:8px;padding-right:6px}
+.addrParts select{font-size:16px;padding-right:2px}
+.addrParts .sep{font:700 20px var(--display);color:var(--muted);text-align:center}

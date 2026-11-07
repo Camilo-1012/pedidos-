@@ -220,14 +220,21 @@
       <h2 id="dlgTitle">Paquete</h2>
       <button type="submit" class="primary small" id="saveTop">Guardar</button>
     </div>
-    <label for="fAddr">Dirección</label>
+    <span class="lblTxt" id="pLbl">Dirección por partes</span>
+    <div class="addrParts" role="group" aria-labelledby="pLbl">
+      <select id="pVia" aria-label="Vía">
+        <option value="Calle">Calle</option><option value="Carrera">Cra</option><option value="Diagonal">Dg</option><option value="Transversal">Tv</option><option value="Avenida Calle">Av Cl</option><option value="Avenida Carrera">Av Cra</option>
+      </select>
+      <input id="pN1" aria-label="Número de la vía (ej. 150B o 141 Bis B)" placeholder="150B" autocomplete="off" autocapitalize="characters" enterkeyhint="next">
+      <span class="sep" aria-hidden="true">#</span>
+      <input id="pN2" aria-label="Número de la cruce (ej. 143B)" placeholder="143B" autocomplete="off" autocapitalize="characters" enterkeyhint="next">
+      <span class="sep" aria-hidden="true">-</span>
+      <input id="pN3" aria-label="Placa (ej. 45)" placeholder="45" autocomplete="off" inputmode="numeric" maxlength="3" enterkeyhint="next">
+    </div>
+    <label for="fAddr">Dirección completa (o pégala / díctala)</label>
     <div class="addrRow">
       <input id="fAddr" required autocomplete="off" aria-describedby="fParsed">
       <button type="button" class="mic" id="micAddr" aria-label="Dictar la dirección">Dictar</button>
-    </div>
-    <div id="viaOneBox">
-      <span class="hint" style="display:block;margin:2px 0 6px">Vía al dictar (para no decirla)</span>
-      <div class="seg seg5" role="radiogroup" aria-label="Vía para el dictado"><input type="radio" name="viaS" id="viaSDicha" value=""><label for="viaSDicha">Dicha</label><input type="radio" name="viaS" id="viaSCalle" value="Calle"><label for="viaSCalle">Calle</label><input type="radio" name="viaS" id="viaSCarrera" value="Carrera"><label for="viaSCarrera">Carrera</label><input type="radio" name="viaS" id="viaSDiagonal" value="Diagonal"><label for="viaSDiagonal">Diag.</label><input type="radio" name="viaS" id="viaSTransversal" value="Transversal"><label for="viaSTransversal">Transv.</label></div>
     </div>
     <p class="hint" id="micMsg" hidden aria-live="polite"></p>
     <div id="fParsed" class="preview"></div>

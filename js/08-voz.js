@@ -97,15 +97,15 @@ function splitPhone(text){
    Si en lo dictado sí se dice una vía («calle…», «avenida…»), manda lo dicho. «Dicha» = sin vía elegida. */
 const VIA_DICHA_RE = /^\s*(calle|cll?|carrera|carerra|cra|kra|kr|k|diagonal|diag|dg|transversal|transv|tv|avenida|av|ac|ak|autopista)\b/i;
 function viaElegida(){ return state.viaDictado || ""; }
-function conViaElegida(t){
-  const v = viaElegida(), x = String(t||"").trim();
+function conViaElegida(t, via){
+  const v = via === undefined ? viaElegida() : via, x = String(t||"").trim();
   if(!v || !x || VIA_DICHA_RE.test(x.normalize("NFD").replace(/[\u0300-\u036f]/g,""))) return x;
   return v + " " + x;
 }
 function pintarVia(){
-  for(const nm of ["viaB", "viaS"]) for(const r of document.querySelectorAll(`input[name=${nm}]`)) r.checked = r.value === viaElegida();
+  for(const r of document.querySelectorAll("input[name=viaB]")) r.checked = r.value === viaElegida();
 }
-for(const r of document.querySelectorAll("input[name=viaB], input[name=viaS]")){
+for(const r of document.querySelectorAll("input[name=viaB]")){
   r.addEventListener("change", ()=>{ if(!r.checked) return; state.viaDictado = r.value; save(); pintarVia();
     toast(r.value ? `Dicta sin decir «${r.value.toLowerCase()}»: solo el número y el resto de la dirección.` : "Di la vía en cada dirección (calle, carrera…)."); });
 }
@@ -125,8 +125,8 @@ function startDictation(){
   rec = new SR();
   rec.lang = "es-CO"; rec.interimResults = true; rec.maxAlternatives = 3; rec.continuous = false;
   let finalTxt = "";
-  rec.onstart = ()=>micUI(true, viaElegida()
-    ? `Escuchando… vía: ${viaElegida()}. Di solo el resto, por ejemplo: «ciento cuarenta y tres número ciento cincuenta y uno be guion veintitrés». Si quieres, al final di «teléfono» y el número.`
+  rec.onstart = ()=>micUI(true, $("pVia").value
+    ? `Escuchando… vía: ${$("pVia").value}. Di solo el resto, por ejemplo: «ciento cuarenta y tres número ciento cincuenta y uno be guion veintitrés». Si quieres, al final di «teléfono» y el número.`
     : "Escuchando… di la dirección, por ejemplo: «calle ciento cuarenta y tres número ciento cincuenta y uno be guion veintitrés». Si quieres, al final di «teléfono» y el número.");
   rec.onresult = ev=>{
     let interim = "";
@@ -135,11 +135,12 @@ function startDictation(){
       if(r.isFinal){
         // De las alternativas, se prefiere la que se entiende como dirección válida.
         let best = r[0].transcript;
-        for(let k=0;k<r.length;k++){ if(parseAddress(spokenToAddress(conViaElegida(r[k].transcript)))){ best = r[k].transcript; break; } }
+        for(let k=0;k<r.length;k++){ if(parseAddress(spokenToAddress(conViaElegida(r[k].transcript, $("pVia").value)))){ best = r[k].transcript; break; } }
         finalTxt += " " + best;
       } else interim += r[0].transcript;
     }
-    const sp = splitPhone(conViaElegida((finalTxt + " " + interim).trim()));
+    // En este formulario la vía es la de «Dirección por partes» (si no se dice otra al dictar).
+    const sp = splitPhone(conViaElegida((finalTxt + " " + interim).trim(), $("pVia").value));
     const conv = sp.addrConv;
     const pa = parseAddress(conv);
     if(sp.tel){ $("fPhone").value = sp.tel; if(typeof updPhone === "function") updPhone(); }

@@ -61,10 +61,46 @@ test("dictado: vía elegida con botón, sin decirla en cada dirección", async (
   expect((await page.inputValue("#txtArea")).split("\n")).toEqual([
     "Carrera 141 Bis B # 143B-59", "Carrera 150B # 143-45", "Calle 139 # 112-15", "Carrera 110 # 152-30 Tel 3112223344"
   ]);
-  // Calle: en el formulario de una sola dirección queda marcada igual (es la misma opción)
   await page.click("label[for=viaBCalle]");
-  expect(await page.evaluate(() => [conViaElegida("145 106 20"), document.getElementById("viaSCalle").checked])).toEqual(["Calle 145 106 20", true]);
+  expect(await page.evaluate(() => conViaElegida("145 106 20"))).toBe("Calle 145 106 20");
   // «Dicha»: sin vía, como antes
   await page.click("label[for=viaBDicha]");
   expect(await page.evaluate(() => conViaElegida("145 106 20"))).toBe("145 106 20");
+});
+
+test("dirección por partes: vía, número # cruce - placa, y se reparte al pegar o editar", async ({ page }) => {
+  await entrar(page);
+  await page.evaluate(() => { state.viaDictado = "Carrera"; save(); openEdit(mkStop({}), true); });
+  await expect(page.locator("#pVia")).toHaveValue("Carrera");        // por defecto la del dictado
+  // Escribir por partes: «#» y «-» saltan al siguiente campo
+  await page.click("#pN1"); await page.keyboard.type("141 bis b#143b-59");
+  await expect(page.locator("#pN1")).toHaveValue("141 bis b");
+  await expect(page.locator("#pN2")).toHaveValue("143b");
+  await expect(page.locator("#pN3")).toHaveValue("59");
+  await expect(page.locator("#fParsed")).toContainText("Reconocida Carrera 141 Bis B # 143B-59");
+  await expect(page.locator("#fAddr")).toHaveValue("Carrera 141 bis b # 143b-59");
+  // Cambiar la vía arma de nuevo la dirección
+  await page.selectOption("#pVia", "Calle");
+  await expect(page.locator("#fParsed")).toContainText("Reconocida Calle 141 Bis B # 143B-59");
+  // Pegar la dirección completa la reparte en las partes (con lo que va después de la placa)
+  await page.fill("#fAddr", "Cra 110 # 152-30 Torre 2 apto 302");
+  await expect(page.locator("#pVia")).toHaveValue("Carrera");
+  await expect(page.locator("#pN1")).toHaveValue("110");
+  await expect(page.locator("#pN2")).toHaveValue("152");
+  await expect(page.locator("#pN3")).toHaveValue("30");
+  await page.fill("#pN3", "34");
+  await expect(page.locator("#fAddr")).toHaveValue(/^Carrera 110 # 152-34 .*Torre 2 apto 302$/i);
+  // Guardar
+  await page.click("#saveTop");
+  expect(await page.evaluate(() => state.stops.some(s => s.label === "Carrera 110 # 152-34"))).toBe(true);
+  // Editar una parada existente: las partes muestran su dirección
+  await page.evaluate(() => openEdit(state.stops.find(s => s.label === "Carrera 110 # 152-34")));
+  await expect(page.locator("#pN2")).toHaveValue("152");
+  await expect(page.locator("#pN3")).toHaveValue("34");
+  // La vía elegida a mano queda como la de los paquetes nuevos
+  await page.selectOption("#pVia", "Diagonal");
+  await page.keyboard.press("Escape");
+  await page.evaluate(() => openEdit(mkStop({}), true));
+  await expect(page.locator("#pVia")).toHaveValue("Diagonal");
+  await expect(page.locator("#pN1")).toHaveValue("");
 });
