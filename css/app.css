@@ -354,3 +354,4 @@ details.sec[open] > summary .secSum{display:none}
 .addrParts select,.addrParts input{min-width:0;width:100%;font-size:18px;padding-left:8px;padding-right:6px}
 .addrParts select{font-size:16px;padding-right:2px}
 .addrParts .sep{font:700 20px var(--display);color:var(--muted);text-align:center}
+.addrParts.bqParts{grid-template-columns:minmax(0,1.3fr) auto minmax(0,1.1fr) auto minmax(0,.8fr)}

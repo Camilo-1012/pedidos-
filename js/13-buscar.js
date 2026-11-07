@@ -72,35 +72,62 @@ function buscarPedidos(texto){
   }
   return res.sort((a, b)=>b.puntos - a.puntos || (stopNum(a.st)||999) - (stopNum(b.st)||999)).slice(0, BQ_MAX);
 }
+// Búsqueda por partes: [número de la vía] # [cruce] - [placa], con la vía de los botones (o todas).
+// Cada parte compara por el comienzo («14» encuentra 141, 145…); las vacías no filtran.
+const bqLlave = t => String(t||"").toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^0-9A-Z]/g, "");
+const bqPartes = ()=>({n1: $("bqN1").value, n2: $("bqN2").value, n3: $("bqN3").value});
+const bqConPartes = ()=>Object.values(bqPartes()).some(v=>v.trim());
+function buscarPorPartes(p){
+  const via = viaBuscar(), k1 = bqLlave(p.n1), k2 = bqLlave(p.n2), k3 = bqLlave(p.n3).replace(/^0+(?=\d)/, "");
+  if(!k1 && !k2 && !k3) return [];
+  const res = [];
+  for(const st of state.stops){
+    if(st.example) continue;
+    const d = partesDe(st.label || st.addr || "");
+    if(!d || (via && d.via !== via)) continue;
+    const d1 = bqLlave(d.n1), d2 = bqLlave(d.n2), d3 = String(+d.n3);
+    if((k1 && !d1.startsWith(k1)) || (k2 && !d2.startsWith(k2)) || (k3 && !d3.startsWith(k3))) continue;
+    let puntos = (!k1 || k1 === d1) && (!k2 || k2 === d2) && (!k3 || k3 === d3) ? 100 : 80;
+    if(st.status !== "done") puntos += 5;
+    res.push({st, g: "", por: "dirección", puntos});
+  }
+  return res.sort((a, b)=>b.puntos - a.puntos || (stopNum(a.st)||999) - (stopNum(b.st)||999)).slice(0, BQ_MAX);
+}
 function renderBuscar(){
+  if(bqConPartes()) return renderResultados(buscarPorPartes(bqPartes()), [bqPartes().n1, bqPartes().n2 && "# " + bqPartes().n2, bqPartes().n3 && "- " + bqPartes().n3].filter(Boolean).join(" "));
   const q = $("bqIn").value, box = $("bqList"); box.innerHTML = "";
   $("bqIn").placeholder = viaBuscar() ? `${viaBuscar()} … ej.: 145 106 20` : "Ej.: 150b 143 45";
   if(!q.trim()){ $("bqInfo").textContent = viaBuscar()
     ? `Buscando en ${viaBuscar()}: escribe o dicta solo los números (por ejemplo «145 106 20» o solo «145»). También sirve la guía, el nombre, el teléfono o el conjunto.`
     : "Escribe o dicta la dirección (también sirve parte de ella: «150b 143 45»), la guía o sus últimos 4 números, el nombre, el teléfono o el conjunto."; return; }
-  const r = buscarPedidos(q);
+  renderResultados(buscarPedidos(q), q.trim());
+}
+function renderResultados(r, q){
+  const box = $("bqList"); box.innerHTML = "";
   const total = state.stops.filter(s=>!s.example).length;
   $("bqInfo").textContent = r.length
     ? `${r.length === BQ_MAX ? "Primeros " + BQ_MAX : r.length} resultado(s) de ${total} paradas. Toca uno para verlo.`
-    : `No hay pedidos de la jornada que coincidan con «${q.trim()}». Revisa la dirección o busca solo una parte (por ejemplo, los números).`;
+    : `No hay pedidos de la jornada que coincidan con «${viaBuscar() && bqConPartes() ? viaBuscar() + " " : ""}${q}». Revisa la dirección o busca solo una parte (por ejemplo, los números).`;
   for(const x of r){
     const c = stopCard(x.st, x.g);
     c.style.cursor = "pointer"; c.setAttribute("role", "button"); c.tabIndex = 0;
-    const abrir = ()=>{ $("dlgBuscar").close(); showStopFound(x.st, x.g, ()=>abrirBuscar(q)); };
+    const otra = bqConPartes() ? ()=>abrirBuscar(undefined, true) : ()=>abrirBuscar(q);
+    const abrir = ()=>{ $("dlgBuscar").close(); showStopFound(x.st, x.g, otra); };
     c.onclick = abrir; c.onkeydown = e=>{ if(e.key === "Enter") abrir(); };
     box.appendChild(c);
   }
 }
 function pintarViaBuscar(){ for(const r of document.querySelectorAll("input[name=viaQ]")) r.checked = r.value === viaBuscar(); }
 for(const r of document.querySelectorAll("input[name=viaQ]")) r.addEventListener("change", ()=>{
-  if(!r.checked) return; state.viaBuscar = r.value; save(); renderBuscar(); $("bqIn").focus();
+  if(!r.checked) return; state.viaBuscar = r.value; save(); renderBuscar(); (bqConPartes() ? $("bqN1") : $("bqIn")).focus();
 });
-function abrirBuscar(texto){
+function abrirBuscar(texto, mantenerPartes){
   pintarViaBuscar();
+  if(!mantenerPartes) for(const id of ["bqN1","bqN2","bqN3"]) $(id).value = "";
   $("bqIn").value = texto || "";
   renderBuscar();
   $("dlgBuscar").showModal();
-  if(!texto) setTimeout(()=>$("bqIn").focus(), 50);
+  if(!texto) setTimeout(()=>(mantenerPartes ? $("bqN1") : $("bqIn")).focus(), 50);
 }
 // Dictar lo que se busca (necesita internet, como el resto del dictado).
 let bqRec = null;
@@ -122,6 +149,7 @@ function bqDictar(){
     const conv = spokenToAddress(txt.trim()), pa = parseAddress(conv);
     // Con vía elegida, lo dictado sin vía («ciento cuarenta y cinco ciento seis veinte») queda como números.
     $("bqIn").value = pa ? pa.label : conv;
+    for(const id of ["bqN1","bqN2","bqN3"]) $(id).value = "";
     renderBuscar();
   };
   const fin = ()=>{ bqRec = null; btn.classList.remove("on"); btn.textContent = "Dictar"; };
@@ -129,7 +157,18 @@ function bqDictar(){
   bqRec.onerror = e=>{ fin(); if(e.error !== "aborted" && e.error !== "no-speech") toast("No se pudo dictar (" + e.error + ")."); };
   try{ bqRec.start(); }catch(e){ fin(); }
 }
-document.getElementById("bqIn").addEventListener("input", ()=>renderBuscar());
+// Escribir en el texto limpia las partes y al revés: se busca de una forma a la vez.
+document.getElementById("bqIn").addEventListener("input", ()=>{ for(const id of ["bqN1","bqN2","bqN3"]) $(id).value = ""; renderBuscar(); });
+for(const id of ["bqN1","bqN2","bqN3"]) document.getElementById(id).addEventListener("input", e=>{
+  $("bqIn").value = "";
+  const sig = {bqN1:"bqN2", bqN2:"bqN3"}[id], ch = {bqN1:"#", bqN2:"-"}[id];
+  if(ch && e.target.value.includes(ch)){ const [a, b] = e.target.value.split(ch); e.target.value = a.trim(); if(b && !$(sig).value) $(sig).value = b.trim(); $(sig).focus(); }
+  renderBuscar();
+});
+// «#» salta a la cruce, «-» a la placa; Enter pasa al siguiente.
+for(const [id, sig, ch] of [["bqN1","bqN2","#"],["bqN2","bqN3","-"],["bqN3",null,null]]) document.getElementById(id).addEventListener("keydown", e=>{
+  if(e.key === "Enter" || (ch && e.key === ch)){ e.preventDefault(); if(sig) $(sig).focus(); else e.target.blur(); }
+});
 document.getElementById("bqMic").onclick = bqDictar;
 document.getElementById("bqScan").onclick = ()=>{ $("dlgBuscar").close(); startScan("find"); };
 document.getElementById("dlgBuscar").addEventListener("close", ()=>{ if(bqRec) try{ bqRec.abort(); }catch(e){} });

@@ -74,3 +74,31 @@ test("buscar pedido: vía elegida con botón (por defecto la del dictado) y solo
   expect((await buscar("145")).length).toBeGreaterThanOrEqual(2);
   expect(errs).toEqual([]);
 });
+
+test("buscar pedido por partes: vía (botón) [número] # [cruce] - [placa]", async ({ page }) => {
+  const errs = vigilarErrores(page);
+  await entrar(page); await cargar(page, [...PARADAS, { addr: "Carrera 145 # 139-10" }, { addr: "Calle 141 Bis B # 143B-59" }]);
+  await page.evaluate(() => { state.viaBuscar = "Calle"; save(); });
+  await page.click("#btnFind2");
+  await page.fill("#bqN1", "145");
+  expect(await dirs(page)).toEqual(["Calle 145 # 106-20", "Calle 145 # 106-60"]);
+  await page.fill("#bqN1", ""); await page.click("#bqN1"); await page.keyboard.type("141 bis b#143b-5");
+  await expect(page.locator("#bqN2")).toHaveValue("143b");
+  await expect(page.locator("#bqN3")).toHaveValue("5");
+  expect(await dirs(page)).toEqual(["Calle 141 Bis B # 143B-59"]);
+  for (const id of ["#bqN1", "#bqN2", "#bqN3"]) await page.fill(id, "");
+  await page.fill("#bqN2", "106"); await page.fill("#bqN3", "60");
+  expect(await dirs(page)).toEqual(["Calle 145 # 106-60"]);
+  await page.click("label[for=viaQCarrera]");
+  for (const id of ["#bqN2", "#bqN3"]) await page.fill(id, "");
+  await page.fill("#bqN1", "145");
+  expect(await dirs(page)).toEqual(["Carrera 145 # 139-10"]);
+  await page.fill("#bqIn", "pinos");
+  await expect(page.locator("#bqN1")).toHaveValue("");
+  expect(await dirs(page)).toEqual(["Carrera 110 # 150-20"]);
+  await page.fill("#bqN1", "145");
+  await page.click("#bqList .found");
+  await page.click('#fdActs button:has-text("Buscar otro")');
+  await expect(page.locator("#bqN1")).toHaveValue("145");
+  expect(errs).toEqual([]);
+});

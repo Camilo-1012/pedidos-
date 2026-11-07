@@ -442,3 +442,7 @@ El optimizador ahora arma una tabla de costos una sola vez y calcula cada intent
 - La dirección completa sigue disponible para pegar, dictar o escanear: al llenarse se reparte sola en las partes (lo que va después de la placa, como Torre/apto o Sur, se conserva).
 - La vía de las partes también es la que se usa al dictar en este formulario. Para paquetes nuevos viene la última elegida a mano (o la del dictado).
 - Corregido: al abrir la app directo en modo conducción podía fallar «Parquea una vez» porque ese archivo carga después; ahora la app se vuelve a pintar cuando terminan de cargar todos los archivos.
+
+## Buscar por partes (v2.22)
+- En «Buscar pedido», además del texto, hay campos **[Vía] # [Cruce] - [Placa]** con la vía de los botones (Todas, Calle, Carrera…). No hace falta llenar todo: «145» solo, o «106» # «60». Cada parte compara por el comienzo (la placa «5» encuentra 59).
+- «#» y «-» saltan al siguiente campo. Escribir en el texto limpia las partes y al revés. «Buscar otro» vuelve con las mismas partes.

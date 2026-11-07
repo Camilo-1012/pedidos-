@@ -411,6 +411,14 @@
       <button type="button" class="mic" id="bqMic" aria-label="Dictar lo que buscas">Dictar</button>
     </div>
     <div class="seg seg5" role="radiogroup" aria-label="Vía de la dirección que buscas"><input type="radio" name="viaQ" id="viaQTodas" value=""><label for="viaQTodas">Todas</label><input type="radio" name="viaQ" id="viaQCalle" value="Calle"><label for="viaQCalle">Calle</label><input type="radio" name="viaQ" id="viaQCarrera" value="Carrera"><label for="viaQCarrera">Carrera</label><input type="radio" name="viaQ" id="viaQDiagonal" value="Diagonal"><label for="viaQDiagonal">Diag.</label><input type="radio" name="viaQ" id="viaQTransversal" value="Transversal"><label for="viaQTransversal">Transv.</label></div>
+    <span class="hint" id="bqPLbl" style="margin:0">O por partes (no hace falta llenar todo)</span>
+    <div class="addrParts bqParts" role="group" aria-labelledby="bqPLbl">
+      <input id="bqN1" aria-label="Número de la vía" placeholder="Vía" autocomplete="off" autocapitalize="characters" enterkeyhint="next">
+      <span class="sep" aria-hidden="true">#</span>
+      <input id="bqN2" aria-label="Número de la cruce" placeholder="Cruce" autocomplete="off" autocapitalize="characters" enterkeyhint="next">
+      <span class="sep" aria-hidden="true">-</span>
+      <input id="bqN3" aria-label="Placa" placeholder="Placa" autocomplete="off" inputmode="numeric" maxlength="3" enterkeyhint="search">
+    </div>
     <button type="button" id="bqScan">Escanear la guía con la cámara</button>
     <p class="hint" id="bqInfo" style="margin:0" aria-live="polite"></p>
     <div id="bqList" style="display:flex;flex-direction:column;gap:8px"></div>
