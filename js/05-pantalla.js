@@ -113,7 +113,7 @@ function render(){
   // Resumen de las opciones cuando el bloque está oculto.
   // Cómo ordenar
   $("ordAuto").checked = !modoDirecciones(); $("ordDir").checked = modoDirecciones();
-  $("ordPrimKr").checked = state.ordenPrimero !== "calles"; $("ordPrimCl").checked = state.ordenPrimero === "calles";
+  $("ordPrimKr").checked = !state.ordenPrimero || state.ordenPrimero === "carreras"; $("ordPrimCl").checked = state.ordenPrimero === "calles"; $("ordPrimAm").checked = state.ordenPrimero === "ambas";
   $("ordAsc").checked = !!state.ordenAsc;
   $("ordDirBox").hidden = !modoDirecciones();
   $("ordInfo").textContent = modoDirecciones() ? "Los pedidos nuevos entran en su lugar. Puedes mover a mano con ▲▼; para volver a este orden, toca «Ordenar ruta»." :

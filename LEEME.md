@@ -452,3 +452,6 @@ El optimizador ahora arma una tabla de costos una sola vez y calcula cada intent
 - Por direcciones: **Carreras primero** = carreras de mayor a menor y, en cada carrera, las calles de mayor a menor; **Calles primero** = al revés. «De menor a mayor» invierte. Una carrera agrupa sus letras y bis (141, 141A, 141 Bis B) y las direcciones sobre calles que caen en esa franja (Calle 144 # 141-20 va con la carrera 141).
 - Los «No estaba» van al final; los pedidos nuevos entran en su lugar sin mover los demás; ▲▼ sigue funcionando y «Ordenar ruta» vuelve al orden por direcciones. Los números siguen la lista (1, 2, 3…) hasta la primera entrega.
 - Waze no recibe listas de paradas (solo navega a una a la vez), por eso el modo automático lo calcula la app con el mapa.
+
+### Ajuste v2.24: «Ambas (zigzag)»
+- Tercera opción del orden por direcciones: carreras de mayor a menor (o al revés) y, en cada carrera, las calles en el sentido que empiece más cerca de donde terminó la anterior: se baja por una carrera y se sube por la siguiente, sin devolverse. Los pedidos nuevos entran junto a los de su carrera.

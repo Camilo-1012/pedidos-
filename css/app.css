@@ -355,3 +355,5 @@ details.sec[open] > summary .secSum{display:none}
 .addrParts select{font-size:16px;padding-right:2px}
 .addrParts .sep{font:700 20px var(--display);color:var(--muted);text-align:center}
 .addrParts.bqParts{grid-template-columns:minmax(0,1.3fr) auto minmax(0,1.1fr) auto minmax(0,.8fr)}
+.seg.seg3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.seg.seg3 label{font-size:13px;text-align:center;padding:0 4px;line-height:1.15}

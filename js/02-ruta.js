@@ -367,37 +367,60 @@ function applyOrder(orderIds){
   const done = state.stops.filter(s=>s.status==="done");
   state.stops = [...out, ...restGeo, ...unk, ...done];
 }
-/* Orden «Por direcciones» (en vez del automático con el mapa): carreras de mayor a menor y, en cada carrera, las
-   calles de mayor a menor (o al revés con «Calles primero»; «De menor a mayor» invierte). Una carrera agrupa sus
-   letras y bis (141, 141A, 141 Bis B) y las direcciones sobre calles que caen en esa franja (Calle 144 # 141-20).
-   Los «No estaba» van al final y las que no se reconocen, después. */
+/* Orden «Por direcciones» (en vez del automático con el mapa):
+   - Carreras primero: carreras de mayor a menor y, en cada carrera, las calles de mayor a menor.
+   - Calles primero: al revés.
+   - Ambas (zigzag): carreras de mayor a menor y, en cada carrera, las calles en el sentido que empiece más cerca de
+     donde terminó la carrera anterior (bajando por una y subiendo por la siguiente), para no devolverse.
+   «De menor a mayor» invierte. Una carrera agrupa sus letras y bis (141, 141A, 141 Bis B) y las direcciones sobre
+   calles que caen en esa franja (Calle 144 # 141-20 va con la carrera 141). Los «No estaba» van al final. */
 const modoDirecciones = ()=>state.ordenModo === "direcciones";
+const franja = v=>Math.floor(v + 1e-9);
 function cmpDirecciones(a, b){
   const s = state.ordenAsc ? 1 : -1;
   const [p, q] = state.ordenPrimero === "calles" ? ["y", "x"] : ["x", "y"];
-  const ka = Math.floor(a[p] + 1e-9), kb = Math.floor(b[p] + 1e-9);
+  const ka = franja(a[p]), kb = franja(b[p]);
   if(ka !== kb) return s * (ka - kb);
   return s * (a[q] - b[q]) || s * (a[p] - b[p]);
 }
+function zigzag(lista){
+  const s = state.ordenAsc ? 1 : -1;
+  const grupos = new Map();
+  for(const st of lista){ const k = franja(st.x); if(!grupos.has(k)) grupos.set(k, []); grupos.get(k).push(st); }
+  const out = []; let y = null;
+  for(const k of [...grupos.keys()].sort((a, b)=>s * (a - b))){
+    const g = grupos.get(k).sort((a, b)=>(b.y - a.y) || (s * (a.x - b.x)));   // calles de mayor a menor
+    // La primera carrera va en el sentido elegido; las demás, empezando por el extremo más cercano a donde se quedó.
+    const bajar = y === null ? !state.ordenAsc : Math.abs(y - g[0].y) <= Math.abs(y - g[g.length-1].y);
+    if(!bajar) g.reverse();
+    out.push(...g); y = g[g.length-1].y;
+  }
+  return out;
+}
 function ordenDirecciones(lista, estable){
   const falla = s=>s.status === "fail";
-  const ordenada = [...lista.filter(s=>!falla(s)).sort(cmpDirecciones), ...lista.filter(falla).sort(cmpDirecciones)];
+  const ordenar = l=>state.ordenPrimero === "ambas" ? zigzag(l) : l.slice().sort(cmpDirecciones);
+  const ordenada = [...ordenar(lista.filter(s=>!falla(s))), ...ordenar(lista.filter(falla))];
   const conocidas = new Set(estable ? (baseConocidas || state.suggestedIds || []) : []);
   const ids = new Set(lista.map(s=>s.id));
   const actual = state.stops.filter(s=>ids.has(s.id) && conocidas.has(s.id));
   if(!actual.length) return ordenada;
-  // Ya estaba ordenada: se respeta (incluidos los cambios a mano) y cada nueva entra donde le toca.
+  // Ya estaba ordenada: se respeta (incluidos los cambios a mano) y cada nueva entra justo después de la que la
+  // precede en el orden por direcciones.
   const P = [...actual.filter(s=>!falla(s)), ...actual.filter(falla)];
-  for(const s of ordenada.filter(x=>!conocidas.has(x.id))){
-    const i = P.findIndex(q=>falla(q) !== falla(s) ? falla(q) : cmpDirecciones(s, q) < 0);
-    if(i < 0) P.push(s); else P.splice(i, 0, s);
-  }
+  ordenada.forEach((s, i)=>{
+    if(conocidas.has(s.id)) return;
+    let j = -1;
+    for(let k = i - 1; k >= 0 && j < 0; k--) j = P.indexOf(ordenada[k]);
+    if(j < 0 && !falla(s)) P.splice(0, 0, s);
+    else P.splice(j < 0 ? P.length : j + 1, 0, s);
+  });
   return P;
 }
 function textoOrdenDirecciones(){
-  const asc = state.ordenAsc, cl = state.ordenPrimero === "calles";
-  const dir = asc ? "de menor a mayor" : "de mayor a menor";
-  return cl ? `Por direcciones: calles ${dir} y, en cada calle, las carreras ${dir}.` : `Por direcciones: carreras ${dir} y, en cada carrera, las calles ${dir}.`;
+  const dir = state.ordenAsc ? "de menor a mayor" : "de mayor a menor";
+  if(state.ordenPrimero === "ambas") return `Por direcciones (zigzag): carreras ${dir} y, en cada una, las calles bajando o subiendo según dónde terminó la anterior, para no devolverse.`;
+  return state.ordenPrimero === "calles" ? `Por direcciones: calles ${dir} y, en cada calle, las carreras ${dir}.` : `Por direcciones: carreras ${dir} y, en cada carrera, las calles ${dir}.`;
 }
 let optimizing = null, pendingOpt = false, optEstable = false, baseConocidas = null;
 // optimize(silent, {estable:true}): lo que pasa solo (pedido nuevo, editar, GPS, volver la señal, llegó algo del otro

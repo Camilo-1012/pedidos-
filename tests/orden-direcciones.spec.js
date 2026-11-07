@@ -48,3 +48,29 @@ test("por direcciones: carreras y calles de mayor a menor, al revés, y calles p
   expect(await page.evaluate(() => state.ordenModo)).toBe("auto");
   expect(errs).toEqual([]);
 });
+
+test("por direcciones, ambas (zigzag): carreras de mayor a menor y calles bajando y subiendo sin devolverse", async ({ page }) => {
+  await sinInternetExterno(page);
+  await entrar(page);
+  await cargar(page, [
+    { addr: "Carrera 141 # 152-10" }, { addr: "Calle 138 # 136-50" }, { addr: "Carrera 145 # 139-10" },
+    { addr: "Calle 146 # 136-20" }, { addr: "Carrera 141 # 140-30" }, { addr: "Carrera 145 # 150-20" }
+  ]);
+  await page.click("label[for=ordDir]"); await listo(page);
+  await page.click("label[for=ordPrimAm]"); await listo(page);
+  expect(await orden(page)).toEqual([
+    "Carrera 145 # 150-20", "Carrera 145 # 139-10",      // baja por la 145
+    "Carrera 141 # 140-30", "Carrera 141 # 152-10",      // sube por la 141 (empieza cerca de donde quedó)
+    "Calle 146 # 136-20", "Calle 138 # 136-50"           // baja por la 136
+  ]);
+  await expect(page.locator("#routeInfo")).toContainText("zigzag");
+  // Es más corto que ordenar todas las carreras siempre de mayor a menor
+  const km = () => page.evaluate(() => pathLen(currentOrigin(), state.stops.filter(s => s.status !== "done"), false));
+  const zig = await km();
+  await page.click("label[for=ordPrimKr]"); await listo(page);
+  expect(zig).toBeLessThan(await km());
+  // Un pedido nuevo entra junto a su carrera
+  await page.click("label[for=ordPrimAm]"); await listo(page);
+  await page.evaluate(() => { state.stops.push(mkStop({ addr: "Carrera 141 # 146-15" })); save(); render(); return optimize(true, { estable: true }); });
+  expect((await orden(page)).slice(2, 5)).toEqual(["Carrera 141 # 140-30", "Carrera 141 # 146-15", "Carrera 141 # 152-10"]);
+});
