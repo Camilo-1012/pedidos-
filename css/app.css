@@ -357,3 +357,9 @@ details.sec[open] > summary .secSum{display:none}
 .addrParts.bqParts{grid-template-columns:minmax(0,1.3fr) auto minmax(0,1.1fr) auto minmax(0,.8fr)}
 .seg.seg3{grid-template-columns:repeat(3,minmax(0,1fr))}
 .seg.seg3 label{font-size:13px;text-align:center;padding:0 4px;line-height:1.15}
+
+/* Apps de entrega en el modo conducción */
+.dvApps{display:grid;grid-template-columns:1fr 1fr auto;gap:8px}
+.dvApps > button{min-height:44px;font:700 17px var(--display);border-radius:12px}
+.dvApps #dvAppsCfg{min-width:48px}
+.dvApps button.off{opacity:.55}

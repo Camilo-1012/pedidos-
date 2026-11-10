@@ -27,6 +27,7 @@ function closeDrive(fromBack){
 }
 function renderDrive(){
   if($("drive").hidden) return;
+  if(typeof pintarApps === "function") pintarApps();   // botones de Xcargo / iMile (js/14-apps.js)
   const list = drivePend();
   if(dvIdx >= list.length) dvIdx = Math.max(0, list.length-1);
   const s = list[dvIdx];

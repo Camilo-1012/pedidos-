@@ -201,6 +201,7 @@
           </label>
           <p class="hint" style="margin:0">Por defecto: Suba de la Av. Ciudad de Cali (Av. Carrera 104) hacia el río Bogotá, entre el río Juan Amarillo (≈ Calle 125) y la Calle 175. Puedes ajustar los números.</p>
         </fieldset>
+        <button type="button" id="btnAppsCfg">Apps de entrega (Xcargo, iMile)</button>
         <button type="button" id="btnTeamCfg">Equipo en la nube (sincronizar entre celulares)</button>
         <fieldset style="border:1px solid var(--line);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:8px">
           <legend style="font-weight:600;padding:0 4px">Ubicaciones aprendidas</legend>
@@ -365,12 +366,30 @@
     <button type="button" id="dvFail">No estaba</button>
     <button type="button" class="dvDone" id="dvDone">Entregado</button>
   </div>
+  <div class="dvApps">
+    <button type="button" id="dvXcargo" data-app="xcargo">Xcargo</button>
+    <button type="button" id="dvImile" data-app="imile">iMile</button>
+    <button type="button" class="small" id="dvAppsCfg" aria-label="Configurar las apps de entrega">⚙</button>
+  </div>
   <div class="dvSkip">
     <button type="button" class="small" id="dvPrev">◀ Anterior</button>
     <span id="dvPace"></span>
     <button type="button" class="small" id="dvNextBtn">Siguiente ▶</button>
   </div>
 </div>
+
+<dialog id="dlgApps" aria-labelledby="apTitle">
+  <form method="dialog" style="display:flex;flex-direction:column;gap:12px">
+    <div class="dlgHead"><h2 id="apTitle">Apps de entrega</h2><button type="submit" class="small">Listo</button></div>
+    <p class="hint" style="margin:0">Para que los botones abran la app, la app necesita saber cuál es (una sola vez por celular):
+      abre <b>Play Store</b>, busca la app (por ejemplo «Xcargo Driver»), toca <b>⋮ → Compartir → Copiar</b> y pega el enlace aquí.</p>
+    <label for="apXcargo">Xcargo<input id="apXcargo" autocomplete="off" placeholder="Pega el enlace de Play Store"></label>
+    <p class="hint" id="apXcargoOk" style="margin:-6px 0 0"></p>
+    <label for="apImile">iMile<input id="apImile" autocomplete="off" placeholder="Pega el enlace de Play Store"></label>
+    <p class="hint" id="apImileOk" style="margin:-6px 0 0"></p>
+    <p class="hint" style="margin:0">Al abrir una app desde el modo conducción se copia la guía de la parada actual: en Xcargo o iMile solo la pegas en el buscador. Funciona en Android.</p>
+  </form>
+</dialog>
 
 <dialog id="dlgTeam" aria-labelledby="tmTitle">
   <div style="padding:16px;display:flex;flex-direction:column;gap:12px">

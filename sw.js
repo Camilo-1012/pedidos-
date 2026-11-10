@@ -1,6 +1,6 @@
 /* Service worker: guarda la app en el celular para que abra sin internet.
    Al publicar cambios, sube el número de CACHE para que los celulares descarguen la versión nueva. */
-const CACHE = "ruta-v2.24";
+const CACHE = "ruta-v2.25";
 const CORE = [
   "./", "index.html", "manifest.webmanifest",
   "icons/icon-192.png", "icons/icon-512.png", "icons/maskable-512.png", "icons/apple-touch-icon.png",
@@ -9,7 +9,7 @@ const CORE = [
   "ocr/tesseract.min.js", "ocr/worker.min.js", "ocr/spa-traineddata.wasm",
   "ocr/tesseract-core-simd-lstm.wasm.js", "ocr/tesseract-core-lstm.wasm.js",
   "css/app.css", "js/00-acceso.js", "js/01-direcciones.js", "js/02-ruta.js", "js/03-mapas.js", "js/04-jornada.js",
-  "js/05-pantalla.js", "js/06-escaner.js", "js/07-cargue.js", "js/08-voz.js", "js/09-arranque.js", "js/10-conduccion.js", "js/11-equipo.js", "js/12-aviso.js", "js/13-buscar.js",
+  "js/05-pantalla.js", "js/06-escaner.js", "js/07-cargue.js", "js/08-voz.js", "js/09-arranque.js", "js/10-conduccion.js", "js/11-equipo.js", "js/12-aviso.js", "js/13-buscar.js", "js/14-apps.js",
   "scan/zxing.min.js", "map/leaflet.js", "map/leaflet.css", "map/images/marker-icon.png", "map/images/marker-shadow.png"
 ];
 self.addEventListener("install", e => {
