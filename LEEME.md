@@ -462,3 +462,4 @@ El optimizador ahora arma una tabla de costos una sola vez y calcula cada intent
 - Una sola vez por celular se pega el enlace de Play Store de cada app (⋮ → Compartir → Copiar): de ahí se toma el paquete (`…details?id=PAQUETE`). No se adivinan nombres de paquete.
 - Al tocar el botón se copia la guía de la parada actual (para pegarla en el buscador de la otra app) y Android abre la app con un enlace `intent:`; si no está instalada, abre su página de Play Store.
 - Solo funciona en Android (en iPhone no existe este tipo de enlace).
+- v2.25.1: vienen configuradas por defecto las apps de Play Store para conductores: X-cargo (`com.bigsmart.xcargo`, BIG SMART) e Imile Delivery (`com.imile.redelivery`, versión Android de «iMile Driver»). Si en el celular es otra, se pega su enlace. Una página web no puede listar las apps instaladas (Android no lo permite por privacidad).

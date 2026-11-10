@@ -5,6 +5,9 @@
 // El paquete se toma del enlace de Play Store que el repartidor pega una vez (…details?id=PAQUETE), así no depende
 // de nombres adivinados. Si la app no está instalada, Android abre su página de Play Store.
 const APPS_EXT = {xcargo: "Xcargo", imile: "iMile"};
+// Paquetes conocidos en Play Store (nov. 2026): X-cargo para conductores (BIG SMART, Colombia) e Imile Delivery para
+// conductores (la versión Android de «iMile Driver»). Si en el celular la app es otra, se cambia pegando su enlace.
+const APPS_PREDET = {xcargo: "com.bigsmart.xcargo", imile: "com.imile.redelivery"};
 const PKG_RE = /^[a-zA-Z][\w]*(\.[a-zA-Z0-9_]+)+$/;
 function paqueteDe(texto){
   const t = String(texto||"").trim();
@@ -14,13 +17,14 @@ function paqueteDe(texto){
   return PKG_RE.test(t) ? t : null;   // null = no se entendió
 }
 const appsExt = ()=>state.appsExt || (state.appsExt = {});
+const paqueteApp = id=>appsExt()[id] || APPS_PREDET[id] || "";
 const esAndroid = ()=>/Android/i.test(navigator.userAgent);
 function intentDe(pkg){
   const tienda = "https://play.google.com/store/apps/details?id=" + pkg;
   return `intent:#Intent;action=android.intent.action.MAIN;category=android.intent.category.LAUNCHER;package=${pkg};S.browser_fallback_url=${encodeURIComponent(tienda)};end`;
 }
 async function abrirApp(id){
-  const pkg = appsExt()[id];
+  const pkg = paqueteApp(id);
   if(!pkg){ toast(`Primero dile a la app cuál es ${APPS_EXT[id]} (una sola vez).`); configurarApps(id); return; }
   if(!esAndroid()){ toast(`Abrir ${APPS_EXT[id]} desde aquí solo funciona en Android.`); return; }
   // Copia la guía de la parada que se está viendo, para pegarla en el buscador de la otra app.
@@ -32,10 +36,11 @@ async function abrirApp(id){
 }
 function pintarApps(){
   for(const [id, campo] of [["xcargo", "apXcargo"], ["imile", "apImile"]]){
-    const pkg = appsExt()[id] || "";
+    const propio = appsExt()[id] || "", pkg = paqueteApp(id);
     const el = document.getElementById(campo), ok = document.getElementById(campo + "Ok");
-    if(document.activeElement !== el) el.value = pkg;
-    ok.textContent = pkg ? `✓ Lista (${pkg}).` : "Sin configurar.";
+    if(document.activeElement !== el) el.value = propio;
+    el.placeholder = APPS_PREDET[id] ? `Predeterminado: ${APPS_PREDET[id]}` : "Pega el enlace de Play Store";
+    ok.textContent = propio ? `✓ Lista (${propio}).` : pkg ? `✓ Predeterminada (${pkg}). Si el botón abre Play Store en vez de tu app, pega aquí el enlace de la tuya.` : "Sin configurar.";
     ok.style.color = pkg ? "" : "var(--warn)";
     const b = document.getElementById(id === "xcargo" ? "dvXcargo" : "dvImile");
     if(b) b.classList.toggle("off", !pkg);

@@ -17,10 +17,15 @@ test("apps de entrega: configurar con el enlace de Play Store y abrir con la gu�
   await page.evaluate(() => { window.__abiertos = []; const c = HTMLAnchorElement.prototype.click; HTMLAnchorElement.prototype.click = function(){ if(this.href.startsWith("intent:")) window.__abiertos.push(this.href); else c.call(this); }; });
   await page.click("#btnDrive");
   await expect(page.locator("#dvXcargo")).toBeVisible();
-  // Sin configurar: abre la configuración
+  // Sin configurar: usa el paquete predeterminado de Play Store
+  await page.click("#dvImile");
+  expect((await page.evaluate(() => window.__abiertos))[0]).toContain("package=com.imile.redelivery;");
   await page.click("#dvXcargo");
-  await expect(page.locator("#dlgApps")).toHaveAttribute("open", "");
-  await expect(page.locator("#apXcargo")).toBeFocused();
+  expect((await page.evaluate(() => window.__abiertos))[1]).toContain("package=com.bigsmart.xcargo;");
+  await page.evaluate(() => { window.__abiertos = []; });
+  // Cambiarlo por el enlace de la app que tiene el celular
+  await page.click("#dvAppsCfg");
+  await expect(page.locator("#apXcargoOk")).toContainText("Predeterminada (com.bigsmart.xcargo)");
   await page.fill("#apXcargo", "esto no es un enlace"); await page.locator("#apXcargo").dispatchEvent("change");
   await expect(page.locator("#apXcargoOk")).toContainText("No entendí ese enlace");
   await page.fill("#apXcargo", "https://play.google.com/store/apps/details?id=co.xcargo.driver"); await page.locator("#apXcargo").dispatchEvent("change");
