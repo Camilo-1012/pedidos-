@@ -21,7 +21,7 @@ test("aprende solo con GPS preciso y cerca, y lo usa al día siguiente", async (
   expect(await entregar(page, await agregar(page, "Calle 145 # 103B-90"), 60, 12)).toBe(1);
   expect(await entregar(page, await agregar(page, "Carrera 91 # 147-20"), 30, 200)).toBe(1);    // impreciso
   expect(await entregar(page, await agregar(page, "Calle 138 # 100-15"), 5000, 10)).toBe(1);   // lejos
-  await page.click("#btnNew"); await page.click("#cfYes");
+  await page.evaluate(() => $("btnNew").click()); await page.click("#cfYes");
   await agregar(page, "Calle 145 # 103B-90");
   expect(await page.evaluate(() => state.stops[0].geo)).toBe("gps");
   expect(await page.evaluate(() => wazeUrl(state.stops[0]))).toContain("ll=");

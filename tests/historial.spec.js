@@ -58,7 +58,7 @@ test("historial: si el otro celular empieza jornada nueva no se pierde nada, y s
   await entregar(a.page, "Calle 145 # 106-20"); await entregar(a.page, "Calle 139 # 112-15");
   await a.page.evaluate(() => syncNow(true)); await b.page.evaluate(() => syncNow(true));
   // B toca «Jornada nueva»: a A se le vacía la lista
-  await b.page.click("#btnNew"); await confirmar(b.page);
+  await b.page.evaluate(() => $("btnNew").click()); await confirmar(b.page);
   await b.page.evaluate(() => syncNow(true)); await a.page.evaluate(() => syncNow(true));
   expect(await a.page.evaluate(() => state.stops.length)).toBe(0);
   // A sigue con pedidos nuevos (más de 8 h después): queda como otra jornada y la anterior sigue completa

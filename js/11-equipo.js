@@ -5,7 +5,7 @@
 const SB_URL = "https://aptyzcodlubefqrscmvc.supabase.co";
 const SB_KEY = "sb_publishable_dNrUbYZmql3Qei4-peiJNQ_4waYeXkx";
 const SYNC_KEY = "rutaEntregas.u." + USER.id + ".sync.v1";
-const SYNC_EVERY = 30000;
+const SYNC_EVERY = 10000;   // con datos móviles siempre: lo del otro celular llega en ~10 s
 // sync = {email, uid, nombre, admin, access, refresh, exp, since, known:{id:huella}, last, err}
 let sync = store.get(SYNC_KEY) || null;
 const saveSync = ()=>store.set(SYNC_KEY, sync);
@@ -157,6 +157,17 @@ function disconnectTeam(){
 }
 
 /* ---- Pantallas ---- */
+// Estado del equipo a la vista en el encabezado: «✓ Sinc. hace 1 min» o «⚠ Sin sincronizar».
+function pintarChipSync(){
+  const c = $("syncChip"), on = syncOn();
+  c.hidden = !on; if(!on) return;
+  const min = sync.last ? Math.floor((Date.now() - sync.last)/60000) : null;
+  const mal = !!sync.err || min === null || min >= 5;
+  c.classList.toggle("bad", mal);
+  c.textContent = sync.err ? "⚠ Equipo: revisar" : min === null ? "⚠ Sin sincronizar" : `✓ Sinc. ${min < 1 ? "ahora" : `hace ${min} min`}`;
+  c.title = sync.err || (sync.last ? `Última sincronización: ${hhmm(sync.last)}` : "Aún no sincroniza");
+}
+setInterval(()=>{ if(document.visibilityState==="visible") pintarChipSync(); }, 30000);
 function renderSync(busyMsg){
   const on = syncOn();
   $("btnTeam").hidden = !on;
@@ -165,6 +176,7 @@ function renderSync(busyMsg){
   const pend = Object.keys(sync.known||{}).length;
   $("tmState").textContent = busyMsg || (sync.err ? sync.err : `Conectado como ${sync.nombre} (${sync.email})${sync.admin ? " · administrador" : ""}. ` + (sync.last ? `Última sincronización: ${hhmm(sync.last)} · ${pend} parada(s) en la nube.` : ""));
   $("btnTeamTxt").textContent = sync.err ? "Equipo ⚠" : "Equipo";
+  pintarChipSync();
   $("tmAdminBtn").hidden = !sync.admin;
 }
 $("tmConnect").addEventListener("submit", async e=>{
@@ -239,6 +251,7 @@ async function renderTeam(reload){
   }
   $("tmWhen").textContent = "Actualizado a las " + hhmm(teamCache.t);
 }
+$("syncChip").onclick = ()=>$("btnTeam").click();
 $("btnTeam").onclick = ()=>{ renderSync(); $("dlgTeam").showModal(); if(sync && sync.admin) renderTeam(true); };
 $("tmAdminBtn").onclick = ()=>renderTeam(true);
 $("btnTeamCfg").onclick = ()=>{ renderSync(); $("dlgTeam").showModal(); if(sync && sync.admin) renderTeam(true); };

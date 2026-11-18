@@ -73,10 +73,11 @@ test("las entregadas van en «Pedidos entregados», recogida y desplegable", asy
   // Recuerda si quedó abierta
   await page.reload(); await page.waitForFunction(() => window.RUTA_LISTA === true);
   await expect(page.locator("#listDone")).toBeVisible();
-  // Todas entregadas: la lista principal lo dice
+  // Todas entregadas: lo dice la tarjeta «qué sigue» (sin repetirlo en la lista)
   await page.click('#list li.stop:has-text("Carrera 110") button[data-act=done]');
   await page.click('#list li.stop:has-text("Calle 139") button[data-act=done]');
-  await expect(page.locator("#list")).toContainText("No quedan pendientes");
+  await expect(page.locator("#pasoTxt")).toContainText("¡Ruta terminada!");
+  await expect(page.locator("#list li.empty")).toHaveCount(0);
 });
 
 test("varias direcciones repetidas al pegar: cada pedido aparte y aviso", async ({ page }) => {

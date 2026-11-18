@@ -17,7 +17,12 @@ async function entrar(page, nombre = "Camilo", pin = PIN){
   await page.click("#lkSetup button[type=submit]");
   await expect(page.locator("#lock")).toBeHidden({ timeout: 15000 });
   await page.waitForFunction(() => window.RUTA_LISTA === true);
-  await page.evaluate(() => { state.autoWaze = false; state.realRoads = false; save(); });
+  // Las pruebas de siempre usan las tarjetas con todos los botones; las compactas («⋯») tienen su propia prueba.
+  await page.evaluate(() => { state.autoWaze = false; state.realRoads = false; state.tarjetasCompletas = true; save(); render(); });
+}
+// Abre el menú del encabezado (usuario, equipo, bloquear).
+async function menu(page){
+  if (await page.locator("#hdrMenu").isHidden()) await page.click("#btnMenu");
 }
 // Escribe un PIN en el teclado numérico de la pantalla de bloqueo.
 async function teclear(page, pin){
@@ -63,4 +68,4 @@ function leerXlsx(ruta){
   });
   return out;
 }
-module.exports = { sinCamara, CAMARA, PIN, entrar, teclear, cargar, vigilarErrores, sinInternetExterno, leerXlsx };
+module.exports = { menu, sinCamara, CAMARA, PIN, entrar, teclear, cargar, vigilarErrores, sinInternetExterno, leerXlsx };

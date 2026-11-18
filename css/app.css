@@ -311,10 +311,15 @@ header.top .hbtn{background:rgba(255,255,255,.1);color:var(--bg);border-color:rg
 header.top .hbtn.icon{padding:8px;min-width:38px}
 header.top .hbtn.ghost{background:transparent;color:var(--accent);border-color:var(--accent)}
 header.top .primary .ico{color:var(--accent-ink)}
-@media (max-width: 520px){
-  .hdrBtns{width:100%;justify-content:flex-start}
-  .hdrBtns .grow{flex:1 1 auto}
-}
+.hdrBtns{width:100%;flex-wrap:nowrap;margin-top:8px}
+.hdrBtns .grow{flex:1 1 auto;min-height:44px;font-size:17px}
+/* Encabezado compacto: título + menú (usuario, equipo, bloquear); debajo Conducir y el estado del equipo */
+.hdrRow{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.hdrMenu{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;justify-content:flex-end}
+.hdrMenu[hidden]{display:none}
+header.top #btnMenu[aria-expanded="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+header.top .syncChip{flex:0 0 auto;font-size:13px;white-space:nowrap}
+header.top .syncChip.bad{color:#ffb4a8;border-color:#ffb4a8}
 /* Secciones desplegables (Ruta y Más opciones): cerradas muestran un resumen */
 details.sec > summary{list-style:none;display:flex;flex-direction:column;gap:2px;position:relative;padding-right:30px;cursor:pointer}
 details.sec > summary::-webkit-details-marker{display:none}
@@ -363,3 +368,23 @@ details.sec[open] > summary .secSum{display:none}
 .dvApps > button{min-height:44px;font:700 17px var(--display);border-radius:12px}
 .dvApps #dvAppsCfg{min-width:48px}
 .dvApps button.off{opacity:.55}
+
+/* Tarjeta «Siguiente paso»: ordenar / conducir, repasar «No estaba» y cierre del día */
+.pasoCard{display:flex;flex-direction:column;gap:10px;border-color:var(--accent)}
+.pasoCard[hidden]{display:none}
+.pasoTxt{margin:0;font-weight:600;color:var(--ink);line-height:1.35}
+.pasoTxt small{display:block;font-weight:500;color:var(--muted);margin-top:2px}
+.pasoBtns{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.pasoBtns > button{min-height:48px}
+.pasoBtns > button.ancho{grid-column:1 / -1}
+/* Grupos de «Más opciones» */
+.grpT{margin:6px 0 0;font:700 13px var(--body);text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+/* Tarjetas compactas: Waze, Llamar, Entregado y «⋯»; lo demás aparece al tocar «⋯» */
+li.stop.compacta .actions2{display:none}
+li.stop.compacta.abierta .actions2{display:flex}
+li.stop .masBtn{font-size:20px;line-height:1;letter-spacing:1px}
+li.stop.compacta .actions{grid-template-columns:1fr 1fr 1.25fr auto}
+li.stop.compacta .actions .masBtn{min-width:52px}
+li.stop.compacta.abierta .masBtn{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+/* Método de carga más usado: botón grande */
+#hAdd + .row > .usoTop{flex-basis:100%;order:-1}

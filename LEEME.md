@@ -472,3 +472,11 @@ El optimizador ahora arma una tabla de costos una sola vez y calcula cada intent
   - **Excel de pagos:** hoja «Por mes» y una hoja por mes con sus días.
   - Guías como texto (no se dañan las de 16 dígitos), números como números, encabezados en negrita y fila de títulos fija.
 - **Pedidos de la misma dirección:** cada uno queda como parada aparte (su guía y su número) y se avisa: al agregar («Ojo: ahora hay 2 pedidos…»), en la lista (chip «2 pedidos en esta dirección (n.º 4, 5)») y en el modo conducción. Quedan seguidos en la ruta. El contador de arriba muestra direcciones y pedidos. Excepción: si la parada ya estaba sin guía (dictada) y llega su etiqueta, la guía se le pone a esa parada.
+
+## Más práctica en el día a día (v2.27)
+- **Encabezado:** título, menú «☰» y «Conducir» a lo ancho. Usuario, Bloquear, Equipo e Instalar están dentro de «☰» (se cierra al tocar fuera). «Jornada nueva» pasó a Más opciones para no tocarla por error a mitad de ruta.
+- **Aviso de sincronización** junto a «Conducir» (solo con el equipo conectado): «✓ Sinc. ahora / hace N min», «⚠ Sin sincronizar» o «⚠ Equipo: revisar». Al tocarlo abre Equipo. La sincronización corre cada 10 s con la app a la vista.
+- **Tarjeta «qué sigue»** encima de la lista: con pedidos sin ordenar sugiere «Ordenar ruta»; si solo quedan «No estaba», «Repasar en el modo conducción»; con todo entregado, el total y los botones Reporte del día, Excel, Guardar respaldo y Jornada nueva.
+- **Tarjetas compactas:** cada pedido muestra Waze, Llamar/Tel., Entregado y «⋯»; Maps, ▲▼, WhatsApp, + Guía, No estaba, Editar y Borrar aparecen al tocar «⋯» (queda abierto al repintar). Para ver todo siempre: Más opciones → Avanzado → «Mostrar todos los botones en cada pedido». El modo conducción no cambió.
+- **Más opciones** agrupado en «Día a día» y «Avanzado» (no se quitó ninguna función).
+- **Carga:** el método más usado (al menos 5 veces y más que Escanear) pasa a ser el botón grande de «Agregar paquete». Se cuenta por celular.

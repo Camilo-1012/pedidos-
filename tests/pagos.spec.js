@@ -72,7 +72,7 @@ test("el acumulado sobrevive a Nueva jornada y va en el respaldo", async ({ page
   await entrar(page);
   await cargar(page, [{ addr: "Calle 145 # 103B-90" }]);
   await page.click("#list li.stop >> nth=0 >> button[data-act=done]");
-  await page.click("#btnNew"); await page.click("#cfYes");
+  await page.evaluate(() => $("btnNew").click()); await page.click("#cfYes");
   await page.click("text=Más opciones"); await page.click("#btnPay");
   await expect(page.locator('#pyTable .pr:has-text("Total general")')).toContainText("$ 1.600");
   await page.click("#dlgPay .dlgHead button");

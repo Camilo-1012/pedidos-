@@ -1,6 +1,43 @@
 /* Botones generales, respaldo, actualizaciones, app instalable y arranque. */
 "use strict";
 /* ============ Botones generales ============ */
+// Menú del encabezado (usuario, equipo, bloquear, instalar): se cierra al elegir algo o al tocar fuera.
+function menuHdr(abrir){
+  const m = $("hdrMenu"), b = $("btnMenu");
+  const on = abrir === undefined ? m.hidden : abrir;
+  m.hidden = !on; b.setAttribute("aria-expanded", String(on));
+}
+$("btnMenu").onclick = e=>{ e.stopPropagation(); menuHdr(); };
+$("hdrMenu").addEventListener("click", e=>{ if(e.target.closest("button")) menuHdr(false); });
+document.addEventListener("click", e=>{ if(!$("hdrMenu").hidden && !e.target.closest("#hdrMenu, #btnMenu")) menuHdr(false); });
+// Método de carga más usado: se cuenta cada uso y el que más se usa pasa a ser el botón grande de «Agregar paquete».
+const CARGA_BTN = {scan:"btnScan", foto:"photoLbl", pegar:"btnPaste", escribir:"btnManual", dictar:"btnVoice", varias:"btnBulk2"};
+function usoCarga(k){ const u = state.usoCarga || (state.usoCarga = {}); u[k] = (u[k]||0) + 1; save(); pintarCarga(); }
+function pintarCarga(){
+  const u = state.usoCarga || {};
+  // Escanear sigue siendo el grande hasta que otro método se use más (y al menos 5 veces).
+  let top = "scan";
+  for(const k in CARGA_BTN) if((u[k]||0) >= 5 && (u[k]||0) > (u[top]||0)) top = k;
+  for(const [k, id] of Object.entries(CARGA_BTN)){
+    const el = $(id); if(!el) continue;
+    const grande = k === top;
+    el.classList.toggle("usoTop", grande);
+    el.classList.toggle("primary", grande);
+    if(k === "scan") el.style.flexBasis = grande ? "100%" : "";
+    if(k === "varias") el.classList.toggle("dark", !grande);
+  }
+}
+$("btnScan").addEventListener("click", ()=>usoCarga("scan"));
+$("btnScan2").addEventListener("click", ()=>usoCarga("scan"));
+$("photo").addEventListener("change", ()=>usoCarga("foto"));
+$("btnPaste").addEventListener("click", ()=>usoCarga("pegar"));
+$("btnManual").addEventListener("click", ()=>usoCarga("escribir"));
+$("btnVoice").addEventListener("click", ()=>usoCarga("dictar"));
+$("btnBulk2").addEventListener("click", ()=>usoCarga("varias"));
+pintarCarga();
+// Tarjetas con todos los botones o compactas («⋯»).
+$("optCompletas").checked = !!state.tarjetasCompletas;
+$("optCompletas").addEventListener("change", e=>{ state.tarjetasCompletas = e.target.checked; save(); render(); });
 $("btnPaste").onclick = ()=>openText("one");
 $("btnBulk").onclick = ()=>openText("bulk");
 $("btnBulk2").onclick = ()=>openText("bulk");
@@ -204,7 +241,7 @@ $("restoreFile").addEventListener("change", async e=>{
 /* ============ App instalable y sin conexión ============ */
 // Al bloquear: apaga la cámara y cierra ventanas abiertas para que no queden datos a la vista.
 window.RUTA_onLock = ()=>{ try{ stopScan(); }catch(e){} };
-const APP_VERSION = "2.26";
+const APP_VERSION = "2.27";
 $("ver").textContent = "Versión " + APP_VERSION + ". Funciona sin internet una vez abierta la primera vez.";
 if(navigator.storage && navigator.storage.estimate){
   navigator.storage.estimate().then(e=>{ if(e && e.usage) $("ver").textContent += ` Espacio usado en este celular: ${(e.usage/1048576).toFixed(1).replace(".",",")} MB (la mayor parte es el lector de etiquetas).`; }).catch(()=>{});

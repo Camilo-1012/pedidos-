@@ -19,16 +19,19 @@
 <body>
 <header class="top">
   <div class="wrap">
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
+    <div class="hdrRow">
       <h1>Ruta de entregas</h1>
-      <div class="hdrBtns">
-        <button type="button" class="small hbtn" id="btnInstall" hidden>Instalar</button>
-        <button type="button" class="small hbtn" id="btnUser" title="Usuarios"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 12a4.5 4.5 0 1 0 0-9 4.5 4.5 0 0 0 0 9Zm0 2c-4.4 0-8 2.2-8 5v2h16v-2c0-2.8-3.6-5-8-5Z"/></svg><span id="btnUserName">Usuario</span></button>
-        <button type="button" class="small hbtn" id="btnTeam" hidden title="Equipo"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm8 0a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM9 13c-3.9 0-7 1.8-7 4.2V20h14v-2.8C16 14.8 12.9 13 9 13Zm8 0c-.6 0-1.2 0-1.7.1 1.6 1 2.7 2.4 2.7 4.1V20h4v-2.8c0-2.4-2.2-4.2-5-4.2Z"/></svg><span id="btnTeamTxt">Equipo</span></button>
-        <button type="button" class="small hbtn icon" id="btnLock" aria-label="Bloquear" title="Bloquear"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2a5 5 0 0 0-5 5v3H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2h-1V7a5 5 0 0 0-5-5Zm-3 8V7a3 3 0 1 1 6 0v3H9Z"/></svg></button>
-        <button type="button" class="small primary grow" id="btnDriveTop"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2 4 21l8-4 8 4L12 2Z"/></svg>Conducir</button>
-        <button type="button" class="small hbtn ghost grow" id="btnNew">Nueva jornada</button>
-      </div>
+      <button type="button" class="small hbtn icon" id="btnMenu" aria-label="Menú: usuario, equipo y bloquear" aria-expanded="false" aria-controls="hdrMenu"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 6h18v2H3V6Zm0 5h18v2H3v-2Zm0 5h18v2H3v-2Z"/></svg></button>
+    </div>
+    <div class="hdrMenu" id="hdrMenu" hidden>
+      <button type="button" class="small hbtn" id="btnInstall" hidden>Instalar la app</button>
+      <button type="button" class="small hbtn" id="btnUser" title="Usuarios"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 12a4.5 4.5 0 1 0 0-9 4.5 4.5 0 0 0 0 9Zm0 2c-4.4 0-8 2.2-8 5v2h16v-2c0-2.8-3.6-5-8-5Z"/></svg><span id="btnUserName">Usuario</span></button>
+      <button type="button" class="small hbtn" id="btnTeam" hidden title="Equipo"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm8 0a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM9 13c-3.9 0-7 1.8-7 4.2V20h14v-2.8C16 14.8 12.9 13 9 13Zm8 0c-.6 0-1.2 0-1.7.1 1.6 1 2.7 2.4 2.7 4.1V20h4v-2.8c0-2.4-2.2-4.2-5-4.2Z"/></svg><span id="btnTeamTxt">Equipo</span></button>
+      <button type="button" class="small hbtn" id="btnLock" aria-label="Bloquear" title="Bloquear"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2a5 5 0 0 0-5 5v3H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2h-1V7a5 5 0 0 0-5-5Zm-3 8V7a3 3 0 1 1 6 0v3H9Z"/></svg>Bloquear</button>
+    </div>
+    <div class="hdrBtns">
+      <button type="button" class="small primary grow" id="btnDriveTop"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2 4 21l8-4 8 4L12 2Z"/></svg>Conducir</button>
+      <button type="button" class="small hbtn syncChip" id="syncChip" hidden></button>
     </div>
     <div class="upd" id="upd" hidden role="status"><span id="updTxt">Hay una versión nueva de la app.</span><button type="button" class="primary small" id="updBtn">Actualizar</button></div>
     <span class="net" id="net" hidden>Sin internet: la app sigue funcionando. Waze y Maps necesitan señal.</span>
@@ -46,7 +49,7 @@
     <h2 id="hAdd">Agregar paquete</h2>
     <div class="row">
       <button type="button" class="primary" id="btnScan" style="flex-basis:100%">Escanear etiqueta (código o QR)</button>
-      <label class="btn" for="photo" style="flex-direction:row;color:var(--ink);font-size:15px">Foto</label>
+      <label class="btn" id="photoLbl" for="photo" style="flex-direction:row;color:var(--ink);font-size:15px">Foto</label>
       <input id="photo" type="file" accept="image/*" capture="environment" hidden>
       <button type="button" id="btnPaste">Pegar texto</button>
       <button type="button" id="btnManual">Escribir</button>
@@ -148,6 +151,11 @@
     </div>
   </section>
 
+  <section class="card pasoCard" id="pasoCard" hidden aria-live="polite">
+    <p class="pasoTxt" id="pasoTxt"></p>
+    <div class="pasoBtns" id="pasoBtns"></div>
+  </section>
+
   <ol class="route" id="list" aria-live="polite"></ol>
 
   <section class="card" id="doneWrap" hidden>
@@ -159,14 +167,20 @@
 
   <section class="card">
     <details class="sec">
-      <summary><h2>Más opciones</h2><span class="secSum">Pegar varias, historial, pagos, respaldo, equipo, zona y ajustes</span></summary>
+      <summary><h2>Más opciones</h2><span class="secSum">Reporte, pagos, historial, jornada nueva, respaldo, equipo y ajustes</span></summary>
       <div style="display:flex;flex-direction:column;gap:10px;margin-top:12px">
-        <button type="button" id="btnBulk">Pegar varias direcciones (una por línea)</button>
-        <button type="button" id="btnCopy">Copiar lista en orden (para WhatsApp)</button>
+        <h3 class="grpT">Día a día</h3>
         <button type="button" id="btnReport">Reporte del día</button>
         <button type="button" class="dark" id="btnPay">Acumulado y pagos</button>
-        <button type="button" id="btnHist">Historial de jornadas</button>
+        <button type="button" id="btnHist">Historial de jornadas (Excel)</button>
+        <button type="button" id="btnNew">Jornada nueva (empezar otro día)</button>
+        <button type="button" id="btnBulk">Pegar varias direcciones (una por línea)</button>
+        <button type="button" id="btnCopy">Copiar lista en orden (para WhatsApp)</button>
         <button type="button" id="btnClearDone">Quitar los entregados</button>
+        <h3 class="grpT">Avanzado</h3>
+        <label style="flex-direction:row;align-items:center;gap:8px;color:var(--ink);font-size:15px">
+          <input type="checkbox" id="optCompletas" style="width:auto"> Mostrar todos los botones en cada pedido (si no, quedan en «⋯»)
+        </label>
         <div class="row">
           <button type="button" id="btnBackup">Guardar respaldo</button>
           <label class="btn" for="restoreFile" style="flex-direction:row;color:var(--ink);font-size:15px">Restaurar respaldo</label>

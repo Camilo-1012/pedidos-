@@ -97,6 +97,39 @@ function mapsMultiUrl(stops){
 const $ = id => document.getElementById(id);
 function esc(s){ return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 
+/* Tarjeta «Siguiente paso»: lo que toca ahora, con un toque.
+   - Hay pendientes: «Ordenar ruta» y «Conducir» siempre a la vista (sin abrir la sección Ruta).
+   - Solo quedan «No estaba»: repasarlos o cerrar el día.
+   - Todo entregado: reporte, Excel, respaldo y jornada nueva.
+   Cada botón hace lo mismo que su botón original (data-go = id del original). */
+function renderPaso(){
+  const box = $("pasoCard"), reales = state.stops.filter(s=>!s.example);
+  const pend = reales.filter(s=>s.status!=="done"), fall = pend.filter(s=>s.status==="fail"), hechos = reales.filter(s=>s.status==="done");
+  if(!reales.length){ box.hidden = true; return; }
+  const q = l=>l.reduce((a,s)=>a+(s.qty||1),0);
+  let txt, sub, btns;
+  if(pend.length > fall.length){
+    const conocidas = new Set(state.suggestedIds||[]);
+    const sinOrden = pend.filter(s=>!conocidas.has(s.id)).length;
+    txt = `${q(pend)} pedido(s) por entregar` + (sinOrden ? ` · ${sinOrden} sin ordenar` : "");
+    sub = sinOrden ? "Toca «Ordenar ruta» antes de salir." : rutaEnCurso() ? "Sigue la ruta en el modo conducción." : "Ruta ordenada. Cuando cargues el vehículo, toca «Conducir».";
+    btns = [["Ordenar ruta", sinOrden ? "primary" : "", "btnSort"], ["Conducir", sinOrden ? "dark" : "primary", "btnDriveTop"]];
+  } else if(pend.length){
+    txt = `Te ${fall.length===1 ? "queda 1 «No estaba»" : `quedan ${fall.length} «No estaba»`} por reintentar`;
+    sub = "Repásalos antes de terminar, o cierra el día.";
+    btns = [["Repasar en el modo conducción", "primary ancho", "btnDriveTop"], ["Reporte del día", "", "btnReport"], ["Jornada nueva", "", "btnNew"]];
+  } else {
+    txt = `¡Ruta terminada! ${q(hechos)} pedido(s) entregado(s) · ${cop(q(hechos)*tarifa())}`;
+    sub = "Revisa el reporte, descarga el Excel y guarda el respaldo. Mañana empieza con «Jornada nueva».";
+    btns = [["Reporte del día", "primary", "btnReport"], ["Excel", "", "histCsvPed"], ["Guardar respaldo", "", "btnBackup"], ["Jornada nueva", "dark", "btnNew"]];
+  }
+  box.hidden = false;
+  $("pasoTxt").innerHTML = `${esc(txt)}<small>${esc(sub)}</small>`;
+  $("pasoBtns").innerHTML = btns.map(([t, c, go])=>`<button type="button" class="${c}" data-go="${go}">${esc(t)}</button>`).join("");
+}
+document.getElementById("pasoBtns").addEventListener("click", e=>{ const b = e.target.closest("button[data-go]"); if(b) $(b.dataset.go).click(); });
+// Pedidos con «⋯» abierto (se conserva al repintar la lista).
+const abiertas = new Set();
 function render(){
   const list = $("list");
   const pend = state.stops.filter(s=>s.status!=="done");
@@ -105,6 +138,7 @@ function render(){
   const paq = pend.reduce((a,st)=>a+(st.qty||1),0);
   $("stPendLbl").textContent = paq !== dirs ? `direcciones · ${paq} pedidos` : "pendientes";
   $("stDone").textContent = state.stops.filter(s=>s.status==="done").length;
+  renderPaso();
   const sp = parseAddress(state.start);
   const geo = pend.filter(s=>s.x!==null);
   const real = state.route && state.route.mode==="real" && state.route.km!=null;
@@ -193,10 +227,12 @@ function render(){
   // Pedidos pendientes agrupados por dirección, para avisar cuando hay varios en la misma.
   const mismas = new Map();
   for(const st of state.stops) if(!st.example && st.status!=="done"){ const k = stopKey(st); if(!mismas.has(k)) mismas.set(k, []); mismas.get(k).push(st); }
+  // Tarjetas compactas (por defecto): Waze, Llamar, Entregado y «⋯»; el resto aparece al tocar «⋯».
+  const compactas = !state.tarjetasCompletas;
   const html = state.stops.map((s,idx)=>{
     const isDone = s.status==="done", isFail = s.status==="fail", unk = s.x===null;
     const numTxt = isDone ? "✓" : String(s.num);
-    const cls = "stop" + (isDone?" done":"") + (isFail?" fail":"") + (unk&&!isDone?" unk":"");
+    const cls = "stop" + (isDone?" done":"") + (isFail?" fail":"") + (unk&&!isDone?" unk":"") + (compactas?" compacta":"") + (compactas && abiertas.has(s.id)?" abierta":"");
     return `<li class="${cls}" data-id="${s.id}">
       <div class="num" aria-label="Parada ${numTxt}${(s.qty||1)>1?", "+s.qty+" paquetes":""}">${numTxt}${(s.qty||1)>1?`<span class="qty">×${s.qty}</span>`:""}</div>
       <div>
@@ -222,11 +258,13 @@ function render(){
       </div>
       <div class="actions">
         <a class="btn small waze" href="${wazeUrl(s)}" target="_blank" rel="noopener">Waze</a>
-        <a class="btn small" href="${mapsUrl(s)}" target="_blank" rel="noopener">Maps</a>
+        ${compactas ? "" : `<a class="btn small" href="${mapsUrl(s)}" target="_blank" rel="noopener">Maps</a>`}
         ${s.phone && dialNumber(s.phone)?`<a class="btn small" href="tel:${dialNumber(s.phone)}">Llamar</a>`:`<button class="small" data-act="edit">Tel.</button>`}
         <button class="small ${isDone?"":"primary"}" data-act="done">${isDone?"Deshacer":"Entregado"}</button>
+        ${compactas ? `<button class="small masBtn" data-act="mas" aria-label="Más acciones" aria-expanded="${abiertas.has(s.id)}">⋯</button>` : ""}
       </div>
       <div class="actions2">
+        ${compactas ? `<a class="btn small" href="${mapsUrl(s)}" target="_blank" rel="noopener">Maps</a>` : ""}
         <button class="small" data-act="up" aria-label="Subir" ${idx===0?"disabled":""}>▲</button>
         <button class="small" data-act="down" aria-label="Bajar" ${idx===state.stops.length-1?"disabled":""}>▼</button>
         ${s.phone && cleanPhone(s.phone).startsWith("3") ? `<a class="btn small" href="${waUrl(cleanPhone(s.phone), s)}" target="_blank" rel="noopener">WhatsApp</a>` : ""}
@@ -246,7 +284,8 @@ function render(){
     const head = g ? `<li class="parkHead"><span class="pk">P</span><span>${esc(textoParqueo(g))}</span></li>` : "";
     return head + (enGrupo.has(s.id) ? html[i].replace('<li class="stop', '<li class="stop inPark') : html[i]);
   }).join("") ||
-    `<li class="empty">${doneStops.length ? "¡No quedan pendientes! Las entregadas están abajo, en «Pedidos entregados»." : "Sin paquetes."}</li>`;
+    // Con todo entregado lo dice la tarjeta «¡Ruta terminada!» (arriba); aquí no se repite.
+    (doneStops.some(s=>!s.example) ? "" : `<li class="empty">${doneStops.length ? "¡No quedan pendientes! Las entregadas están abajo, en «Pedidos entregados»." : "Sin paquetes."}</li>`);
   $("listDone").innerHTML = state.stops.map((s,i)=>s.status==="done" ? html[i] : "").join("");
 }
 
@@ -292,6 +331,7 @@ function onListClick(e){
     case "up": if(i>0){ [state.stops[i-1],state.stops[i]]=[state.stops[i],state.stops[i-1]]; } break;
     case "down": if(i<state.stops.length-1){ [state.stops[i+1],state.stops[i]]=[state.stops[i],state.stops[i+1]]; } break;
     case "edit": openEdit(s); return;
+    case "mas": if(abiertas.has(s.id)) abiertas.delete(s.id); else abiertas.add(s.id); render(); return;
     case "del": confirmBox("Borrar paquete", `¿Borrar ${s.label||s.addr}?`, ()=>{ state.stops.splice(i,1); save(); render(); }); return;
   }
   save(); render();

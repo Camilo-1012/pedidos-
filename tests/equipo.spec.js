@@ -1,6 +1,6 @@
 // Equipo en la nube (con Supabase simulado): conectar, sincronizar, ver avance, reasignar, varios celulares y sin señal.
 const { test, expect } = require("@playwright/test");
-const { entrar, vigilarErrores } = require("./ayuda");
+const { menu, entrar, vigilarErrores } = require("./ayuda");
 const { crearSupabase } = require("./supabase-falso");
 
 async function celular(browser, sb, nombre){
@@ -32,7 +32,8 @@ test("equipo: conectar, sincronizar, avance y reasignar entre dos personas", asy
   // Conectar bien
   await cam.page.fill("#tmEmail", "camilo@equipo.co"); await cam.page.fill("#tmPass", "Clave-Camilo-1"); await cam.page.click("#tmGo");
   await expect(cam.page.locator("#tmState")).toContainText("Conectado como Camilo");
-  await expect(cam.page.locator("#btnTeam")).toBeVisible();
+  await expect(cam.page.locator("#syncChip")).toBeVisible();
+  await expect(cam.page.locator("#btnTeam")).not.toHaveAttribute("hidden", "");
   await conectar(and.page, "andrea@equipo.co", "Clave-Andrea-1");
   await expect(and.page.locator("#tmState")).toContainText("Conectado como Andrea");
   await expect(and.page.locator("#tmAdminBtn")).toBeHidden();
@@ -54,7 +55,7 @@ test("equipo: conectar, sincronizar, avance y reasignar entre dos personas", asy
   // Andrea entrega una; Camilo ve su avance
   await and.page.click('#list li.stop:has-text("Calle 139") button[data-act=done]');
   await sincronizar(and.page);
-  await cam.page.click("#btnTeam");
+  await menu(cam.page); await cam.page.click("#btnTeam");
   await expect(cam.page.locator("#tmList")).toContainText("1 de 2 paradas entregadas");
   await expect(cam.page.locator("#tmList")).toContainText("sigue: Calle 150 # 104-20");
 
@@ -121,4 +122,5 @@ test("sin conectar, la app no llama a Supabase", async ({ page }) => {
   await page.waitForTimeout(5000);
   expect(sb.db.llamadas).toBe(0);
   await expect(page.locator("#btnTeam")).toBeHidden();
+  await expect(page.locator("#syncChip")).toBeHidden();
 });

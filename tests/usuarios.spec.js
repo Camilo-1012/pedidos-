@@ -1,6 +1,6 @@
 // Usuarios y PIN: creación, PIN débil, bloqueo, intentos fallidos y datos separados por usuario.
 const { test, expect } = require("@playwright/test");
-const { entrar, teclear, cargar, vigilarErrores, PIN } = require("./ayuda");
+const { menu, entrar, teclear, cargar, vigilarErrores, PIN } = require("./ayuda");
 
 test("migra los datos viejos al primer usuario y no guarda el PIN", async ({ page }) => {
   const errs = vigilarErrores(page);
@@ -26,7 +26,7 @@ test("migra los datos viejos al primer usuario y no guarda el PIN", async ({ pag
 test("bloquear, PIN errado con espera y PIN correcto", async ({ page }) => {
   const errs = vigilarErrores(page);
   await entrar(page);
-  await page.click("#btnLock");
+  await menu(page); await page.click("#btnLock");
   await expect(page.locator("#lkLogin")).toBeVisible();
   await page.reload();
   await expect(page.locator("#lkLogin")).toBeVisible();          // recargar no desbloquea
@@ -44,7 +44,7 @@ test("cada usuario ve solo sus pedidos; el admin restablece PIN", async ({ page 
   const errs = vigilarErrores(page);
   await entrar(page);
   await cargar(page, [{ addr: "Calle 145 # 103B-90", guia: "9990001112223334" }]);
-  await page.click("#btnUser"); await page.click("#usAdd");
+  await menu(page); await page.click("#btnUser"); await page.click("#usAdd");
   await page.fill("#ak_n", "Andrea"); await page.fill("#ak_p", "4711"); await page.fill("#ak_p2", "4711");
   await page.click("#akYes"); await expect(page.locator("#dlgAsk")).not.toHaveAttribute("open", "", { timeout: 20000 });
   await page.click('#usList button:has-text("Nuevo PIN")');
@@ -54,7 +54,7 @@ test("cada usuario ve solo sus pedidos; el admin restablece PIN", async ({ page 
   await page.click('#lkUsers button:has-text("Andrea")');
   await teclear(page, "8642");
   await expect(page.locator("#lock")).toBeHidden({ timeout: 15000 });
-  await expect(page.locator("#btnUser")).toHaveText("Andrea");
+  await expect(page.locator("#btnUserName")).toHaveText("Andrea");
   await expect(page.locator("#list")).not.toContainText("9990001112223334");
   expect(await page.evaluate(() => RUTA_USER.admin)).toBe(false);
   expect(errs).toEqual([]);
