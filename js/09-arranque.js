@@ -86,8 +86,8 @@ for(const [id,k] of [["zMinCra","minCra"],["zMaxCra","maxCra"],["zMinCl","minCl"
 $("btnRestore").onclick = ()=>{ if(state.suggestedIds){ applyOrder(state.suggestedIds); save(); render(); toast("Se restauró el orden sugerido."); } };
 $("btnHist").onclick = ()=>{ recordDay(); renderHist(); $("dlgHist").showModal(); };
 $("frmHist").addEventListener("submit", e=>{ e.preventDefault(); $("dlgHist").close(); });
-$("histCsvPed").onclick = ()=>{ if(!histLoad().length){ toast("Aún no hay jornadas para exportar."); return; } histCsvPedidos(); };
-$("histCsv").onclick = ()=>{ if(!histLoad().length){ toast("Aún no hay jornadas para exportar."); return; } histCsv(); };
+$("histCsvPed").onclick = ()=>{ if(!histLoad().length){ toast("Aún no hay jornadas para exportar."); return; } excelPedidos(); };
+$("histCsv").onclick = ()=>{ if(!histLoad().length){ toast("Aún no hay jornadas para exportar."); return; } excelResumen(); };
 $("histClear").onclick = ()=>{ $("dlgHist").close(); confirmBox("Borrar historial", "Se borran los resúmenes de todas las jornadas guardadas en este celular.", ()=>{ store.set(HIST_KEY, []); toast("Historial borrado."); }); };
 $("btnReport").onclick = ()=>{ $("repText").textContent = dayReport(); $("dlgReport").showModal(); };
 $("frmReport").addEventListener("submit", e=>{ e.preventDefault(); $("dlgReport").close(); });
@@ -204,7 +204,7 @@ $("restoreFile").addEventListener("change", async e=>{
 /* ============ App instalable y sin conexión ============ */
 // Al bloquear: apaga la cámara y cierra ventanas abiertas para que no queden datos a la vista.
 window.RUTA_onLock = ()=>{ try{ stopScan(); }catch(e){} };
-const APP_VERSION = "2.25.1";
+const APP_VERSION = "2.26";
 $("ver").textContent = "Versión " + APP_VERSION + ". Funciona sin internet una vez abierta la primera vez.";
 if(navigator.storage && navigator.storage.estimate){
   navigator.storage.estimate().then(e=>{ if(e && e.usage) $("ver").textContent += ` Espacio usado en este celular: ${(e.usage/1048576).toFixed(1).replace(".",",")} MB (la mayor parte es el lector de etiquetas).`; }).catch(()=>{});

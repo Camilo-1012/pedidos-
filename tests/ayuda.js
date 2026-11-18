@@ -37,4 +37,30 @@ function vigilarErrores(page){
   page.on("pageerror", e => errs.push(e.message));
   return errs;
 }
-module.exports = { sinCamara, CAMARA, PIN, entrar, teclear, cargar, vigilarErrores, sinInternetExterno };
+// Lee un .xlsx generado por la app (ZIP sin compresión) y devuelve {nombreHoja: [[celda…]…]} en el orden del libro.
+function leerXlsx(ruta){
+  const buf = require("fs").readFileSync(ruta), arch = {};
+  let i = 0;
+  while(buf.readUInt32LE(i) === 0x04034b50){
+    const tam = buf.readUInt32LE(i + 18), ln = buf.readUInt16LE(i + 26), le = buf.readUInt16LE(i + 28);
+    const nom = buf.slice(i + 30, i + 30 + ln).toString("utf8");
+    arch[nom] = buf.slice(i + 30 + ln + le, i + 30 + ln + le + tam).toString("utf8");
+    i += 30 + ln + le + tam;
+  }
+  const des = t => t.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&amp;/g, "&");
+  const nombres = [...arch["xl/workbook.xml"].matchAll(/<sheet name="([^"]*)"/g)].map(m => des(m[1]));
+  const out = {};
+  nombres.forEach((n, k) => {
+    out[n] = [...arch[`xl/worksheets/sheet${k + 1}.xml`].matchAll(/<row r="(\d+)">(.*?)<\/row>/g)].map(([, , fila]) => {
+      const celdas = [];
+      for(const c of fila.matchAll(/<c r="([A-Z]+)\d+"[^>]*?(?:\/>|>(.*?)<\/c>)/g)){
+        let col = 0; for(const ch of c[1]) col = col * 26 + ch.charCodeAt(0) - 64;
+        const t = /<t[^>]*>(.*?)<\/t>/.exec(c[2] || ""), v = /<v>(.*?)<\/v>/.exec(c[2] || "");
+        celdas[col - 1] = t ? des(t[1]) : v ? Number(v[1]) : "";
+      }
+      return Array.from(celdas, x => x === undefined ? "" : x);
+    });
+  });
+  return out;
+}
+module.exports = { sinCamara, CAMARA, PIN, entrar, teclear, cargar, vigilarErrores, sinInternetExterno, leerXlsx };

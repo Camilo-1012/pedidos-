@@ -100,9 +100,10 @@ function esc(s){ return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&
 function render(){
   const list = $("list");
   const pend = state.stops.filter(s=>s.status!=="done");
-  $("stPend").textContent = pend.length;
+  const dirs = new Set(pend.map(stopKey)).size;
+  $("stPend").textContent = dirs;
   const paq = pend.reduce((a,st)=>a+(st.qty||1),0);
-  $("stPendLbl").textContent = paq !== pend.length ? `direcciones · ${paq} pedidos` : "pendientes";
+  $("stPendLbl").textContent = paq !== dirs ? `direcciones · ${paq} pedidos` : "pendientes";
   $("stDone").textContent = state.stops.filter(s=>s.status==="done").length;
   const sp = parseAddress(state.start);
   const geo = pend.filter(s=>s.x!==null);
@@ -189,6 +190,9 @@ function render(){
     return;
   }
   numerar();
+  // Pedidos pendientes agrupados por dirección, para avisar cuando hay varios en la misma.
+  const mismas = new Map();
+  for(const st of state.stops) if(!st.example && st.status!=="done"){ const k = stopKey(st); if(!mismas.has(k)) mismas.set(k, []); mismas.get(k).push(st); }
   const html = state.stops.map((s,idx)=>{
     const isDone = s.status==="done", isFail = s.status==="fail", unk = s.x===null;
     const numTxt = isDone ? "✓" : String(s.num);
@@ -208,6 +212,7 @@ function render(){
           ${!isDone && zoneIssue(s)?`<span class="chip warn">Fuera de tu zona: ${esc(zoneIssue(s))}</span>`:""}
           ${s.zoneCheck && s.zoneCheck.bad?`<span class="chip warn">No coincide con ${esc(s.barrio)}: queda a ${s.zoneCheck.km.toFixed(1).replace(".",",")} km</span>`:""}
           ${isFail?'<span class="chip warn">Intento fallido</span>':""}
+          ${!isDone && (mismas.get(stopKey(s))||[]).length > 1 ? `<span class="chip warn">${mismas.get(stopKey(s)).length} pedidos en esta dirección (n.º ${mismas.get(stopKey(s)).map(x=>stopNum(x)).sort((a,b)=>a-b).join(", ")})</span>` : ""}
           ${s.avisadoAt && !isDone ? `<span class="chip ok">Avisado ${hhmm(s.avisadoAt)}</span>` : ""}
           ${state.loadOn && !isDone ? (loadedOf(s) >= (s.qty||1) ? '<span class="chip ok">Cargado ✓</span>' : `<span class="chip warn">Sin verificar${(s.qty||1)>1?" "+((s.qty||1)-loadedOf(s))+" de "+s.qty:""}</span>`) : ""}
           ${s.example?'<span class="chip ex">Ejemplo</span>':""}
@@ -401,30 +406,24 @@ function findGuia(g, except){ g = String(g||"").trim(); if(!g) return null; retu
 // Número de la parada: fijo en ruta (ver numerar() en js/02-ruta.js).
 function stopNum(st){ if(!st.num) numerar(); return st.num || 0; }
 function placeName(st){ const n = stopNum(st); return (st.status!=="done" && n ? "la parada " + n : "una parada ya entregada") + " (" + (st.label||st.addr) + ")"; }
+// Pedidos de la misma dirección: cada uno queda como parada aparte (su guía, su número), pero se avisa.
+// Excepción: si la parada ya estaba sin guía (p. ej. dictada) y llega su etiqueta, la guía se le pone a esa parada.
+function mismaDireccion(st){ const k = stopKey(st); return state.stops.filter(x=>x!==st && !x.example && x.status!=="done" && stopKey(x)===k); }
 function addOrMerge(d){
   const k = stopKey(d);
-  const same = state.stops.find(st=>st.status!=="done" && stopKey(st)===k);
+  const same = state.stops.find(st=>st.status!=="done" && stopKey(st)===k && d.guia && !guias(st).includes(d.guia) && guias(st).length < (st.qty||1) && (parseInt(d.qty,10)||1) === 1);
   if(same){
-    // La parada ya estaba (p. ej. dictada) y le faltan guías: esta etiqueta es uno de sus paquetes, no uno más.
-    if(d.guia && !guias(same).includes(d.guia) && guias(same).length < (same.qty||1) && (parseInt(d.qty,10)||1) === 1){
-      same.guia = guias(same).concat(d.guia).join(", ");
-      for(const k of ["phone","name","zone","barrio","unit"]) if(!same[k] && d[k]) same[k] = d[k];
-      if((!same.type || same.type==="casa") && d.type && d.type!=="casa") same.type = d.type;
-      return {merged:true, filled:true, stop:same};
-    }
-    same.qty = Math.min(99,(same.qty||1) + Math.max(1,parseInt(d.qty,10)||1));
-    if(d.guia && !guias(same).includes(d.guia)) same.guia = guias(same).concat(d.guia).join(", ");
-    if(d.name && !(same.name||"").toLowerCase().includes(d.name.toLowerCase())) same.name = same.name ? same.name + " / " + d.name : d.name;
-    if(d.phone && d.phone!==same.phone){ if(!same.phone) same.phone = d.phone; else if(!(same.notes||"").includes(d.phone)) same.notes = (same.notes? same.notes+" · " : "") + "Otro tel: " + d.phone; }
-    if(d.unit && !(same.unit||"").toLowerCase().includes(d.unit.toLowerCase())) same.unit = same.unit ? same.unit + " / " + d.unit : d.unit;
+    same.guia = guias(same).concat(d.guia).join(", ");
+    for(const f of ["phone","name","zone","barrio","unit"]) if(!same[f] && d[f]) same[f] = d[f];
     if((!same.type || same.type==="casa") && d.type && d.type!=="casa") same.type = d.type;
-    if(d.notes && !(same.notes||"").includes(d.notes)) same.notes = (same.notes? same.notes+" · " : "") + d.notes;
-    if(!same.zone && d.zone) same.zone = d.zone;
-    return {merged:true, stop:same};
+    return {merged:true, filled:true, stop:same};
   }
   const ns = mkStop(d); const firstDone = state.stops.findIndex(q=>q.status==="done");
-  state.stops.splice(firstDone<0?state.stops.length:firstDone,0,ns);
-  return {merged:false, stop:ns};
+  // Junto a los otros pedidos de la misma dirección (si los hay), para que queden seguidos en la lista.
+  const otros = mismaDireccion(ns);
+  const despues = otros.length ? state.stops.lastIndexOf(otros[otros.length-1]) + 1 : -1;
+  state.stops.splice(despues > 0 ? despues : firstDone<0?state.stops.length:firstDone, 0, ns);
+  return {merged:false, stop:ns, mismos: otros.length};
 }
 $("dlgCancel").onclick = ()=>{ fromScan = false; $("dlgEdit").close(); };
 $("frmEdit").addEventListener("submit", e=>{
@@ -440,7 +439,7 @@ $("frmEdit").addEventListener("submit", e=>{
     state.stops = state.stops.filter(s=>!s.example);
     const r = addOrMerge(d);
     if(r.filled) toast(`Guía agregada a la parada que ya tenías: ${r.stop.label||r.stop.addr}.`);
-    else if(r.merged) toast(`Misma dirección que otra parada: ahora son ${r.stop.qty} paquetes en ${r.stop.label||r.stop.addr}.`);
+    else if(r.mismos) toast(`Agregado aparte. Ojo: ahora hay ${r.mismos+1} pedidos para ${r.stop.label||r.stop.addr}.`);
     else toast(p ? "Paquete agregado en su lugar de la ruta." : "Agregado, pero la dirección quedó para revisar.");
   } else {
     const dup = guias(d).find(g=>findGuia(g, editing.s));
@@ -464,7 +463,7 @@ function openText(mode){
   textMode = mode; $("txtArea").value = "";
   $("txtTitle").textContent = mode==="one" ? "Pegar texto de la etiqueta" : "Pegar varias direcciones";
   $("txtHint").textContent = mode==="one" ? "En la galería o Google Lens toca «Copiar texto» sobre la etiqueta y pégalo aquí." :
-    "Una dirección por línea. Puedes agregar al final el teléfono, la zona y la cantidad, por ejemplo: Calle 143 # 151B-23 3001234567 ST 49 x3. Si una dirección se repite, se suma a la misma parada.";
+    "Una dirección por línea. Puedes agregar al final el teléfono, la zona y la cantidad, por ejemplo: Calle 143 # 151B-23 3001234567 ST 49 x3. Si una dirección se repite, cada pedido queda aparte y la app avisa que hay varios para esa dirección.";
   $("micBulk").hidden = mode!=="bulk"; $("micBulkMsg").hidden = true; $("viaBulkBox").hidden = mode!=="bulk";
   $("dlgText").showModal(); if(mode!=="bulk") setTimeout(()=>$("txtArea").focus(),50);
 }
@@ -484,11 +483,13 @@ $("frmText").addEventListener("submit", e=>{
       if(q) d.qty = +(q[1]||q[2]||q[3]);
       if(d.barrio) d.barrio = d.barrio.replace(/\bTel[:.]?\s*\d{7,12}\b/gi,"").replace(/\b(?:por|cantidad)\s+\d{1,2}\b|(?:^|\s)[x×]\s*\d{1,2}\b|\b\d{1,2}\s*(?:paq\w*|unid\w*|und)\b|\b(?:\+?57)?3\d{9}\b|\bST\s*\d+\b/gi,"").trim();
       const r = addOrMerge(d);
-      if(r.merged) merged++; else if(r.stop.x===null) bad++; else ok++;
+      if(r.mismos) merged++;
+      if(r.filled){ ids.push(r.stop.id); return; }
+      if(r.stop.x===null) bad++; else ok++;
       ids.push(r.stop.id);
     });
     save(); render(); optimize(true, {estable:true});
-    toast(`${ok} ubicadas${bad?`, ${bad} para revisar`:""}${merged?`, ${merged} sumadas a una dirección repetida`:""}. Agregadas en su lugar de la ruta.`);
+    toast(`${ok} ubicadas${bad?`, ${bad} para revisar`:""}${merged?`. Ojo: ${merged} con dirección repetida (cada pedido quedó aparte)`:""}. Agregadas en su lugar de la ruta.`);
     // Lo dictado o pegado suele venir sin teléfono ni guía: primero se ofrece escribir los teléfonos y luego escanear las guías.
     const unicos = [...new Set(ids)];
     const sinTel = unicos.filter(id=>{ const s = state.stops.find(x=>x.id===id); return s && !s.phone; });

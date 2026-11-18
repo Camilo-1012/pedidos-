@@ -64,6 +64,7 @@ Los celulares descargan la versión nueva en segundo plano y muestran «Hay una 
 | `js/12-aviso.js` | Aviso a los próximos clientes (WhatsApp/SMS con hora) y «Parquea una vez». |
 | `js/13-buscar.js` | Buscar pedido por dirección (completa o parcial), guía, nombre, teléfono o conjunto. |
 | `js/14-apps.js` | Abrir Xcargo / iMile desde el modo conducción (enlace «intent:» de Android con el paquete tomado del enlace de Play Store) y copiar la guía. |
+| `js/15-excel.js` | Generador de Excel (.xlsx) con varias hojas, sin librerías (ZIP sin compresión + XML). |
 | `supabase/equipo.sql` | Tablas y reglas de seguridad de Supabase. |
 | `sw.js` | Service worker: uso sin señal, actualizaciones y mapas guardados. |
 | `tests/` | Pruebas automáticas (no se publican). |
@@ -463,3 +464,11 @@ El optimizador ahora arma una tabla de costos una sola vez y calcula cada intent
 - Al tocar el botón se copia la guía de la parada actual (para pegarla en el buscador de la otra app) y Android abre la app con un enlace `intent:`; si no está instalada, abre su página de Play Store.
 - Solo funciona en Android (en iPhone no existe este tipo de enlace).
 - v2.25.1: vienen configuradas por defecto las apps de Play Store para conductores: X-cargo (`com.bigsmart.xcargo`, BIG SMART) e Imile Delivery (`com.imile.redelivery`, versión Android de «iMile Driver»). Si en el celular es otra, se pega su enlace. Una página web no puede listar las apps instaladas (Android no lo permite por privacidad).
+
+## Excel con hojas por día y pedidos aparte en la misma dirección (v2.26)
+- Los reportes ahora son **.xlsx** reales (antes CSV) con varias hojas:
+  - **Excel por pedido:** hoja «Global» (todas las jornadas, con total de cada día y total general), «Resumen» y **una hoja por cada jornada** (nombre = fecha; si hay dos el mismo día, «(2)»).
+  - **Excel resumen:** hoja «Resumen» y una hoja por mes.
+  - **Excel de pagos:** hoja «Por mes» y una hoja por mes con sus días.
+  - Guías como texto (no se dañan las de 16 dígitos), números como números, encabezados en negrita y fila de títulos fija.
+- **Pedidos de la misma dirección:** cada uno queda como parada aparte (su guía y su número) y se avisa: al agregar («Ojo: ahora hay 2 pedidos…»), en la lista (chip «2 pedidos en esta dirección (n.º 4, 5)») y en el modo conducción. Quedan seguidos en la ruta. El contador de arriba muestra direcciones y pedidos. Excepción: si la parada ya estaba sin guía (dictada) y llega su etiqueta, la guía se le pone a esa parada.

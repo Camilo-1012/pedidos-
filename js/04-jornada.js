@@ -283,59 +283,90 @@ function downloadCsv(rows, name){
   const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name;
   document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href), 2000);
 }
-// Texto que Excel no debe convertir en número (una guía de 16 dígitos se dañaría: Excel solo guarda 15).
-const xText = v => v ? `="${String(v).replace(/"/g,"")}"` : "";
 const fechaLarga = t => new Date(t).toLocaleDateString("es-CO",{year:"numeric", month:"2-digit", day:"2-digit"});
-// Excel por pedido: Fecha, Primera entrega, Última entrega, Guía (código de barras), Dirección, Inmueble, Estado, Hora, Paquetes.
-const csvCell = v => { v = String(v==null ? "" : v); return /[;"\n]/.test(v) ? '"' + v.replace(/"/g,'""') + '"' : v; };
 // Duración en formato h:mm (para Excel).
 const hmm = min => min==null || isNaN(min) ? "" : `${Math.floor(min/60)}:${String(Math.round(min%60)).padStart(2,"0")}`;
 const rutaMin = x => x.duracionRutaMin != null ? x.duracionRutaMin : x.minutos;   // jornadas viejas: primera → última entrega
-function histCsvPedidos(){
+// Nombre de hoja por jornada: la fecha (si hay dos jornadas el mismo día, la segunda queda «(2)»).
+const hojaFecha = t => fechaLarga(t).replace(/\//g, "-");
+const PED_COLS = ["Fecha","Salida a ruta","Primera entrega","Última entrega","Duración de la ruta (h:mm)","Guía (número de pedido)","Dirección","Inmueble","Estado","Hora","Paquetes","Acumulado entregados","Tiempo desde la salida (h:mm)","Valor ($)","Valor acumulado ($)"];
+const PED_ANCHOS = [12,10,10,10,12,22,30,22,13,8,9,11,12,10,12];
+// Filas de una jornada (pedido por pedido, con acumulado) y su total.
+function filasJornada(x){
+  const ini = x.salida || x.inicio, vp = valorDia(x.id);
+  const base = [fechaLarga(x.inicio), x.salida ? hhmm(x.salida) : "", hhmm(x.inicio), hhmm(x.fin), hmm(rutaMin(x))];
+  const peds = x.pedidos && x.pedidos.length ? x.pedidos : null;
+  if(!peds){
+    const q = x.paquetes||0;
+    return {filas: [base.concat(["(jornada sin detalle por pedido)","","","","",q,"","",q*vp,q*vp])], ent: q, no: 0, ped: q, min: rutaMin(x)||0, val: q*vp};
+  }
+  // Acumulado: se suma cada paquete entregado en orden de hora, para ver cómo avanzó la ruta.
+  let acum = 0, ent = 0, no = 0, pend = 0;
+  const filas = [];
+  for(const pd of peds){
+    const q = pd.q||1;
+    if(pd.e==="Entregado"){ acum += q; ent += q; } else if(pd.e==="No entregado") no += q; else pend += q;
+    filas.push(base.concat([pd.g || "(sin guía)", pd.d||"", pd.u||"", pd.e, pd.h ? hhmm(pd.h) : "", q,
+      pd.e==="Entregado" ? acum : "", pd.h ? hmm((pd.h - ini)/60000) : "", pd.e==="Entregado" ? q*vp : "", pd.e==="Entregado" ? acum*vp : ""]));
+  }
+  // Total del día: pedidos entregados, no entregados, pendientes y cuánto se demoró la ruta.
+  filas.push([fechaLarga(x.inicio), x.salida ? hhmm(x.salida) : "", hhmm(x.inicio), hhmm(x.fin), hmm(rutaMin(x)),
+    {v:"TOTAL DEL DÍA", b:true}, {v:`${ent} pedido(s) entregado(s) de ${ent+no+pend}${no?` · ${no} no entregado(s)`:""}${pend?` · ${pend} pendiente(s)`:""}`, b:true}, "", "", "",
+    {v:ent+no+pend, b:true}, {v:ent, b:true}, hmm(rutaMin(x)), {v:ent*vp, b:true}, {v:ent*vp, b:true}]);
+  return {filas, ent, no, ped: ent+no+pend, min: rutaMin(x)||0, val: ent*vp};
+}
+// Resumen por día: una fila por jornada.
+const RES_COLS = [["fecha","Fecha"],["paquetes","Pedidos entregados"],["paqNoEntregados","Pedidos no entregados"],["entregas","Direcciones entregadas"],["noEntregadas","Direcciones no entregadas"],
+  ["pendientes","Pendientes"],["salida","Salida a ruta"],["inicio","Primera entrega"],["fin","Última entrega"],["duracion","Duración de la ruta (h:mm)"],["minutos","Minutos (1.ª a última entrega)"],["promEntreEntregas","Min. entre entregas"],
+  ["kmEstimados","Km estimados"],["manejoEstMin","Manejo estimado (min)"],["realMin","Tiempo real (min)"],["minPorParada","Min. extra por parada"],
+  ["ahorroKm","Ahorro km"],["ahorroMin","Ahorro min"],["callesReales","Calles reales"],["valorPaq","Valor por pedido ($)"],["valor","Valor del día ($)"]];
+function filaResumen(x){
+  return RES_COLS.map(([k])=>{
+    if(k==="fecha") return fechaLarga(x.inicio);
+    if(k==="duracion") return hmm(rutaMin(x));
+    if(k==="valorPaq") return valorDia(x.id);
+    if(k==="valor") return (x.paquetes||0)*valorDia(x.id);
+    const v = x[k];
+    if(v==null) return "";
+    if(k==="inicio"||k==="fin"||k==="salida") return hhmm(v);
+    if(typeof v==="boolean") return v ? "Sí" : "No";
+    return typeof v==="number" ? Math.round(v*100)/100 : String(v);
+  });
+}
+function totalResumen(h){
+  const sum = k => h.reduce((a,x)=>a+(+x[k]||0),0);
+  return RES_COLS.map(([k])=>k==="fecha" ? {v:"TOTAL", b:true} : ["entregas","paquetes","noEntregadas","paqNoEntregados"].includes(k) ? {v:sum(k), b:true}
+    : k==="duracion" ? {v:hmm(h.reduce((a,x)=>a+(rutaMin(x)||0),0)), b:true} : k==="valor" ? {v:h.reduce((a,x)=>a+(x.paquetes||0)*valorDia(x.id),0), b:true} : "");
+}
+const RES_ANCHOS = RES_COLS.map((c,i)=>i===0 ? 12 : 13);
+// Excel por pedido: hoja «Global» (todas las jornadas), hoja «Resumen» y una hoja por cada jornada.
+function excelPedidos(){
   const h = histLoad();
-  const rows = ["Fecha;Salida a ruta;Primera entrega;Última entrega;Duración de la ruta (h:mm);Guía (número de pedido);Dirección;Inmueble;Estado;Hora;Paquetes;Acumulado entregados;Tiempo desde la salida (h:mm);Valor ($);Valor acumulado ($)"];
+  const global = [PED_COLS.slice()], porDia = [];
   let totEnt = 0, totNo = 0, totPed = 0, totMin = 0, totVal = 0;
   for(const x of h){
-    const ini = x.salida || x.inicio;
-    const base = [fechaLarga(x.inicio), x.salida ? hhmm(x.salida) : "", hhmm(x.inicio), hhmm(x.fin), hmm(rutaMin(x))];
-    const peds = x.pedidos && x.pedidos.length ? x.pedidos : null;
-    const vp = valorDia(x.id);   // valor por paquete de ese día
-    if(!peds){ rows.push(base.concat(["(jornada sin detalle por pedido)","","","","","",String(x.paquetes||""),"","",String((x.paquetes||0)*vp)]).join(";")); totEnt += x.paquetes||0; totMin += rutaMin(x)||0; totVal += (x.paquetes||0)*vp; continue; }
-    // Acumulado: se suma cada paquete entregado en orden de hora, para ver cómo avanzó la ruta.
-    let acum = 0, ent = 0, no = 0, pend = 0;
-    for(const pd of peds){
-      const q = pd.q||1;
-      if(pd.e==="Entregado"){ acum += q; ent += q; } else if(pd.e==="No entregado") no += q; else pend += q;
-      rows.push(base.concat([pd.g ? xText(pd.g) : "(sin guía)", csvCell(pd.d||""), csvCell(pd.u||""), pd.e, pd.h ? hhmm(pd.h) : "", String(q),
-        pd.e==="Entregado" ? String(acum) : "", pd.h ? hmm((pd.h - ini)/60000) : "",
-        pd.e==="Entregado" ? String(q*vp) : "", pd.e==="Entregado" ? String(acum*vp) : ""]).join(";"));
-    }
-    // Total del día: pedidos entregados, no entregados, pendientes y cuánto se demoró la ruta.
-    rows.push([fechaLarga(x.inicio), x.salida ? hhmm(x.salida) : "", hhmm(x.inicio), hhmm(x.fin), hmm(rutaMin(x)),
-      "TOTAL DEL DÍA", csvCell(`${ent} pedido(s) entregado(s) de ${ent+no+pend}${no?` · ${no} no entregado(s)`:""}${pend?` · ${pend} pendiente(s)`:""}`), "", "", "", String(ent+no+pend), String(ent), hmm(rutaMin(x)), String(ent*vp), String(ent*vp)].join(";"));
-    rows.push("");
-    totEnt += ent; totNo += no; totPed += ent+no+pend; totMin += rutaMin(x)||0; totVal += ent*vp;
+    const j = filasJornada(x);
+    global.push(...j.filas, []);
+    porDia.push({nombre: hojaFecha(x.inicio), filas: [PED_COLS.slice(), ...j.filas], anchos: PED_ANCHOS});
+    totEnt += j.ent; totNo += j.no; totPed += j.ped; totMin += j.min; totVal += j.val;
   }
-  if(h.length > 1) rows.push(["TOTAL GENERAL", "", "", "", hmm(totMin), `${h.length} jornada(s)`, csvCell(`${totEnt} pedido(s) entregado(s)${totNo?` · ${totNo} no entregado(s)`:""}`), "", "", "", String(totPed||totEnt), String(totEnt), hmm(totMin), String(totVal), String(totVal)].join(";"));
-  downloadCsv(rows, "pedidos-por-jornada-" + ymd(Date.now()) + ".csv");
-  toast("Excel por pedido descargado, con acumulado y total de cada día.");
+  global.push([{v:"TOTAL GENERAL", b:true}, "", "", "", {v:hmm(totMin), b:true}, {v:`${h.length} jornada(s)`, b:true},
+    {v:`${totEnt} pedido(s) entregado(s)${totNo?` · ${totNo} no entregado(s)`:""}`, b:true}, "", "", "", {v:totPed||totEnt, b:true}, {v:totEnt, b:true}, {v:hmm(totMin), b:true}, {v:totVal, b:true}, {v:totVal, b:true}]);
+  const resumen = [RES_COLS.map(c=>c[1]), ...h.map(filaResumen)];
+  if(h.length > 1) resumen.push(totalResumen(h));
+  descargarXlsx([{nombre:"Global", filas: global, anchos: PED_ANCHOS}, {nombre:"Resumen", filas: resumen, anchos: RES_ANCHOS}, ...porDia],
+    "pedidos-por-jornada-" + ymd(Date.now()) + ".xlsx");
+  toast(`Excel descargado: hoja Global, Resumen y ${porDia.length} hoja(s), una por día.`);
 }
-function histCsv(){
+// Excel resumen: hoja «Resumen» (todas las jornadas) y una hoja por mes.
+function excelResumen(){
   const h = histLoad();
-  const cols = [["fecha","Fecha"],["paquetes","Pedidos entregados"],["paqNoEntregados","Pedidos no entregados"],["entregas","Direcciones entregadas"],["noEntregadas","Direcciones no entregadas"],
-    ["pendientes","Pendientes"],["salida","Salida a ruta"],["inicio","Primera entrega"],["fin","Última entrega"],["duracion","Duración de la ruta (h:mm)"],["minutos","Minutos (1.ª a última entrega)"],["promEntreEntregas","Min. entre entregas"],
-    ["kmEstimados","Km estimados"],["manejoEstMin","Manejo estimado (min)"],["realMin","Tiempo real (min)"],["minPorParada","Min. extra por parada"],
-    ["ahorroKm","Ahorro km"],["ahorroMin","Ahorro min"],["callesReales","Calles reales"],["valorPaq","Valor por pedido ($)"],["valor","Valor del día ($)"]];
-  const cell = (k,v) => v==null ? "" : k==="fecha" ? v : (k==="inicio"||k==="fin"||k==="salida") ? hhmm(v) : typeof v==="number" ? String(v).replace(".",",") : typeof v==="boolean" ? (v?"Sí":"No") : String(v);
-  // Separador «;» y coma decimal: así lo abre bien Excel en español (Colombia).
-  const rows = [cols.map(c=>c[1]).join(";")].concat(h.map(x=>cols.map(([k])=>k==="fecha" ? fechaLarga(x.inicio) : k==="duracion" ? hmm(rutaMin(x)) : k==="valorPaq" ? String(valorDia(x.id)) : k==="valor" ? String((x.paquetes||0)*valorDia(x.id)) : cell(k,x[k])).join(";")));
-  // Fila de totales: entregas, paquetes y tiempo en ruta de todas las jornadas.
-  if(h.length > 1){
-    const sum = k => h.reduce((a,x)=>a+(+x[k]||0),0);
-    rows.push(cols.map(([k])=>k==="fecha" ? "TOTAL" : ["entregas","paquetes","noEntregadas","paqNoEntregados"].includes(k) ? String(sum(k)) : k==="duracion" ? hmm(h.reduce((a,x)=>a+(rutaMin(x)||0),0)) : k==="valor" ? String(h.reduce((a,x)=>a+(x.paquetes||0)*valorDia(x.id),0)) : "").join(";"));
-  }
-  downloadCsv(rows, "resumen-jornadas-" + ymd(Date.now()) + ".csv");
-  toast("Resumen por día descargado. Ábrelo con Excel o Google Sheets.");
+  const resumen = [RES_COLS.map(c=>c[1]), ...h.map(filaResumen)];
+  if(h.length > 1) resumen.push(totalResumen(h));
+  const meses = [...new Set(h.map(x=>ymd(x.inicio).slice(0,7)))].sort();
+  const hojasMes = meses.map(m=>{ const dm = h.filter(x=>ymd(x.inicio).startsWith(m)); return {nombre: nombreMes(m), filas: [RES_COLS.map(c=>c[1]), ...dm.map(filaResumen), totalResumen(dm)], anchos: RES_ANCHOS}; });
+  descargarXlsx([{nombre:"Resumen", filas: resumen, anchos: RES_ANCHOS}, ...hojasMes], "resumen-jornadas-" + ymd(Date.now()) + ".xlsx");
+  toast(`Excel resumen descargado: hoja Resumen y ${hojasMes.length} hoja(s), una por mes.`);
 }
 
 /* ---- Acumulado general y pagos ----
@@ -390,12 +421,23 @@ document.getElementById("pyRate").addEventListener("change", e=>{
   const a = acumLoad(), hoy = ymd(Date.now()); for(const k in a) if(a[k].f === hoy) a[k].t = v; store.set(ACUM_KEY, a);
   renderPay(); renderPace(); toast(`Valor por paquete: ${cop(v)}. Aplica desde hoy.`);
 });
+// Excel de pagos: hoja «Por mes» (todos los meses) y una hoja por mes con sus días.
 document.getElementById("pyCsv").onclick = ()=>{
-  const rows = ["Mes;Días trabajados;Pedidos entregados;Pedidos no entregados;Valor ($)"];
-  for(const [m,s] of acumMeses().reverse()) rows.push([nombreMes(m), s.dias, s.p, s.n, Math.round(s.v)].join(";"));
-  const t = acumSum(()=>true); rows.push(["TOTAL", t.dias, t.p, t.n, Math.round(t.v)].join(";"));
-  downloadCsv(rows, "acumulado-por-mes-" + ymd(Date.now()) + ".csv");
-  toast("Excel por mes descargado.");
+  const cab = ["Mes","Días trabajados","Pedidos entregados","Pedidos no entregados","Valor ($)"];
+  const filas = [cab];
+  for(const [m,s] of acumMeses().reverse()) filas.push([nombreMes(m), s.dias, s.p, s.n, Math.round(s.v)]);
+  const t = acumSum(()=>true); filas.push([{v:"TOTAL",b:true}, {v:t.dias,b:true}, {v:t.p,b:true}, {v:t.n,b:true}, {v:Math.round(t.v),b:true}]);
+  const a = acumLoad();
+  const hojas = acumMeses().reverse().map(([m])=>{
+    const dias = Object.values(a).filter(d=>d.f.startsWith(m)).sort((x,y)=>x.f<y.f?-1:1);
+    const s = acumSum(d=>d.f.startsWith(m));
+    return {nombre: nombreMes(m), anchos: [12,10,10,12,12],
+      filas: [["Día","Pedidos entregados","Pedidos no entregados","Valor por pedido ($)","Valor ($)"],
+        ...dias.map(d=>[fechaLarga(new Date(d.f+"T12:00:00").getTime()), d.p, d.n||0, d.t ?? tarifa(), Math.round(d.p*(d.t ?? tarifa()))]),
+        [{v:"TOTAL",b:true}, {v:s.p,b:true}, {v:s.n,b:true}, "", {v:Math.round(s.v),b:true}]]};
+  });
+  descargarXlsx([{nombre:"Por mes", filas, anchos:[18,10,12,12,12]}, ...hojas], "acumulado-por-mes-" + ymd(Date.now()) + ".xlsx");
+  toast("Excel de pagos descargado: hoja Por mes y una hoja por cada mes.");
 };
 const openPay = ()=>{ renderPay(); $("dlgPay").showModal(); };
 document.getElementById("btnPay").onclick = openPay;

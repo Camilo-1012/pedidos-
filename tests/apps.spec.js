@@ -19,8 +19,10 @@ test("apps de entrega: configurar con el enlace de Play Store y abrir con la guÃ
   await expect(page.locator("#dvXcargo")).toBeVisible();
   // Sin configurar: usa el paquete predeterminado de Play Store
   await page.click("#dvImile");
+  await expect.poll(() => page.evaluate(() => window.__abiertos.length)).toBe(1);   // abre despuÃ©s de copiar la guÃ­a
   expect((await page.evaluate(() => window.__abiertos))[0]).toContain("package=com.imile.redelivery;");
   await page.click("#dvXcargo");
+  await expect.poll(() => page.evaluate(() => window.__abiertos.length)).toBe(2);
   expect((await page.evaluate(() => window.__abiertos))[1]).toContain("package=com.bigsmart.xcargo;");
   await page.evaluate(() => { window.__abiertos = []; });
   // Cambiarlo por el enlace de la app que tiene el celular
@@ -33,6 +35,7 @@ test("apps de entrega: configurar con el enlace de Play Store y abrir con la guÃ
   await page.click("#dlgApps button[type=submit]");
   // Abrir: intent con el paquete y la tienda como respaldo; la guÃ­a queda copiada
   await page.click("#dvXcargo");
+  await expect.poll(() => page.evaluate(() => window.__abiertos.length)).toBe(1);
   const abiertos = await page.evaluate(() => window.__abiertos);
   expect(abiertos[0]).toContain("package=co.xcargo.driver;");
   expect(abiertos[0]).toContain("category=android.intent.category.LAUNCHER");

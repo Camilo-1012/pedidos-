@@ -1,6 +1,6 @@
 // Acumulado general y pagos: valor = paquetes entregados × $1.600 (configurable), por periodo y en los Excel.
 const { test, expect } = require("@playwright/test");
-const { entrar, cargar, vigilarErrores } = require("./ayuda");
+const { leerXlsx, entrar, cargar, vigilarErrores } = require("./ayuda");
 const fs = require("fs");
 
 test("acumulado del día, deshacer, días anteriores, cambio de valor y Excel", async ({ page }) => {
@@ -37,22 +37,34 @@ test("acumulado del día, deshacer, días anteriores, cambio de valor y Excel", 
   await expect(fila("Total general")).toContainText("$ 52.200");
   // Excel por mes
   const [dl] = await Promise.all([page.waitForEvent("download"), page.click("#pyCsv")]);
-  const mes = fs.readFileSync(await dl.path(), "utf8");
-  expect(mes).toContain("Mes;Días trabajados;Pedidos entregados;Pedidos no entregados;Valor ($)");
-  expect(mes).toMatch(/TOTAL;2;34;3;52200/);
+  expect(dl.suggestedFilename()).toMatch(/\.xlsx$/);
+  const libroMes = leerXlsx(await dl.path());
+  const pm = libroMes["Por mes"];
+  expect(pm[0]).toEqual(["Mes", "Días trabajados", "Pedidos entregados", "Pedidos no entregados", "Valor ($)"]);
+  expect(pm[pm.length - 1]).toEqual(["TOTAL", 2, 34, 3, 52200]);
+  expect(Object.keys(libroMes).length).toBeGreaterThanOrEqual(2);      // + una hoja por mes
   // Excel por pedido: valor por fila, acumulado y total del día
   await page.click("#dlgPay .dlgHead button");
   await page.click("text=Más opciones"); await page.click("#btnHist");
   const [dl2] = await Promise.all([page.waitForEvent("download"), page.click("#histCsvPed")]);
-  const filas = fs.readFileSync(await dl2.path(), "utf8").replace(/^﻿/, "").split(/\r?\n/).map(l => l.split(";"));
-  const c = n => filas[0].indexOf(n);
-  const tot = filas.find(f => f[c("Guía (número de pedido)")] === "TOTAL DEL DÍA");
-  expect(tot[c("Valor ($)")]).toBe("7200");
-  expect(filas.filter(f => f[c("Estado")] === "Entregado").map(f => f[c("Valor ($)")])).toEqual(["5400", "1800"]);
-  expect(filas.filter(f => f[c("Estado")] === "Entregado").map(f => f[c("Valor acumulado ($)")])).toEqual(["5400", "7200"]);
-  // Excel resumen
+  const libro = leerXlsx(await dl2.path());
+  const hojas = Object.keys(libro);
+  expect(hojas.slice(0, 2)).toEqual(["Global", "Resumen"]);
+  expect(hojas.length).toBe(2 + await page.evaluate(() => histLoad().length));   // una hoja por jornada
+  for (const nombre of ["Global", hojas[hojas.length - 1]]) {
+    const filas = libro[nombre];
+    const c = n => filas[0].indexOf(n);
+    const tot = filas.find(f => f[c("Guía (número de pedido)")] === "TOTAL DEL DÍA" && f[c("Valor ($)")] === 7200);
+    expect(tot).toBeTruthy();
+    const ent = filas.filter(f => f[c("Estado")] === "Entregado" && f[c("Fecha")] === tot[c("Fecha")]);
+    expect(ent.map(f => f[c("Valor ($)")])).toEqual([5400, 1800]);
+    expect(ent.map(f => f[c("Valor acumulado ($)")])).toEqual([5400, 7200]);
+  }
+  // Excel resumen: hoja Resumen y una por mes
   const [dl3] = await Promise.all([page.waitForEvent("download"), page.click("#histCsv")]);
-  expect(fs.readFileSync(await dl3.path(), "utf8")).toMatch(/;1800;7200/);
+  const res = leerXlsx(await dl3.path());
+  expect(Object.keys(res)[0]).toBe("Resumen");
+  expect(res.Resumen.some(f => f.includes(1800) && f.includes(7200))).toBe(true);
   expect(errs).toEqual([]);
 });
 
