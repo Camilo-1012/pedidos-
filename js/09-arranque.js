@@ -169,11 +169,17 @@ $("btnMaps").onclick = ()=>{
   if(!next.length){ toast("No hay paradas ubicadas."); return; }
   const a = document.createElement("a"); a.href = mapsMultiUrl(next); a.target="_blank"; a.rel="noopener"; document.body.appendChild(a); a.click(); a.remove();
 };
-for(const id of ["vehCarro","vehMoto"]) $(id).addEventListener("change", e=>{
+for(const id of ["vehCarro","vehMoto","vehPie"]) $(id).addEventListener("change", e=>{
   if(!e.target.checked) return;
+  const antesPie = esPie();
   state.vehiculo = e.target.value; save(); render();
-  toast(`Tiempos estimados para ${e.target.value === "moto" ? "moto" : "carro"}.`);
-  optimize(true, {estable:true});   // el orden es el mismo en carro y moto: solo cambian los tiempos
+  // Entre carro y moto solo cambian los tiempos. Al entrar o salir de «A pie» cambian los caminos: se recalcula, pero
+  // la ruta no se reordena sola (estable); si hay un orden claramente mejor, la app lo ofrece y tú decides.
+  toast(antesPie !== esPie()
+    ? (esPie() ? "A pie: caminos peatonales y tiempos de caminar. Si hay un orden mejor, la app te lo ofrece; para reordenar toca «Ordenar ruta»."
+               : `Vuelve a ${e.target.value === "moto" ? "moto" : "carro"}: con sentidos de las vías. Si hay un orden mejor, la app te lo ofrece.`)
+    : `Tiempos estimados para ${e.target.value === "moto" ? "moto" : "carro"}.`);
+  optimize(true, {estable:true});
 });
 $("routeCard").addEventListener("toggle", e=>{ if(state.rutaOpen !== e.target.open){ state.rutaOpen = e.target.open; save(); } });
 $("btnCopy").onclick = async ()=>{
@@ -241,7 +247,7 @@ $("restoreFile").addEventListener("change", async e=>{
 /* ============ App instalable y sin conexión ============ */
 // Al bloquear: apaga la cámara y cierra ventanas abiertas para que no queden datos a la vista.
 window.RUTA_onLock = ()=>{ try{ stopScan(); }catch(e){} };
-const APP_VERSION = "2.27";
+const APP_VERSION = "2.28";
 $("ver").textContent = "Versión " + APP_VERSION + ". Funciona sin internet una vez abierta la primera vez.";
 if(navigator.storage && navigator.storage.estimate){
   navigator.storage.estimate().then(e=>{ if(e && e.usage) $("ver").textContent += ` Espacio usado en este celular: ${(e.usage/1048576).toFixed(1).replace(".",",")} MB (la mayor parte es el lector de etiquetas).`; }).catch(()=>{});

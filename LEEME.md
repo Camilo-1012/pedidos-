@@ -480,3 +480,11 @@ El optimizador ahora arma una tabla de costos una sola vez y calcula cada intent
 - **Tarjetas compactas:** cada pedido muestra Waze, Llamar/Tel., Entregado y «⋯»; Maps, ▲▼, WhatsApp, + Guía, No estaba, Editar y Borrar aparecen al tocar «⋯» (queda abierto al repintar). Para ver todo siempre: Más opciones → Avanzado → «Mostrar todos los botones en cada pedido». El modo conducción no cambió.
 - **Más opciones** agrupado en «Día a día» y «Avanzado» (no se quitó ninguna función).
 - **Carga:** el método más usado (al menos 5 veces y más que Escanear) pasa a ser el botón grande de «Agregar paquete». Se cuenta por celular.
+
+## Vehículo «A pie» (v2.28)
+- Opciones de la ruta → Vehículo: **Carro · Moto · A pie**.
+- A pie el orden se calcula con caminos peatonales (perfil `routed-foot` del servidor de OpenStreetMap, o `foot-walking` de openrouteservice si hay clave), sin sentidos de las vías, y con tiempos de caminar (≈ 5 km/h; sin dato del mapa, ≈ 72 s por cuadra). Google Maps abre en modo caminando; Waze no cambia.
+- Cambiar de vehículo no reordena sola la ruta: si hay un orden claramente mejor, la app lo ofrece; «Ordenar ruta» reordena del todo.
+- Banco de pruebas (simulador tipo Suba): caminando, el orden a pie queda a 0–0,2 % del óptimo; el orden de carro caminado sale 3–5 % más largo (hasta 18 %). En moto, el orden a pie sale 1–3 % más largo: úsalo solo si el recorrido es caminando.
+- A pie no hay servidor de respaldo (el de demostración solo tiene carro): si falla, se usa el orden aproximado.
+- Arreglo: la hora estimada del aviso por WhatsApp en moto aplicaba dos veces el ajuste del 15 %.

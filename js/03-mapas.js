@@ -327,6 +327,9 @@ const OSRM_SERVERS = [
   {name:"OSRM (servidor de OpenStreetMap)", base:"https://routing.openstreetmap.de/routed-car"},
   {name:"OSRM (servidor de demostración)", base:"https://router.project-osrm.org"}
 ];
+// A pie se usa el perfil peatonal del servidor de OpenStreetMap (el de demostración solo tiene carro).
+const OSRM_PIE = [{name:"OSRM a pie (servidor de OpenStreetMap)", base:"https://routing.openstreetmap.de/routed-foot"}];
+const osrmServers = ()=>esPie() ? OSRM_PIE : OSRM_SERVERS;
 let ROUTE_GEOM = null;
 const ll = c => c.lng.toFixed(6)+","+c.lat.toFixed(6);
 const sleep = ms => new Promise(r=>setTimeout(r,ms));
@@ -345,7 +348,7 @@ async function getJSON(url, opts, ms){
 }
 async function matrix(coords){
   const errs = [];
-  for(const sv of OSRM_SERVERS){
+  for(const sv of osrmServers()){
     try{
       const j = await getJSON(sv.base + "/table/v1/driving/" + coords.map(ll).join(";") + "?annotations=duration,distance", {}, 25000);
       if(j.code!=="Ok" || !j.durations) throw new Error(j.code||"respuesta inválida");
@@ -355,7 +358,7 @@ async function matrix(coords){
   const key = (state.orsKey||"").trim();
   if(key && coords.length <= 59){
     try{
-      const j = await getJSON("https://api.openrouteservice.org/v2/matrix/driving-car", {method:"POST",
+      const j = await getJSON("https://api.openrouteservice.org/v2/matrix/" + (esPie() ? "foot-walking" : "driving-car"), {method:"POST",
         headers:{"Authorization":key,"Content-Type":"application/json"},
         body:JSON.stringify({locations:coords.map(c=>[c.lng,c.lat]), metrics:["duration","distance"], units:"m"})}, 30000);
       if(!j.durations) throw new Error("respuesta inválida");
@@ -365,7 +368,7 @@ async function matrix(coords){
   throw new Error(errs.join(" · ") || "sin servidores");
 }
 async function routeGeom(coords){
-  for(const sv of OSRM_SERVERS){
+  for(const sv of osrmServers()){
     try{
       const parts = [];
       for(let i=0;i<coords.length-1;i+=49){
@@ -413,13 +416,14 @@ async function realOrder(silent){
   const pts = hasO ? [origin, ...geo] : geo.slice();
   const j = await matrix(pts.map(p=>({lat:p.lat,lng:p.lng})));
   const n = pts.length, D = j.durations, KM = j.distances || null;
-  // Celdas sin dato: se estiman con la cuadrícula (≈ 25 s por cuadra).
-  for(let a=0;a<n;a++) for(let b=0;b<n;b++) if(D[a][b]==null) D[a][b] = gridDist(pts[a],pts[b])*25;
+  // Celdas sin dato: se estiman con la cuadrícula (≈ 25 s por cuadra manejando, ≈ 72 s caminando).
+  for(let a=0;a<n;a++) for(let b=0;b<n;b++) if(D[a][b]==null) D[a][b] = gridDist(pts[a],pts[b])*segCuadra();
   const SYM = D.map((r,a)=>r.map((v,b)=>(v + D[b][a])/2));
   IDX.clear(); pts.forEach((p,i)=>IDX.set(p,i));
   const o = hasO ? origin : null;
   // El orden es el mismo para carro y moto: en el banco de pruebas (simulador de calles con sentidos y giros), el orden
   // con los tiempos del servidor resultó el mejor también para moto; la moto solo cambia el tiempo estimado (más abajo).
+  // A pie la matriz ya viene del perfil peatonal (sin sentidos), así que el orden sí cambia.
   const moto = esMoto();
   const COST = D;
   let ordered;
@@ -442,7 +446,7 @@ async function realOrder(silent){
   const est = geo.filter(s=>s.geo!=="osm").length;
   state.route = {mode:"real", km: KM ? m/1000 : null, min: sec/60};
   const outN = geo.filter(s=>zoneIssue(s)).length;
-  setRouteInfo(`Ruta con calles reales: ${KM ? (m/1000).toFixed(1)+" km · " : ""}${Math.round(sec/60)} min en ${moto ? "moto" : "carro"} sin trancón, más el tiempo en cada entrega. Calculada con ${j.provider}. ` +
+  setRouteInfo(`Ruta con calles reales: ${KM ? (m/1000).toFixed(1)+" km · " : ""}${Math.round(sec/60)} min ${vehTxt()}${esPie() ? "" : " sin trancón"}, más el tiempo en cada entrega. Calculada con ${j.provider}. ` +
     `Orden ${lastStrategy}${o && o.entry ? ", entrando por " + o.label : ""}${outN && zone().outLast ? `; ${outN} fuera de zona al final` : ""}.` +
     (est ? ` ${est} dirección(es) ubicadas de forma aproximada (borde punteado en el mapa).` : "") +
     (geo.filter(s=>s.zoneCheck && s.zoneCheck.bad).length ? ` Atención: ${geo.filter(s=>s.zoneCheck && s.zoneCheck.bad).length} dirección(es) quedaron lejos del barrio que dice la etiqueta; revísalas.` : ""));

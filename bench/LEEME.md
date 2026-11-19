@@ -8,7 +8,8 @@ Mide qué tan buenas y qué tan rápidas son las rutas de la app. **No se public
   - el **óptimo exacto** (Held-Karp) para rutas de hasta unas 11 paradas.
 - `banco.js` hace ordenar a la app, a través de su código real y con un servidor de rutas simulado, y compara el resultado con el óptimo o con una referencia de búsqueda local exhaustiva.
   - Uso: `node bench/banco.js 8,10 20 carro,moto,sinred`
-  - Modos: `carro`, `moto`, `sinred` (sin internet); se agrega `-nosect` para apagar los sectores.
+  - Modos: `carro`, `moto`, `pie` (perfil peatonal: sin sentidos ni giros) y `sinred` (sin internet); se agrega `-nosect` para apagar los sectores.
+  - Además del costo en carro y en moto, muestra el costo **caminando** de cada orden contra el óptimo a pie.
 - `velocidad.js` mide el tiempo de ordenar con el procesador 4 veces más lento, como un celular de gama media.
   - Uso: `node bench/velocidad.js 30,60,99`
 

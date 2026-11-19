@@ -88,7 +88,7 @@ function wazeUrl(s){
 }
 function openExternal(url){ const a = document.createElement("a"); a.href = url; a.target = "_blank"; a.rel = "noopener"; document.body.appendChild(a); a.click(); a.remove(); }
 function nextStop(){ return state.stops.find(q=>q.status==="pend" && q.x!==null) || state.stops.find(q=>q.status==="pend") || state.stops.find(q=>q.status==="fail"); }
-function mapsUrl(s){ return "https://www.google.com/maps/dir/?api=1&destination=" + encodeURIComponent(navQuery(s)) + "&travelmode=driving"; }
+function mapsUrl(s){ return "https://www.google.com/maps/dir/?api=1&destination=" + encodeURIComponent(navQuery(s)) + "&travelmode=" + (esPie() ? "walking" : "driving"); }
 function mapsMultiUrl(stops){
   return "https://www.google.com/maps/dir/" + stops.map(s=>encodeURIComponent(navQuery(s))).join("/") ;
 }
@@ -155,7 +155,7 @@ function render(){
     "La app calcula el recorrido más corto con el mapa. Waze solo navega a cada parada: no recibe la lista completa.";
   const parts = [];
   parts.push(currentOrigin() && currentOrigin().id ? "Desde tu última entrega" : state.startGPS ? "Desde " + (state.startGPS.dirMapa || state.startGPS.cruce || (state.startGPS.dir ? "≈ " + state.startGPS.dir : "tu ubicación")) : state.start ? "Desde " + state.start : (zone().on && zone().entry ? "Entrada por " + (ZONE_ENTRIES[zone().entry]||"la zona").replace(/ \(.*\)$/,"") : "Sin punto de partida"));
-  parts.push(esMoto() ? "en moto" : "en carro");
+  parts.push(vehTxt());
   if(state.byZone) parts.push("por zona ST");
   if(state.roundTrip) parts.push("con regreso");
   parts.push(modoDirecciones() ? "por direcciones" : state.realRoads !== false ? "calles reales" : "orden aproximado");
@@ -168,9 +168,11 @@ function render(){
   if($("routeCard").open !== rOpen) $("routeCard").open = rOpen;
   if($("routeOpts").open !== !!state.optsOpen) $("routeOpts").open = !!state.optsOpen;
   $("autoWaze").checked = state.autoWaze !== false;
-  $(esMoto() ? "vehMoto" : "vehCarro").checked = true;
-  $("vehInfo").textContent = (esMoto() ? "Moto: tiempos de manejo ≈ 15 % menores (avanza en el trancón y parquea en la puerta). " : "Carro: tiempos de manejo del servidor de rutas. ")
-    + "El orden de las paradas es el mismo para los dos: en las pruebas, el orden más corto en carro también fue el mejor en moto.";
+  $(esPie() ? "vehPie" : esMoto() ? "vehMoto" : "vehCarro").checked = true;
+  $("vehInfo").textContent = esPie()
+    ? "A pie: el orden se calcula con caminos peatonales (sin sentidos de las vías) y tiempos de caminar. Úsalo solo si haces el recorrido caminando: en moto o carro ese orden sale más largo, porque igual hay que respetar los sentidos."
+    : (esMoto() ? "Moto: tiempos de manejo ≈ 15 % menores (avanza en el trancón y parquea en la puerta). " : "Carro: tiempos de manejo del servidor de rutas. ")
+      + "El orden de las paradas es el mismo en carro y moto: en las pruebas, el orden más corto en carro también fue el mejor en moto.";
   if(document.activeElement !== $("orsKey")) $("orsKey").value = state.orsKey || "";
   $("routeInfo").textContent = state.routeNote || "";
   const mj = state.mejoraRuta && state.stops.some(s=>s.status!=="done") ? state.mejoraRuta : null;

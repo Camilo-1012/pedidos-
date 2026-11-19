@@ -15,7 +15,7 @@ function etaProximos(n){
     if(out.length && p.perStop != null) min = p.perStop;                       // ritmo real del día (manejo + entrega)
     else {
       const lc = prev ? legCost(prev, s) : null;
-      const manejo = lc && lc.sec != null ? lc.sec/60 * (esMoto() ? MOTO_TIEMPO : 1) : (prev && prev.x != null && s.x != null ? gridDist(prev, s)*25/60 : 6);
+      const manejo = lc && lc.sec != null ? lc.sec/60 : (prev && prev.x != null && s.x != null ? gridDist(prev, s)*segCuadra()/60 : 6);   // LASTM.D ya trae el ajuste de moto
       min = manejo + (out.length ? SERVICIO_MIN : 0);
     }
     t += min*60000;

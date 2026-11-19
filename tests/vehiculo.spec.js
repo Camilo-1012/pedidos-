@@ -4,14 +4,18 @@ const { test, expect } = require("@playwright/test");
 const { entrar, vigilarErrores } = require("./ayuda");
 
 // Tiempos simulados: distancia / 6 m/s, y +240 s si el tramo va hacia el oriente (vías de un solo sentido que obligan a rodear).
+// A pie (routed-foot): sin sentidos, la misma distancia en ambas direcciones, a 1,4 m/s.
+const PEDIDAS = [];
 async function osrmFalso(ctx){
   await ctx.route(/routing\.openstreetmap\.de|router\.project-osrm\.org/, async route => {
     const url = new URL(route.request().url());
+    PEDIDAS.push(url.host + url.pathname.split("/").slice(0, 3).join("/"));
     if(!url.pathname.includes("/table/")) return route.abort();
+    const pie = url.pathname.startsWith("/routed-foot/");
     const pts = url.pathname.split("/").pop().split(";").map(p => p.split(",").map(Number));   // lng,lat
     const m = (a, b) => { const R = 6371000, toR = x => x*Math.PI/180; const dLa = toR(b[1]-a[1]), dLo = toR(b[0]-a[0]);
       return 2*R*Math.asin(Math.sqrt(Math.sin(dLa/2)**2 + Math.cos(toR(a[1]))*Math.cos(toR(b[1]))*Math.sin(dLo/2)**2)); };
-    const durations = pts.map(a => pts.map(b => a === b ? 0 : m(a,b)/6 + (b[0] > a[0] + 0.0005 ? 240 : 0)));
+    const durations = pts.map(a => pts.map(b => a === b ? 0 : pie ? m(a,b)/1.4 : m(a,b)/6 + (b[0] > a[0] + 0.0005 ? 240 : 0)));
     const distances = pts.map(a => pts.map(b => m(a,b)));
     route.fulfill({ status: 200, contentType: "application/json", headers: { "access-control-allow-origin": "*" }, body: JSON.stringify({ code: "Ok", durations, distances }) });
   });
@@ -33,11 +37,62 @@ test("Moto: mismo orden (el mejor en las pruebas) y tiempo de manejo ≈ 15 % me
   await page.click('label[for="vehMoto"]');
   await expect(page.locator("#routeInfo")).toContainText("min en moto", { timeout: 20000 });
   await expect(page.locator("#optsSum")).toContainText("en moto");
-  await expect(page.locator("#vehInfo")).toContainText("mismo para los dos");
+  await expect(page.locator("#vehInfo")).toContainText("mismo en carro y moto");
   const moto = await page.evaluate(() => ({ ids: state.stops.filter(s => s.status !== "done").map(s => s.id).join(), min: state.route.min }));
   expect(moto.ids).toBe(carro.ids);
   expect(moto.min / carro.min).toBeCloseTo(0.85, 2);
   await page.click('label[for="vehCarro"]');
   await expect(page.locator("#routeInfo")).toContainText("min en carro", { timeout: 20000 });
+  expect(errs).toEqual([]);
+});
+
+test("A pie: caminos peatonales, no reordena sola, «Ordenar ruta» usa el orden a pie y Maps abre caminando", async ({ page }) => {
+  test.setTimeout(120000);
+  const errs = vigilarErrores(page);
+  await entrar(page);
+  await osrmFalso(page.context());
+  await page.evaluate(l => { state.realRoads = true; state.stops = l.map(a => mkStop({ addr: a })); state.stops.forEach(s => { const e = estimate(s.x, s.y); s.lat = e.lat; s.lng = e.lng; s.geo = "osm"; }); state.start = "Calle 145 # 104-10"; save(); render(); }, PARADAS);
+  await page.evaluate(() => optimize(false));
+  await expect(page.locator("#routeInfo")).toContainText("min en carro");
+  const ids = () => page.evaluate(() => state.stops.filter(s => s.status !== "done").map(s => s.id).join());
+  const carro = await ids();
+  PEDIDAS.length = 0;
+  await page.click("#routeOpts > summary");
+  await page.click('label[for="vehPie"]');
+  await expect(page.locator("#routeInfo")).toContainText("min a pie", { timeout: 20000 });
+  await expect(page.locator("#routeInfo")).not.toContainText("trancón");
+  await expect(page.locator("#optsSum")).toContainText("a pie");
+  await expect(page.locator("#vehInfo")).toContainText("caminos peatonales");
+  // Solo el perfil peatonal (el servidor de demostración no tiene perfil a pie)
+  expect(PEDIDAS.length).toBeGreaterThan(0);
+  expect(PEDIDAS.every(u => u.startsWith("routing.openstreetmap.de/routed-foot"))).toBe(true);
+  // Cambiar el vehículo no reordena sola la ruta
+  expect(await ids()).toBe(carro);
+  // «Ordenar ruta» sí ordena a pie: el orden nuevo no camina más que el de carro
+  await page.click("#btnSort");
+  await expect(page.locator("#routeInfo")).toContainText("min a pie", { timeout: 20000 });
+  await expect.poll(() => page.evaluate(() => !optimizing)).toBe(true);
+  const costos = await page.evaluate(ordCarro => {
+    const porId = new Map(state.stops.map(s => [s.id, s])), o = currentOrigin();
+    const pend = state.stops.filter(s => s.status !== "done");
+    return { pie: orderCost(o, pend, false).min, carro: orderCost(o, ordCarro.split(",").map(i => porId.get(i) || porId.get(Number(i))), false).min };
+  }, carro);
+  expect(costos.pie).toBeLessThanOrEqual(costos.carro + 1e-6);
+  expect(await page.evaluate(() => mapsUrl(state.stops[0]))).toContain("travelmode=walking");
+  // De vuelta a moto: otra vez con sentidos de las vías y Maps manejando
+  await page.click('label[for="vehMoto"]');
+  await expect(page.locator("#routeInfo")).toContainText("min en moto", { timeout: 20000 });
+  expect(await page.evaluate(() => mapsUrl(state.stops[0]))).toContain("travelmode=driving");
+  expect(errs).toEqual([]);
+});
+
+test("A pie sin internet: orden aproximado y tiempos de caminar, sin errores", async ({ page }) => {
+  const errs = vigilarErrores(page);
+  await entrar(page);
+  await page.evaluate(l => { state.vehiculo = "pie"; state.stops = l.map(a => mkStop({ addr: a })); save(); render(); }, PARADAS.slice(0, 5));
+  await page.evaluate(() => optimize(false));
+  await expect(page.locator("#vehPie")).toBeChecked();
+  expect(await page.evaluate(() => segCuadra())).toBe(72);
+  expect(await page.evaluate(() => state.stops.filter(s => s.status !== "done").length)).toBe(5);
   expect(errs).toEqual([]);
 });

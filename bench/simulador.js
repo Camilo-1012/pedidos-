@@ -148,3 +148,7 @@ function mejorarReal(T, ord, maxPasadas=50){
   return best;
 }
 module.exports.mejorarReal = mejorarReal;
+
+// A pie: se puede caminar en cualquier sentido y sin costo de giro; 100 m por cuadra a ~5 km/h ≈ 72 s.
+function matrizPie(pts){ return pts.map(a=>pts.map(b=> a===b ? 0 : (Math.abs(a.x-b.x)+Math.abs(a.y-b.y))*72)); }
+module.exports.matrizPie = matrizPie;

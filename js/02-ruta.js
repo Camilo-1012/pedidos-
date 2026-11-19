@@ -32,6 +32,11 @@ function save(){
 // (Se probó una penalidad menor para moto y daba rutas peores en el banco de pruebas: se usa la misma para ambos.)
 const CROSS_PENALTY = 2;
 const esMoto = ()=>typeof state !== "undefined" && state && state.vehiculo === "moto";
+// A pie: el orden se calcula con caminos peatonales (sin sentidos de las vías) y tiempos de caminar.
+const esPie = ()=>typeof state !== "undefined" && state && state.vehiculo === "pie";
+const vehTxt = ()=>esPie() ? "a pie" : esMoto() ? "en moto" : "en carro";
+// Segundos por cuadra cuando no hay dato del mapa: ≈ 25 s manejando; ≈ 72 s caminando (100 m a 5 km/h).
+const segCuadra = ()=>esPie() ? 72 : 25;
 function gridDist(a,b){
   let d = Math.abs(a.x-b.x) + Math.abs(a.y-b.y);
   const st = typeof state !== "undefined" ? state : null;

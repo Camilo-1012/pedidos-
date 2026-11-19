@@ -18,14 +18,15 @@ const key = p => ll(p).lng.toFixed(6)+","+ll(p).lat.toFixed(6);
 (async()=>{
   const b = await chromium.launch();
   const ctx = await b.newContext({...devices["Pixel 7"]});
-  let D = null, byKey = null;
+  let D = null, DP = null, byKey = null;
   await ctx.route(/overpass|kumi|coffee|nominatim|openrouteservice|waze/, r=>r.abort());
   await ctx.route(/routing\.openstreetmap\.de|router\.project-osrm\.org/, async route=>{
     const u = new globalThis.URL(route.request().url());
     if(!u.pathname.includes("/table/")) return route.abort();
     const idx = u.pathname.split("/").pop().split(";").map(c=>byKey.get(c));
     if(idx.some(i=>i===undefined)) return route.abort();
-    const durations = idx.map(i=>idx.map(j=>D[i][j])), distances = idx.map(i=>idx.map(j=>D[i][j]*6));
+    const M = u.pathname.startsWith("/routed-foot/") ? DP : D;   // perfil a pie: sin sentidos ni giros
+    const durations = idx.map(i=>idx.map(j=>M[i][j])), distances = idx.map(i=>idx.map(j=>M[i][j]*6));
     route.fulfill({status:200, contentType:"application/json", headers:{"access-control-allow-origin":"*"}, body:JSON.stringify({code:"Ok", durations, distances})});
   });
   const p = await ctx.newPage();
@@ -37,6 +38,8 @@ const key = p => ll(p).lng.toFixed(6)+","+ll(p).lat.toFixed(6);
     for(let s=0;s<INST;s++){
       const pts = genera(n, 1000*n + s);
       D = S.matriz(net, pts, "carro");                       // lo que entrega el servidor (sin rumbo, perfil carro)
+      DP = S.matrizPie(pts);                                 // perfil a pie
+      const optP = n <= 11 ? S.optimoExacto(DP) : null;
       byKey = new Map(pts.map((q,i)=>[key(q), i]));
       const Tc = S.tablaRumbos(net, pts, "carro"), Tm = S.tablaRumbos(net, pts, "moto");
       const exact = n <= 11;
@@ -46,15 +49,16 @@ const key = p => ll(p).lng.toFixed(6)+","+ll(p).lat.toFixed(6);
           state.stops = pts.slice(1).map((q,i)=>{ const s = mkStop({addr:`Calle ${q.y} # ${q.x}-10`}); s.x=q.x; s.y=q.y; s.label=s.addr; s.lat=lls[i+1].lat; s.lng=lls[i+1].lng; s.geo="osm"; s.idx=i+1; return s; });
           state.startGPS = {x:pts[0].x, y:pts[0].y, lat:lls[0].lat, lng:lls[0].lng, acc:10, t:Date.now()};
           state.lastDoneId = null; state.start = ""; state.roundTrip = false; state.byZone = false;
-          state.vehiculo = /moto/.test(modo) ? "moto" : "carro"; state.realRoads = !/sinred/.test(modo);
+          state.vehiculo = /moto/.test(modo) ? "moto" : /pie/.test(modo) ? "pie" : "carro"; state.realRoads = !/sinred/.test(modo);
           state.zone = {...(state.zone||{}), sectors: !/nosect/.test(modo)};
           save();
           await optimize(true);
           return state.stops.filter(s=>s.status!=="done").map(s=>s.idx);
         }, [pts, modo, pts.map(ll)]);
         const verdadC = S.costoReal(Tc, ord), verdadM = S.costoReal(Tm, ord);
-        const r = (res[n+"|"+modo] ||= {gapC:[], gapM:[], n:0, info:new Set()});
+        const r = (res[n+"|"+modo] ||= {gapC:[], gapM:[], gapP:[], n:0, info:new Set()});
         r.n++;
+        { const cP = S.costo(DP, ord); r.gapP.push(cP / (optP != null ? optP : Math.min(cP, S.referencia(DP, 4, n*7+s))) - 1); }   // caminando
         if(exact){ r.gapC.push(verdadC/optC-1); r.gapM.push(verdadM/optM-1); }
         else {
           // Referencia: lo mejor entre la búsqueda local exhaustiva desde el orden de la app y desde 3 órdenes aleatorios.
@@ -74,6 +78,7 @@ const key = p => ll(p).lng.toFixed(6)+","+ll(p).lat.toFixed(6);
   const mx = a => (100*Math.max(...a)).toFixed(1)+" %";
   for(const [k,r] of Object.entries(res)){
     const [n, modo] = k.split("|");
+    console.log(`n=${n} ${modo.padEnd(6)} | CAMINANDO sobre el ${+n<=11?"óptimo":"referencia"} a pie: prom ${pct(r.gapP)} máx ${mx(r.gapP)}`);
     if(+n <= 11) console.log(`n=${n} ${modo.padEnd(6)} | sobre el óptimo en CARRO: prom ${pct(r.gapC)} máx ${mx(r.gapC)} | en MOTO: prom ${pct(r.gapM)} máx ${mx(r.gapM)}`);
     else console.log(`n=${n} ${modo.padEnd(6)} | sobre la REFERENCIA en CARRO: prom ${pct(r.gapC)} máx ${mx(r.gapC)} | en MOTO: prom ${pct(r.gapM)} máx ${mx(r.gapM)}`);
   }
