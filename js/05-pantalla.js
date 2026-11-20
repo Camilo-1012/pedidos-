@@ -393,6 +393,40 @@ for(const id of ["pN1","pN2"]) $(id).addEventListener("input", e=>{   // si pega
   const el = e.target, ch = id==="pN1" ? "#" : "-";
   if(el.value.includes(ch)){ const [a, b] = el.value.split(ch); el.value = a.trim(); const sig = $(sigParte[id]); if(b && !sig.value) sig.value = b.trim(); armarDesdePartes(); sig.focus(); }
 });
+/* Teclado numérico (el mismo de la placa) en los números de la dirección. Las letras y «Bis» van en una fila de
+   botones que aparece al tocar el campo; «ABC» abre el teclado normal en ese campo hasta salir de él. */
+const LETRAS_DIR = ["A","B","C","D","E","F","Bis"];
+function filaLetras(filaId, ids){
+  const fila = $(filaId);
+  fila.innerHTML = LETRAS_DIR.map(l=>`<button type="button" data-l="${l}">${l}</button>`).join("")
+    + `<button type="button" class="abc" data-l="abc" aria-label="Abrir el teclado con letras en este campo">ABC</button>`;
+  let ultimo = null, ocultar = 0;
+  const numerico = el=>el.inputMode === "numeric" || el.dataset.abc;
+  // Sin perder el foco: el campo sigue activo y el teclado no se cierra al tocar una letra.
+  fila.addEventListener("pointerdown", e=>{ if(e.target.closest("button")) e.preventDefault(); });
+  fila.addEventListener("mousedown", e=>{ if(e.target.closest("button")) e.preventDefault(); });
+  fila.addEventListener("click", e=>{
+    const b = e.target.closest("button"), el = ultimo && $(ultimo);
+    if(!b || !el) return;
+    clearTimeout(ocultar);
+    if(b.dataset.l === "abc"){ el.dataset.abc = "pend"; el.inputMode = "text"; el.blur(); setTimeout(()=>el.focus(), 30); return; }
+    const v = el.value.replace(/\s+$/, ""), l = b.dataset.l;
+    if(!v){ el.focus(); return; }   // la letra va después del número
+    el.value = l === "Bis" ? v + " Bis" : /\d$/.test(v) ? v + l : v + " " + l;
+    el.dispatchEvent(new Event("input", {bubbles:true}));
+    el.focus();
+  });
+  for(const id of ids){
+    const el = $(id);
+    el.addEventListener("focus", ()=>{ clearTimeout(ocultar); ultimo = id; fila.hidden = !numerico(el); });
+    el.addEventListener("blur", ()=>{
+      if(el.dataset.abc === "pend") el.dataset.abc = "on";                         // cambio a «ABC»: vuelve enseguida
+      else if(el.dataset.abc === "on"){ delete el.dataset.abc; el.inputMode = "numeric"; }   // salió del campo
+      ocultar = setTimeout(()=>{ if(!ids.includes((document.activeElement || {}).id)) fila.hidden = true; }, 200);
+    });
+  }
+}
+filaLetras("pLetras", ["pN1","pN2"]);
 function updParsed(desdePartes){
   if(desdePartes !== true) llenarPartes();
   const p = parseAddress($("fAddr").value);

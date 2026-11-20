@@ -96,9 +96,12 @@ function buscarPorPartes(p){
 function renderBuscar(){
   if(bqConPartes()) return renderResultados(buscarPorPartes(bqPartes()), [bqPartes().n1, bqPartes().n2 && "# " + bqPartes().n2, bqPartes().n3 && "- " + bqPartes().n3].filter(Boolean).join(" "));
   const q = $("bqIn").value, box = $("bqList"); box.innerHTML = "";
-  $("bqIn").placeholder = viaBuscar() ? `${viaBuscar()} … ej.: 145 106 20` : "Ej.: 150b 143 45";
+  // Con una vía elegida se buscan números: teclado numérico (separa con # o -). En «Todas» queda el teclado normal (nombres, conjuntos).
+  if(!$("bqIn").dataset.abc) $("bqIn").inputMode = viaBuscar() ? "numeric" : "text";
+  $("bqIn").placeholder = viaBuscar() ? `${viaBuscar()}: 145#106-20` : "Ej.: 150b 143 45";
+  $("bqCargar").classList.remove("vacio"); $("bqAddScan").classList.remove("primary");
   if(!q.trim()){ $("bqInfo").textContent = viaBuscar()
-    ? `Buscando en ${viaBuscar()}: escribe o dicta solo los números (por ejemplo «145 106 20» o solo «145»). También sirve la guía, el nombre, el teléfono o el conjunto.`
+    ? `Buscando en ${viaBuscar()}: escribe o dicta solo los números, separados con # o - (por ejemplo «145#106-20» o solo «145»). También sirve la guía, el teléfono o el conjunto.`
     : "Escribe o dicta la dirección (también sirve parte de ella: «150b 143 45»), la guía o sus últimos 4 números, el nombre, el teléfono o el conjunto."; return; }
   renderResultados(buscarPedidos(q), q.trim());
 }
@@ -107,7 +110,8 @@ function renderResultados(r, q){
   const total = state.stops.filter(s=>!s.example).length;
   $("bqInfo").textContent = r.length
     ? `${r.length === BQ_MAX ? "Primeros " + BQ_MAX : r.length} resultado(s) de ${total} paradas. Toca uno para verlo.`
-    : `No hay pedidos de la jornada que coincidan con «${viaBuscar() && bqConPartes() ? viaBuscar() + " " : ""}${q}». Revisa la dirección o busca solo una parte (por ejemplo, los números).`;
+    : `No hay pedidos de la jornada que coincidan con «${viaBuscar() && bqConPartes() ? viaBuscar() + " " : ""}${q}». Revisa la dirección o busca solo una parte (por ejemplo, los números). Si no está cargado, cárgalo abajo.`;
+  $("bqCargar").classList.toggle("vacio", !r.length); $("bqAddScan").classList.toggle("primary", !r.length);
   for(const x of r){
     const c = stopCard(x.st, x.g);
     c.style.cursor = "pointer"; c.setAttribute("role", "button"); c.tabIndex = 0;
@@ -170,6 +174,33 @@ for(const [id, sig, ch] of [["bqN1","bqN2","#"],["bqN2","bqN3","-"],["bqN3",null
   if(e.key === "Enter" || (ch && e.key === ch)){ e.preventDefault(); if(sig) $(sig).focus(); else e.target.blur(); }
 });
 document.getElementById("bqMic").onclick = bqDictar;
+filaLetras("bqLetras", ["bqIn","bqN1","bqN2"]);
+/* Cargar un pedido sin salir de Buscar: el formulario (o el escáner) se abre encima y, al guardar o cancelar,
+   se vuelve a Buscar con la misma búsqueda (el pedido nuevo ya aparece). Lo buscado se pasa al formulario:
+   las partes o los números de la dirección (con la vía elegida), o la guía si se buscó una guía. */
+function bqAlFormulario(){
+  const via = viaBuscar() || state.viaParte || "Calle";
+  if(bqConPartes()){ const p = bqPartes(); return {via, n1:p.n1.trim(), n2:p.n2.trim(), n3:p.n3.replace(/\D/g, "")}; }
+  const q = $("bqIn").value.trim();
+  if(!q) return {};
+  if(/^[\d\s]{8,}$/.test(q)) return {guia: q.replace(/\s+/g, "")};   // solo números largos, sin # ni -: una guía
+  if(!viaBuscar()){ const pa = parseAddress(q); return pa ? {addr: q} : {}; }
+  const nums = q.toUpperCase().match(/\d+\s*(?:[A-H](?![A-Z]))?(?:\s*BIS(?:\s*[A-H](?![A-Z]))?)?/g) || [];
+  const t = nums.map(x=>x.replace(/\s+/g, " ").replace(/(\d) ([A-H])$/, "$1$2").replace(/BIS/, "Bis").trim());
+  return t.length ? {via, n1:t[0] || "", n2:t[1] || "", n3:(t[2] || "").replace(/\D/g, "")} : {};
+}
+document.getElementById("bqAddWrite").onclick = ()=>{
+  const d = bqAlFormulario();
+  openEdit({addr: d.addr || "", guia: d.guia || ""}, true);
+  if(d.n1 != null){
+    if(![...$("pVia").options].some(o=>o.value===d.via)) $("pVia").add(new Option(d.via));
+    $("pVia").value = d.via; $("pN1").value = d.n1; $("pN2").value = d.n2; $("pN3").value = d.n3; armarDesdePartes();
+    const vacio = ["pN1","pN2","pN3"].find(id=>!$(id).value);
+    setTimeout(()=>$(vacio || "fPhone").focus(), 80);
+  }
+};
+document.getElementById("bqAddScan").onclick = ()=>startScan("label");   // el escáner queda encima de Buscar
+document.getElementById("dlgEdit").addEventListener("close", ()=>{ if($("dlgBuscar").open) renderBuscar(); });
 document.getElementById("bqScan").onclick = ()=>{ $("dlgBuscar").close(); startScan("find"); };
 document.getElementById("dlgBuscar").addEventListener("close", ()=>{ if(bqRec) try{ bqRec.abort(); }catch(e){} });
 document.getElementById("btnFind").onclick = ()=>abrirBuscar();

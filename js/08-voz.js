@@ -232,3 +232,32 @@ function startBulkDictation(){
 $("micBulk").onclick = startBulkDictation;
 $("dlgText").addEventListener("close", ()=>{ if(bulkOn){ bulkOn = false; try{ recBulk.abort(); }catch(e){} } bulkUI(false, ""); });
 $("dlgEdit").addEventListener("close", ()=>{ if(recOn){ try{ rec.abort(); }catch(e){} micUI(false,""); } });
+
+/* Teléfono dictado al agregar o editar un paquete: «tres once doscientos veintidós treinta y tres cuarenta y cuatro»
+   o «311 222 3344» → 3112223344. Necesita internet, como el resto del dictado. */
+let telRec = null;
+function telDictado(txt){ const d = spokenToAddress(txt).replace(/\D/g, ""); return telDeDigitos(d) || d; }
+function dictarTel(){
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if(!SR){ toast("Este navegador no permite dictar aquí. Usa el micrófono del teclado."); $("fPhone").focus(); return; }
+  if(!navigator.onLine){ toast("El dictado necesita internet. Escribe el teléfono."); $("fPhone").focus(); return; }
+  if(telRec){ try{ telRec.stop(); }catch(e){} return; }
+  telRec = new SR(); telRec.lang = "es-CO"; telRec.interimResults = true; telRec.maxAlternatives = 3; telRec.continuous = false;
+  const btn = $("micPhone"); btn.classList.add("on"); btn.textContent = "Parar";
+  telRec.onresult = ev=>{
+    let txt = "";
+    for(let i = 0; i < ev.results.length; i++){
+      const r = ev.results[i]; let best = r[0].transcript;
+      if(r.isFinal) for(let k = 0; k < r.length; k++){ if(telDeDigitos(spokenToAddress(r[k].transcript).replace(/\D/g, ""))){ best = r[k].transcript; break; } }
+      txt += " " + best;
+    }
+    $("fPhone").value = telDictado(txt.trim());
+    updPhone();
+  };
+  const fin = ()=>{ telRec = null; btn.classList.remove("on"); btn.textContent = "Dictar"; };
+  telRec.onend = fin;
+  telRec.onerror = e=>{ fin(); if(e.error !== "aborted" && e.error !== "no-speech") toast("No se pudo dictar (" + e.error + ")."); };
+  try{ telRec.start(); }catch(e){ fin(); }
+}
+$("micPhone").onclick = dictarTel;
+$("dlgEdit").addEventListener("close", ()=>{ if(telRec) try{ telRec.abort(); }catch(e){} });
