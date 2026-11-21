@@ -3,18 +3,48 @@ const { test, expect } = require("@playwright/test");
 const fs = require("fs"), path = require("path");
 const A = require("./ayuda");
 
-test("archivos de la app: versión, caché y lista de carga coinciden", async () => {
-  const raiz = path.join(__dirname, "..");
-  const sw = fs.readFileSync(path.join(raiz, "sw.js"), "utf8"), acc = fs.readFileSync(path.join(raiz, "js/00-acceso.js"), "utf8");
-  const arr = fs.readFileSync(path.join(raiz, "js/11-arranque.js"), "utf8");
-  const ver = /APP_VERSION = "([^"]+)"/.exec(arr)[1];
-  expect(/CACHE = "bodega-v([^"]+)"/.exec(sw)[1]).toBe(ver);
-  const core = JSON.parse("[" + /const CORE = \[([\s\S]*?)\];/.exec(sw)[1] + "]");
-  const appFiles = JSON.parse(/const APP_FILES = (\[[^\]]*\])/.exec(acc)[1]);
-  const js = fs.readdirSync(path.join(raiz, "js")).map(f => "js/" + f);
-  js.forEach(f => expect(core, f + " en CORE").toContain(f));
-  js.filter(f => !f.endsWith("00-acceso.js")).forEach(f => expect(appFiles, f + " en APP_FILES").toContain(f));
-  core.filter(f => f !== "./").forEach(f => expect(fs.existsSync(path.join(raiz, f)), f + " existe").toBe(true));
+// Una sola app, dos pantallas: el rol de cada usuario decide si entra a Ruta (repartidor) o a Bodega (despachador).
+test("roles: el administrador cambia de pantalla sin PIN; un repartidor no entra a Bodega y un despachador no entra a Ruta", async ({ page }) => {
+  const errs = A.vigilarErrores(page);
+  await A.entrar(page);                                              // primer usuario: administrador, «ambos»
+  await A.menu(page, "btnOtraApp");
+  await page.waitForURL(/\/$/);
+  await page.waitForFunction(() => window.RUTA_LISTA === true);
+  await expect(page.locator("#lock")).toBeHidden();                  // no pidió el PIN otra vez
+  if(await page.locator("#hdrMenu").isHidden()) await page.click("#btnMenu");
+  await expect(page.locator("#btnOtraApp")).toHaveText("Ir a Bodega");
+  // El administrador agrega a Jairo desde Ruta: queda como repartidor.
+  const menuRuta = async id => { if(await page.locator("#hdrMenu").isHidden()) await page.click("#btnMenu"); await page.click("#" + id); };
+  await menuRuta("btnUser");
+  await page.click("#usAdd");
+  await page.fill("#ak_n", "Jairo"); await page.fill("#ak_p", "1357"); await page.fill("#ak_p2", "1357");
+  await page.click("#akYes");
+  await expect(page.locator("#usList")).toContainText("Jairo");
+  await expect(page.locator("#usList .urow", { hasText: "Jairo" })).toContainText("Repartidor");
+  await page.click("#usSwitch");
+  const teclear = async pin => { for(const d of pin) await page.click(`#lkPad button[aria-label="${d}"]`); };
+  await page.locator("#lkUsers button", { hasText: "Jairo" }).click(); await teclear("1357");
+  await expect(page.locator("#lock")).toBeHidden();
+  // Jairo intenta abrir Bodega: vuelve a Ruta.
+  await page.goto("/bodega.html");
+  await page.waitForURL(/\/$/);
+  await page.waitForFunction(() => window.RUTA_LISTA === true);
+  if(await page.locator("#hdrMenu").isHidden()) await page.click("#btnMenu");
+  await expect(page.locator("#btnOtraApp")).toBeHidden();
+  await page.click("#btnMenu");
+  // El administrador lo pasa a despachador («Cambiar rol» rota repartidor → despachador → ambos).
+  await menuRuta("btnLock");
+  await page.locator("#lkUsers button", { hasText: "Camilo" }).click(); await teclear(A.PIN);
+  await expect(page.locator("#lock")).toBeHidden();
+  await menuRuta("btnUser");
+  await page.locator("#usList .urow", { hasText: "Jairo" }).locator("button", { hasText: "Cambiar rol" }).click();
+  await expect(page.locator("#usList .urow", { hasText: "Jairo" })).toContainText("Despachador (bodega)");
+  await page.click("#usSwitch");
+  await page.locator("#lkUsers button", { hasText: "Jairo" }).click(); await teclear("1357");
+  await page.waitForURL(/bodega\.html$/);
+  await page.waitForFunction(() => window.BODEGA_DATOS === true);
+  await expect(page.locator("#lock")).toBeHidden();
+  expect(errs).toEqual([]);
 });
 
 test("recepción con listado: recibidos, repetidos, fuera del listado, deshacer y faltantes", async ({ page }) => {

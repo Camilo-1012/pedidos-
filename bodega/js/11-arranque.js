@@ -1,7 +1,7 @@
-/* Arranque: versión, navegación entre secciones, menú, repartidores, actualizaciones y carga inicial de datos.
-   Al publicar: subir el mismo número aquí (APP_VERSION) y en sw.js (CACHE). */
+/* Arranque de la pantalla Bodega: versión, navegación entre secciones, menú, repartidores, actualizaciones y carga de datos.
+   Es la misma app que Ruta de Entregas: al publicar, el mismo número aquí, en js/09-arranque.js (APP_VERSION) y en sw.js (CACHE). */
 "use strict";
-const APP_VERSION = "1.2";
+const APP_VERSION = "2.30";
 
 /* ---- Secciones ---- */
 const VISTAS = ["vRecibir", "vDespachar", "vDevolver", "vConsultar"];

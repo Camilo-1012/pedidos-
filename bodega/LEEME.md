@@ -1,4 +1,4 @@
-# Bodega · Recepción, despacho y devoluciones
+# Bodega · Recepción, despacho, devoluciones y zonas (pantalla del despachador)
 
 App web instalable (PWA) para controlar los paquetes de la bodega: qué llegó, qué se lleva cada repartidor, qué devolvió y qué entregó. App hermana de **Ruta de Entregas** (`Camilo-1012/pedidos-`): mismas reglas técnicas (JavaScript vanilla, scripts clásicos, funciona sin señal, PIN con PBKDF2) y mismo proyecto de Supabase, con tablas aparte (`bodega_*`).
 
@@ -18,26 +18,17 @@ Cuadre por repartidor: `asignados = entregados + devueltos + faltantes + siguen 
 - Nube: tabla `bodega_eventos` (solo SELECT e INSERT por RLS). Solo un administrador crea o cambia repartidores. Ver `supabase/bodega.sql`.
 - **Ley 1581:** solo se guardan guía, empresa, estado, repartidor, fechas y novedades. Nada del cliente.
 
+## Dónde vive (desde la v2.30 de Ruta de Entregas)
+Bodega es la **pantalla del despachador de la misma app** Ruta de Entregas (repo `Camilo-1012/pedidos-`), no una app aparte:
+- `bodega.html` (raíz) + `bodega/js/*` + `bodega/bodega.css`. Usa `css/app.css`, `js/00-acceso.js` (PIN y roles), `js/15-excel.js` (generador .xlsx), `scan/zxing.min.js`, `sw.js` y el manifiesto de Ruta.
+- **Roles por usuario** (☰ → Usuario → «Cambiar rol»): Repartidor → solo Ruta; Despachador → solo Bodega; Repartidor y despachador → ambas, con «Ir a Bodega / Ir a Ruta» en el menú (sin volver a pedir el PIN). El primer usuario del celular queda con los dos.
+- Una sola versión: `APP_VERSION` en `js/09-arranque.js` y `bodega/js/11-arranque.js`, y `CACHE` en `sw.js` (una prueba lo verifica). Los archivos nuevos de `bodega/js/` van en `CORE` (sw.js) y en la lista de Bodega de `APP_FILES` (js/00-acceso.js).
+- Pruebas: `tests/bodega/` (corren con todas las demás; Supabase simulado en `tests/bodega/nube.js`). Capturas: `CAPTURAS=1 npx playwright test tests/bodega/capturas.spec.js`.
+- El repo `Camilo-1012/Bodega` (v1.0–v1.2) quedó importado aquí con su historial (`git subtree`) y se archiva en solo lectura.
+
+## Histórico (auditoría)
+Todo movimiento queda en Supabase (`bodega_eventos`) y **no se borra**: quién recibió, quién despachó a qué repartidor, quién liquidó, desde qué celular y a qué hora subió. En Consultar → «Histórico (nube)»: historial completo de una guía y Excel por fechas y repartidor (resumen por día, movimientos y recepción por lote). El celular guarda 30 días; la nube, todo.
+
 ## Puesta en marcha (una vez)
-1. En el repositorio `Camilo-1012/Bodega`: Settings → Pages → Source, elegir «GitHub Actions».
-2. En Supabase (proyecto de Ruta de Entregas): crear la cuenta del despacho en Authentication → Users. Cambiar los correos al final de `supabase/bodega.sql` y correrlo en SQL Editor.
-3. En cada celular: abrir `https://camilo-1012.github.io/Bodega/`, crear el usuario con PIN, conectar la nube en ☰ → Equipo (nube) y agregar los repartidores en ☰ → Repartidores (con una cuenta de rol `admin`).
-
-## Estructura del código
-- `js/00-acceso.js`: PIN y usuarios (adaptado de pedidos-). Carga el resto después de entrar.
-- `js/01-base.js`: utilidades, guías, sonido y formulario genérico `pedir()`.
-- `js/02-datos.js`: eventos, IndexedDB y cálculo del estado (`calcPaq`, `statsLote`, `delRepartidor`, `resumenDia`).
-- `js/03-escaner.js`: escáner continuo (BarcodeDetector o ZXing), preguntas dentro del escáner, deshacer y novedad.
-- `js/04-recepcion.js`, `js/05-despacho.js`, `js/06-devolucion.js`, `js/07-consulta.js`: una sección cada uno.
-- `js/08-excel.js`: generador .xlsx (copiado de pedidos-) y reportes.
-- `js/09-sync.js`: Supabase (sube lo pendiente y baja por `seq`).
-- `js/10-zonas.js`: zonas por rangos de calles y carreras, ubicación de cada paquete y resúmenes por zona.
-- `js/11-arranque.js`: navegación, repartidores, actualizaciones y `APP_VERSION`.
-- `tests/`: Playwright. `tests/nube.js` simula Supabase y prueba dos celulares, trabajo sin señal y conflictos.
-
-**Al publicar:** subir el mismo número en `APP_VERSION` (`js/11-arranque.js`) y `CACHE` (`sw.js`). Los archivos nuevos van en `CORE` (sw.js) y `APP_FILES` (00-acceso.js); una prueba lo verifica.
-
-**Código compartido con pedidos-** (PIN, escáner, Excel, sesión de Supabase): si allá se corrige algo de seguridad, hay que traerlo aquí.
-
-## Pruebas
-`npm ci && npx playwright install chromium && npx playwright test`. Para las capturas: `CAPTURAS=1 npx playwright test tests/capturas.spec.js`.
+1. En Supabase (proyecto de Ruta de Entregas): crear la cuenta del despacho en Authentication → Users, cambiar los correos al final de `supabase/bodega.sql` y correrlo en SQL Editor.
+2. En cada celular de bodega: abrir la app, entrar con un usuario de rol Despachador (o «ambos»), conectar la nube en ☰ → Equipo (nube), y con una cuenta `admin` agregar repartidores (☰ → Repartidores) y zonas (☰ → Zonas).

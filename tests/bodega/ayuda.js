@@ -1,14 +1,20 @@
-// Utilidades comunes de las pruebas.
+// Utilidades de las pruebas de la pantalla Bodega (bodega.html). Las de Ruta están en tests/ayuda.js.
 const { expect } = require("@playwright/test");
 const PIN = "2580";
 // Errores de JavaScript de la página: toda prueba termina verificando que no hubo ninguno.
 function vigilarErrores(page){ const errs = []; page.on("pageerror", e => errs.push(e.message)); return errs; }
 // Bloquea Supabase real (las pruebas de la nube usan tests/nube.js).
 async function sinNube(page){ await page.context().route(/supabase\.co/, r => r.abort()); }
+// Servicios externos de la pantalla Ruta (mapas, rutas, Waze…), por si una prueba pasa por ella.
+async function sinExternos(page){ await page.context().route(/overpass|osrm|routing\.openstreetmap|openrouteservice|kumi|coffee|waze\.com|wa\.me|nominatim|tile\.openstreetmap/, r => r.abort()); }
 // Primera vez: crea el usuario administrador y entra; espera a que carguen los datos.
+// La cámara simulada de las pruebas de Ruta (playwright.config.js) leería sola la etiqueta de ejemplo: aquí se apaga
+// y las lecturas se simulan con window.__leer.
+async function sinCamara(page){ await page.addInitScript(() => { if(navigator.mediaDevices) navigator.mediaDevices.getUserMedia = () => Promise.reject(new Error("sin cámara en pruebas")); }); }
 async function entrar(page, nombre = "Camilo", pin = PIN, nube){
   if(!nube) await sinNube(page);
-  await page.goto("/");
+  await sinCamara(page); await sinExternos(page);
+  await page.goto("/bodega.html");
   await expect(page.locator("#lkSetup")).toBeVisible();
   await page.fill("#suName", nombre); await page.fill("#suPin", pin); await page.fill("#suPin2", pin);
   await page.click("#lkSetup button[type=submit]");
@@ -77,4 +83,4 @@ function leerXlsx(ruta){
   });
   return out;
 }
-module.exports = { PIN, vigilarErrores, sinNube, entrar, menu, responder, agregarRep, nuevoLote, leer, leerConRespuesta, kpi, leerXlsx };
+module.exports = { PIN, sinCamara, vigilarErrores, sinNube, entrar, menu, responder, agregarRep, nuevoLote, leer, leerConRespuesta, kpi, leerXlsx };

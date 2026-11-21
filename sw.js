@@ -1,6 +1,6 @@
 /* Service worker: guarda la app en el celular para que abra sin internet.
    Al publicar cambios, sube el número de CACHE para que los celulares descarguen la versión nueva. */
-const CACHE = "ruta-v2.29";
+const CACHE = "ruta-v2.30";
 const CORE = [
   "./", "index.html", "manifest.webmanifest",
   "icons/icon-192.png", "icons/icon-512.png", "icons/maskable-512.png", "icons/apple-touch-icon.png",
@@ -10,6 +10,9 @@ const CORE = [
   "ocr/tesseract-core-simd-lstm.wasm.js", "ocr/tesseract-core-lstm.wasm.js",
   "css/app.css", "js/00-acceso.js", "js/01-direcciones.js", "js/02-ruta.js", "js/03-mapas.js", "js/04-jornada.js",
   "js/05-pantalla.js", "js/06-escaner.js", "js/07-cargue.js", "js/08-voz.js", "js/09-arranque.js", "js/10-conduccion.js", "js/11-equipo.js", "js/12-aviso.js", "js/13-buscar.js", "js/14-apps.js", "js/15-excel.js",
+  "bodega.html", "bodega/bodega.css", "bodega/js/01-base.js", "bodega/js/02-datos.js", "bodega/js/03-escaner.js", "bodega/js/04-recepcion.js",
+  "bodega/js/05-despacho.js", "bodega/js/06-devolucion.js", "bodega/js/07-consulta.js", "bodega/js/08-excel.js", "bodega/js/09-sync.js",
+  "bodega/js/10-zonas.js", "bodega/js/11-arranque.js",
   "scan/zxing.min.js", "map/leaflet.js", "map/leaflet.css", "map/images/marker-icon.png", "map/images/marker-shadow.png"
 ];
 self.addEventListener("install", e => {
@@ -63,9 +66,11 @@ self.addEventListener("fetch", e => {
   if (req.method !== "GET" || new URL(req.url).origin !== self.location.origin) return;
   // Página: sale de la versión instalada, junto con sus archivos js/ y css/, para que nunca se mezcle una página
   // nueva con código viejo. Las versiones nuevas llegan por la actualización del service worker (botón «Actualizar»).
+  // Dos páginas: bodega.html (despachador) y el resto, index.html (repartidor).
   if (req.mode === "navigate") {
+    const pag = /\/bodega\.html$/.test(new URL(req.url).pathname) ? "bodega.html" : "index.html";
     e.respondWith(
-      caches.open(CACHE).then(c => c.match("index.html")).then(hit => hit || fetch(req))
+      caches.open(CACHE).then(c => c.match(pag)).then(hit => hit || fetch(req))
     );
     return;
   }

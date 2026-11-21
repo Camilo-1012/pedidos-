@@ -1,4 +1,7 @@
 /* ============ Usuarios y PIN (solo en este celular) ============
+   Una sola app con dos pantallas: Ruta (repartidor, index.html) y Bodega (despachador, bodega.html, <body data-app="bodega">).
+   Cada usuario tiene un rol: repartidor, despachador o ambos. Al entrar se abre la pantalla de su rol; con «ambos» se
+   cambia desde el menú (☰ → Ir a Bodega / Ir a Ruta) sin volver a pedir el PIN (la sesión es de la pestaña).
    La app (archivos js/01…09) no se carga hasta que alguien entra con su PIN.
    Cada usuario guarda sus pedidos e historial en claves propias: rutaEntregas.u.<id>.v1 / .hist.v1.
    El PIN nunca se guarda: se guarda PBKDF2-SHA256 (150 000 vueltas, sal aleatoria de 16 bytes). */
@@ -8,7 +11,16 @@ const DB_KEY = "rutaEntregas.users.v1", SES_KEY = "rutaEntregas.session.v1";
 const LEGACY = {state:"rutaEntregas.v1", hist:"rutaEntregas.hist.v1"};
 const ITER = 150000, MAX_USERS = 6, FREE_TRIES = 5;
 // Archivos de la app, en el orden en que deben ejecutarse (ver LEEME.md → «Estructura del código»).
-const APP_FILES = ["js/01-direcciones.js","js/02-ruta.js","js/03-mapas.js","js/04-jornada.js","js/05-pantalla.js","js/06-escaner.js","js/07-cargue.js","js/08-voz.js","js/09-arranque.js","js/10-conduccion.js","js/11-equipo.js","js/12-aviso.js","js/13-buscar.js","js/14-apps.js","js/15-excel.js"];
+const PAGE = document.body.dataset.app === "bodega" ? "bodega" : "ruta";
+const APP_FILES = PAGE === "bodega"
+  ? ["js/15-excel.js","bodega/js/01-base.js","bodega/js/02-datos.js","bodega/js/03-escaner.js","bodega/js/04-recepcion.js","bodega/js/05-despacho.js","bodega/js/06-devolucion.js","bodega/js/07-consulta.js","bodega/js/08-excel.js","bodega/js/09-sync.js","bodega/js/10-zonas.js","bodega/js/11-arranque.js"]
+  : ["js/01-direcciones.js","js/02-ruta.js","js/03-mapas.js","js/04-jornada.js","js/05-pantalla.js","js/06-escaner.js","js/07-cargue.js","js/08-voz.js","js/09-arranque.js","js/10-conduccion.js","js/11-equipo.js","js/12-aviso.js","js/13-buscar.js","js/14-apps.js","js/15-excel.js"];
+/* ---- Roles ---- */
+const ROLES = {repartidor:"Repartidor", despachador:"Despachador (bodega)", ambos:"Repartidor y despachador"};
+const PAGINA = {ruta:"./", bodega:"bodega.html"};
+// Usuarios de antes de los roles: el administrador queda con los dos; los demás, repartidores (como venían usando la app).
+const rolDe = u => ROLES[u.rol] ? u.rol : (u.admin ? "ambos" : "repartidor");
+const puede = (u, page) => { const r = rolDe(u); return r === "ambos" || (page === "ruta" ? r === "repartidor" : r === "despachador"); };
 const q = id => document.getElementById(id);
 const ls = {
   get(k){ try{ const v = localStorage.getItem(k); return v ? JSON.parse(v) : null; }catch(e){ return null; } },
@@ -64,26 +76,33 @@ async function checkPin(u, pin){
 /* ---- Arranque de la app para un usuario ---- */
 let started = null, locked = true;
 function fmtWait(s){ return s >= 60 ? Math.ceil(s/60) + " min" : s + " s"; }
-function setInert(on){ document.querySelectorAll("body > header, body > main, body > .toolbar, body > .drive").forEach(e => { e.inert = on; }); }
+function setInert(on){ document.querySelectorAll("body > header, body > main, body > .toolbar, body > .drive, body > nav.tabs").forEach(e => { e.inert = on; }); }
 function enter(u){
   ss.set({id:u.id, away:null});
+  // Pantalla que no es de su rol: se abre la suya (la sesión sigue, no pide el PIN otra vez).
+  if(!puede(u, PAGE)){ location.replace(PAGINA[PAGE === "ruta" ? "bodega" : "ruta"]); return; }
   if(started && started !== u.id){ location.reload(); return; }
   locked = false; q("lock").hidden = true; setInert(false); pinBuf = "";
   if(started) return;
   started = u.id;
-  window.RUTA_USER = {id:u.id, name:u.name, admin:!!u.admin};
+  window.RUTA_USER = window.BODEGA_USER = {id:u.id, name:u.name, admin:!!u.admin, rol:rolDe(u)};
   q("btnUserName").textContent = u.name;
+  const otra = q("btnOtraApp");
+  if(otra){ otra.hidden = rolDe(u) !== "ambos"; otra.onclick = () => { location.href = PAGINA[PAGE === "ruta" ? "bodega" : "ruta"]; }; }
   // Los archivos de la app se cargan en orden y solo después de entrar con el PIN.
   // Cuando carga el último, la app está completa: se vuelve a pintar (lo de los archivos finales, como «Parquea una vez»)
   // y se marca RUTA_LISTA (la usan las pruebas automáticas).
   APP_FILES.forEach((f, i)=>{
     const s = document.createElement("script"); s.src = f; s.async = false;
-    if(i === APP_FILES.length - 1) s.onload = ()=>{ window.RUTA_LISTA = true; window.dispatchEvent(new Event("ruta-lista")); };
+    if(i === APP_FILES.length - 1) s.onload = ()=>{
+      if(PAGE === "bodega"){ window.BODEGA_LISTA = true; window.dispatchEvent(new Event("bodega-lista")); }
+      else { window.RUTA_LISTA = true; window.dispatchEvent(new Event("ruta-lista")); }
+    };
     document.body.appendChild(s);
   });
 }
 function lock(){
-  if(typeof window.RUTA_onLock === "function"){ try{ window.RUTA_onLock(); }catch(e){} }
+  for(const f of [window.RUTA_onLock, window.BODEGA_onLock]) if(typeof f === "function"){ try{ f(); }catch(e){} }
   document.querySelectorAll("dialog[open]").forEach(d => d.close());
   locked = true; setInert(true); ss.set({id:started, away:null, locked:true}); showLogin(started);
 }
@@ -170,7 +189,8 @@ q("lkSetup").addEventListener("submit", async e => {
   if(err){ q("suMsg").textContent = err; return; }
   q("suMsg").textContent = "Creando…";
   const d = loadDb();
-  const u = {id: "u" + Date.now().toString(36) + Math.random().toString(36).slice(2,6), name, admin: !d.users.length, created: Date.now(), ...(await makeCred(p1))};
+  // El primer usuario es administrador y hace las dos cosas; los demás los agrega él con su rol.
+  const u = {id: "u" + Date.now().toString(36) + Math.random().toString(36).slice(2,6), name, admin: !d.users.length, rol: d.users.length ? (PAGE === "bodega" ? "despachador" : "repartidor") : "ambos", created: Date.now(), ...(await makeCred(p1))};
   // Primer usuario: hereda los pedidos e historial que ya había en el celular.
   if(!d.users.length){
     const [kS, kH] = dataKeys(u.id), st = ls.get(LEGACY.state), hi = ls.get(LEGACY.hist);
@@ -241,7 +261,7 @@ function renderUsers(){
     const t = document.createElement("div");
     t.innerHTML = "<b></b><div class='hint' style='margin:0'></div>";
     t.querySelector("b").textContent = u.name + (u.id === m.id ? " (tú)" : "");
-    t.querySelector("div").textContent = u.admin ? "Administrador" : "Usuario";
+    t.querySelector("div").textContent = (u.admin ? "Administrador · " : "") + ROLES[rolDe(u)];
     row.appendChild(t);
     if(m.admin && u.id !== m.id){
       const acts = document.createElement("div"); acts.className = "row";
@@ -254,7 +274,9 @@ function renderUsers(){
       const bd = document.createElement("button"); bd.type = "button"; bd.className = "small danger"; bd.textContent = "Eliminar";
       bd.onclick = () => ask({title:"Eliminar a " + u.name, msg:"Se borran su usuario, sus pedidos y su historial de este celular. Escribe BORRAR para confirmar.", fields:[{id:"c",label:"Confirmación",type:"text"}], yes:"Eliminar", danger:true,
         onOk: async v => v.c.trim().toUpperCase() === "BORRAR" ? (removeUser(u.id), "") : "Escribe BORRAR para confirmar.", after: renderUsers});
-      acts.append(bp, ba, bd); row.appendChild(acts);
+      const br = document.createElement("button"); br.type = "button"; br.className = "small"; br.textContent = "Cambiar rol";
+      br.onclick = () => { const dd = loadDb(), x = dd.users.find(y => y.id === u.id); if(!x) return; const ks = Object.keys(ROLES); x.rol = ks[(ks.indexOf(rolDe(x)) + 1) % ks.length]; saveDb(dd); renderUsers(); };
+      acts.append(br, bp, ba, bd); row.appendChild(acts);
     }
     list.appendChild(row);
   });
@@ -265,14 +287,14 @@ q("btnUser").onclick = () => { renderUsers(); q("dlgUsers").showModal(); };
 q("btnLock").onclick = () => lock();
 q("usSwitch").onclick = () => { q("dlgUsers").close(); lock(); };
 q("usLock").onchange = e => { const d = loadDb(); d.lockMin = +e.target.value; saveDb(d); };
-q("usAdd").onclick = () => ask({title:"Agregar usuario", msg:"La otra persona entra con su nombre y su PIN, y ve solo sus propios pedidos.", fields:[{id:"n",label:"Nombre",type:"text"},{id:"p",label:"PIN de 4 a 6 números",type:"pin"},{id:"p2",label:"Repite el PIN",type:"pin"}],
+q("usAdd").onclick = () => ask({title:"Agregar usuario", msg:"La otra persona entra con su nombre y su PIN, y ve solo sus propios pedidos. Queda como " + (PAGE === "bodega" ? "despachador" : "repartidor") + ": cámbialo con «Cambiar rol».", fields:[{id:"n",label:"Nombre",type:"text"},{id:"p",label:"PIN de 4 a 6 números",type:"pin"},{id:"p2",label:"Repite el PIN",type:"pin"}],
   onOk: async v => {
     const name = v.n.trim().replace(/\s+/g," "), d = loadDb();
     if(!name) return "Escribe el nombre.";
     if(d.users.some(u => u.name.toLowerCase() === name.toLowerCase())) return "Ya hay un usuario con ese nombre.";
     if(d.users.length >= MAX_USERS) return "Máximo " + MAX_USERS + " usuarios por celular.";
     const e = pinProblem(v.p) || (v.p !== v.p2 ? "Los dos PIN no coinciden." : ""); if(e) return e;
-    d.users.push({id:"u" + Date.now().toString(36) + Math.random().toString(36).slice(2,6), name, admin:false, created:Date.now(), ...(await makeCred(v.p))});
+    d.users.push({id:"u" + Date.now().toString(36) + Math.random().toString(36).slice(2,6), name, admin:false, rol: PAGE === "bodega" ? "despachador" : "repartidor", created:Date.now(), ...(await makeCred(v.p))});
     saveDb(d); return "";
   }, after: renderUsers});
 q("usMyPin").onclick = () => ask({title:"Cambiar mi PIN", fields:[{id:"o",label:"PIN actual",type:"pin"},{id:"p",label:"PIN nuevo",type:"pin"},{id:"p2",label:"Repite el PIN nuevo",type:"pin"}],

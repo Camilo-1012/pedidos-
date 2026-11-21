@@ -12,10 +12,11 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="apple-mobile-web-app-title" content="Bodega">
-<title>Bodega · Recepción y despacho</title>
+<title>Bodega · Ruta de Entregas</title>
 <link rel="stylesheet" href="css/app.css">
+<link rel="stylesheet" href="bodega/bodega.css">
 </head>
-<body>
+<body data-app="bodega">
 <header class="top">
   <div class="wrap">
     <div class="hdrRow">
@@ -30,6 +31,7 @@
       <button type="button" class="small hbtn" id="btnTeam">Equipo (nube)</button>
       <button type="button" class="small hbtn" id="btnExcel">Excel del día</button>
       <button type="button" class="small hbtn" id="btnMore">Más</button>
+      <button type="button" class="small hbtn" id="btnOtraApp" hidden>Ir a Ruta</button>
       <button type="button" class="small hbtn" id="btnLock">Bloquear</button>
     </div>
     <button type="button" class="small hbtn syncChip" id="syncChip" hidden></button>

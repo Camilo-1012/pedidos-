@@ -3,7 +3,7 @@ const { test, expect, devices } = require("@playwright/test");
 const A = require("./ayuda"), N = require("./nube");
 
 async function celular(browser, nube, usuario){
-  const context = await browser.newContext({ ...devices["Pixel 7"], baseURL: "http://localhost:8791" });
+  const context = await browser.newContext({ ...devices["Pixel 7"], baseURL: "http://localhost:8790" });
   await N.conectarNube(context, nube);
   const page = await context.newPage();
   const errs = A.vigilarErrores(page);

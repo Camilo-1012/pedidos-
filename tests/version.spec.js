@@ -9,6 +9,7 @@ test("APP_VERSION y CACHE del service worker coinciden", () => {
   const app = leer("js/09-arranque.js").match(/APP_VERSION = "([^"]+)"/)[1];
   const sw = leer("sw.js").match(/CACHE = "ruta-v([^"]+)"/)[1];
   expect(sw).toBe(app);
+  expect(leer("bodega/js/11-arranque.js").match(/APP_VERSION = "([^"]+)"/)[1]).toBe(app);   // pantalla Bodega: misma app
 });
 
 test("todos los archivos js/ y css/ están en la caché del service worker", () => {
@@ -16,4 +17,7 @@ test("todos los archivos js/ y css/ están en la caché del service worker", () 
   for (const dir of ["js", "css"]) for (const f of fs.readdirSync(path.join(raiz, dir))) expect(sw).toContain(`"${dir}/${f}"`);
   const acceso = leer("js/00-acceso.js");
   for (const f of fs.readdirSync(path.join(raiz, "js")).filter(f => f !== "00-acceso.js")) expect(acceso).toContain(`"js/${f}"`);
+  // Pantalla Bodega (bodega.html): sus archivos también se guardan para usar sin señal y se cargan al entrar.
+  for (const f of ["bodega.html", "bodega/bodega.css"]) expect(sw).toContain(`"${f}"`);
+  for (const f of fs.readdirSync(path.join(raiz, "bodega", "js"))){ expect(sw).toContain(`"bodega/js/${f}"`); expect(acceso).toContain(`"bodega/js/${f}"`); }
 });

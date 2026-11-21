@@ -1,0 +1,95 @@
+/* Estilos propios de la pantalla Bodega (despachador). La base es css/app.css de Ruta de Entregas. */
+/* ============================== BODEGA ============================== */
+main{padding-bottom:calc(96px + env(safe-area-inset-bottom))}
+h3{font:600 16px var(--display);text-transform:uppercase;margin:4px 0 0;letter-spacing:.02em}
+header.top .syncChip{align-self:flex-start}
+header.top .syncChip.warn{color:#ffd28a;border-color:#ffd28a}
+header.top .syncChip.ok{color:#9be3bd;border-color:#9be3bd}
+.chip.bad{color:var(--bad);border-color:currentColor}
+.chk{flex-direction:row;align-items:center;gap:8px;font-size:15px;color:var(--ink)}
+.chk input{width:22px;height:22px;min-height:0}
+button.big{min-height:60px;font-size:18px}
+button:disabled{opacity:.45;cursor:not-allowed}
+/* Barra de secciones abajo: alcanzable con el pulgar */
+nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:6;display:grid;grid-template-columns:repeat(4,1fr);gap:4px;background:var(--ink);padding:6px 6px calc(6px + env(safe-area-inset-bottom));border-top:3px solid var(--accent)}
+nav.tabs button{background:transparent;color:var(--bg);border:none;min-height:48px;font-size:15px;border-radius:10px}
+nav.tabs button[aria-current="page"]{background:var(--accent);color:var(--accent-ink)}
+/* Indicadores */
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+.kpi{border:1px solid var(--line);border-radius:10px;padding:8px 6px;text-align:center}
+.kpi b{display:block;font:700 26px/1 var(--display);font-variant-numeric:tabular-nums}
+.kpi span{font-size:12px;color:var(--muted);line-height:1.2;display:block;margin-top:2px}
+.kpi.ok b{color:var(--ok)} .kpi.warn b{color:var(--warn)} .kpi.zone{border-color:var(--accent)}
+@media (max-width:380px){ .kpis{grid-template-columns:repeat(2,minmax(0,1fr))} }
+/* Repartidores: botones grandes en cuadrícula */
+.reps{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px}
+.reps button{flex-direction:column;gap:2px;min-height:58px}
+.reps button small{font-weight:500;font-size:12px;color:var(--muted)}
+.reps button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.reps button[aria-pressed="true"] small{color:var(--accent)}
+.urow.inactivo b{opacity:.55;text-decoration:line-through}
+/* Listas de paquetes */
+.lista{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.lista li{border:1px solid var(--line);border-radius:10px;padding:8px 10px;display:flex;flex-direction:column;gap:3px}
+.lista li.paq{flex-direction:row;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;cursor:pointer}
+.lista li.paq > div{display:flex;flex-wrap:wrap;gap:4px 6px;align-items:center;min-width:0}
+.lista li.paq b{font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.lista li.paq .hint{flex-basis:100%}
+.lista li.vacio{border-style:dashed;color:var(--muted);font-size:14px;align-items:center}
+.lista select{max-width:150px}
+/* Escáner continuo */
+.scTarget{margin:0;font-weight:600}
+.scVideo{position:relative;background:#000;border-radius:10px;overflow:hidden;aspect-ratio:4/3;max-height:38vh}
+.scVideo video{width:100%;height:100%;object-fit:cover;display:block}
+.scAim{position:absolute;left:8%;right:8%;top:38%;height:24%;border:3px solid var(--accent);border-radius:8px;box-shadow:0 0 0 999px rgba(0,0,0,.25)}
+.scCount{display:flex;align-items:baseline;gap:8px}
+.scCount b{font:700 40px/1 var(--display);font-variant-numeric:tabular-nums}
+.scCount span{color:var(--muted)}
+.scAsk{border:2px solid var(--warn);background:rgba(180,84,11,.1);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:8px}
+.scAsk p{margin:0;font-weight:600}
+li.lec{display:grid!important;grid-template-columns:1fr auto;gap:0 8px;border-left-width:6px!important}
+li.lec b{font-variant-numeric:tabular-nums}
+li.lec span{grid-column:1/-1;font-size:13px}
+li.lec time{grid-row:1;grid-column:2;font-size:12px;color:var(--muted)}
+li.lec.ok{border-left-color:var(--ok)!important}
+li.lec.ok.aviso{border-left-color:var(--warn)!important}
+li.lec.rep{border-left-color:var(--line)!important;opacity:.8}
+li.lec.mal{border-left-color:var(--bad)!important}
+li.lec.mal span{color:var(--bad)}
+/* Ficha de una guía */
+.ficha{display:flex;flex-direction:column;gap:8px;border:1px solid var(--line);border-radius:10px;padding:10px}
+.guiaG{font:700 22px var(--display);overflow-wrap:anywhere}
+.alerta{margin:0;color:var(--bad);font-weight:600}
+.linea{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px;font-size:14px}
+.linea time{font-variant-numeric:tabular-nums;color:var(--muted)}
+.linea li.anulado{text-decoration:line-through;opacity:.6}
+/* Tablas (resumen y planilla) */
+.tb{width:100%;border-collapse:collapse;font-size:14px}
+.tb th,.tb td{border-bottom:1px solid var(--line);padding:6px 4px;text-align:left}
+.tb td:not(:first-child),.tb th:not(:first-child){text-align:right}
+.planilla .tb td:nth-child(n+2),.planilla .tb th{text-align:left}
+.firma{margin-top:28px}
+/* Impresión: solo la planilla */
+@media print{
+  body > *:not(#dlgLista){display:none!important}
+  #dlgLista{position:static;max-height:none;width:100%;box-shadow:none}
+  #dlgLista .dlgHead,#dlgLista #ltActs{display:none!important}
+  :root{--ink:#000;--surface:#fff;--bg:#fff;--line:#999;color-scheme:light}
+}
+#desPlanilla,#devCerrar,#recNuevo{width:100%}
+/* Zonas (v1.1) */
+.chip.zona{background:var(--zc);color:#fff;border-color:var(--zc)}
+.chip.zsin{border-style:dashed}
+.zdot{display:inline-block;width:12px;height:12px;border-radius:50%;background:var(--zc);margin-right:6px;vertical-align:middle}
+.zgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:6px}
+.zcell{flex-direction:column;gap:2px;min-height:58px;border-left:6px solid var(--zc,var(--line));padding:6px}
+.zcell b{font:700 22px/1 var(--display)}
+.zcell span{font-size:12px;font-weight:500;color:var(--muted)}
+.zcell.suya{background:var(--ink);color:var(--bg)}
+.zcell.suya span{color:var(--accent)}
+.zcell.sin{border-left-style:dashed}
+.scUbic{border:2px solid var(--accent);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:8px}
+.ubNums input{font-size:22px;text-align:center;font-weight:700}
+.zbtns{display:flex;flex-wrap:wrap;gap:6px}
+.zbtn{background:var(--zc);color:#fff;border-color:var(--zc)}
+.lec .zona{margin-top:2px}

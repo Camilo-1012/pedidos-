@@ -493,3 +493,6 @@ El optimizador ahora arma una tabla de costos una sola vez y calcula cada intent
 - **Buscar pedido → «¿El paquete no está cargado?»:** «Escanear etiqueta» o «Escribir» se abren encima de Buscar; al guardar o cancelar se vuelve a Buscar con la misma búsqueda (el pedido nuevo ya aparece). Lo buscado pasa al formulario: vía y números (por partes o escritos con # y -) o la guía (número largo sin # ni -). Sin resultados, el cuadro se resalta.
 - **Teclado numérico** en los números de la dirección (vía, cruce y placa) del formulario y de Buscar por partes, y en el campo principal de Buscar cuando hay vía elegida («Todas» sigue con teclado normal). Al tocar la vía o la cruce aparece una fila **A–F, Bis y ABC** (ABC abre el teclado con letras en ese campo hasta salir de él). Se separa con # y - (ej.: 145#106-20).
 - **Dictar el teléfono** en el formulario del paquete: entiende cifras o palabras («trescientos once…», «tres uno uno…») y quita el +57; si queda incompleto, se avisa. Necesita internet.
+
+## Pantalla Bodega (despachador)
+Desde la v2.30 la app tiene dos pantallas según el rol del usuario: **Ruta** (repartidor, `index.html`) y **Bodega** (despachador, `bodega.html`: recepción, despacho, devoluciones, zonas e histórico). Detalles en `bodega/LEEME.md`.
