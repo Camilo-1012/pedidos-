@@ -21,7 +21,7 @@ Cuadre por repartidor: `asignados = entregados + devueltos + faltantes + siguen 
 ## Dónde vive (desde la v2.30 de Ruta de Entregas)
 Bodega es la **pantalla del despachador de la misma app** Ruta de Entregas (repo `Camilo-1012/pedidos-`), no una app aparte:
 - `bodega.html` (raíz) + `bodega/js/*` + `bodega/bodega.css`. Usa `css/app.css`, `js/00-acceso.js` (PIN y roles), `js/15-excel.js` (generador .xlsx), `scan/zxing.min.js`, `sw.js` y el manifiesto de Ruta.
-- **Roles por usuario** (☰ → Usuario → «Cambiar rol»): Repartidor → solo Ruta; Despachador → solo Bodega; Repartidor y despachador → ambas, con «Ir a Bodega / Ir a Ruta» en el menú (sin volver a pedir el PIN). El primer usuario del celular queda con los dos.
+- **Roles por usuario** (☰ → Usuario → «Cambiar rol»): **Repartidor** → solo Ruta, sin opción de elegir; **Despachador** → Ruta y Bodega. El administrador y los despachadores eligen en la pantalla del PIN «Entrar a: Ruta | Bodega» (se recuerda la última elección) y cambian con «Ir a Bodega / Ir a Ruta» en el menú, sin volver a pedir el PIN. El primer usuario del celular es administrador.
 - Una sola versión: `APP_VERSION` en `js/09-arranque.js` y `bodega/js/11-arranque.js`, y `CACHE` en `sw.js` (una prueba lo verifica). Los archivos nuevos de `bodega/js/` van en `CORE` (sw.js) y en la lista de Bodega de `APP_FILES` (js/00-acceso.js).
 - Pruebas: `tests/bodega/` (corren con todas las demás; Supabase simulado en `tests/bodega/nube.js`). Capturas: `CAPTURAS=1 npx playwright test tests/bodega/capturas.spec.js`.
 - El repo `Camilo-1012/Bodega` (v1.0–v1.2) quedó importado aquí con su historial (`git subtree`) y se archiva en solo lectura.
@@ -31,4 +31,4 @@ Todo movimiento queda en Supabase (`bodega_eventos`) y **no se borra**: quién r
 
 ## Puesta en marcha (una vez)
 1. En Supabase (proyecto de Ruta de Entregas): crear la cuenta del despacho en Authentication → Users, cambiar los correos al final de `supabase/bodega.sql` y correrlo en SQL Editor.
-2. En cada celular de bodega: abrir la app, entrar con un usuario de rol Despachador (o «ambos»), conectar la nube en ☰ → Equipo (nube), y con una cuenta `admin` agregar repartidores (☰ → Repartidores) y zonas (☰ → Zonas).
+2. En cada celular de bodega: abrir la app, entrar con un usuario despachador (o el administrador) eligiendo «Bodega» en la pantalla del PIN, conectar la nube en ☰ → Equipo (nube), y con una cuenta `admin` agregar repartidores (☰ → Repartidores) y zonas (☰ → Zonas).

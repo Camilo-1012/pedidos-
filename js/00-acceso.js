@@ -1,7 +1,8 @@
 /* ============ Usuarios y PIN (solo en este celular) ============
    Una sola app con dos pantallas: Ruta (repartidor, index.html) y Bodega (despachador, bodega.html, <body data-app="bodega">).
-   Cada usuario tiene un rol: repartidor, despachador o ambos. Al entrar se abre la pantalla de su rol; con «ambos» se
-   cambia desde el menú (☰ → Ir a Bodega / Ir a Ruta) sin volver a pedir el PIN (la sesión es de la pestaña).
+   Cada usuario tiene un rol: repartidor (solo Ruta) o despachador (Ruta y Bodega). El administrador y los despachadores
+   eligen en la pantalla del PIN a cuál entrar («Ruta» o «Bodega») y cambian desde el menú (☰ → Ir a Bodega / Ir a Ruta)
+   sin volver a pedir el PIN (la sesión es de la pestaña). Los repartidores no ven esa opción y entran siempre a Ruta.
    La app (archivos js/01…09) no se carga hasta que alguien entra con su PIN.
    Cada usuario guarda sus pedidos e historial en claves propias: rutaEntregas.u.<id>.v1 / .hist.v1.
    El PIN nunca se guarda: se guarda PBKDF2-SHA256 (150 000 vueltas, sal aleatoria de 16 bytes). */
@@ -16,11 +17,14 @@ const APP_FILES = PAGE === "bodega"
   ? ["js/15-excel.js","bodega/js/01-base.js","bodega/js/02-datos.js","bodega/js/03-escaner.js","bodega/js/04-recepcion.js","bodega/js/05-despacho.js","bodega/js/06-devolucion.js","bodega/js/07-consulta.js","bodega/js/08-excel.js","bodega/js/09-sync.js","bodega/js/10-zonas.js","bodega/js/11-arranque.js"]
   : ["js/01-direcciones.js","js/02-ruta.js","js/03-mapas.js","js/04-jornada.js","js/05-pantalla.js","js/06-escaner.js","js/07-cargue.js","js/08-voz.js","js/09-arranque.js","js/10-conduccion.js","js/11-equipo.js","js/12-aviso.js","js/13-buscar.js","js/14-apps.js","js/15-excel.js"];
 /* ---- Roles ---- */
-const ROLES = {repartidor:"Repartidor", despachador:"Despachador (bodega)", ambos:"Repartidor y despachador"};
+const ROLES = {repartidor:"Repartidor (solo Ruta)", despachador:"Despachador (Ruta y Bodega)"};
 const PAGINA = {ruta:"./", bodega:"bodega.html"};
-// Usuarios de antes de los roles: el administrador queda con los dos; los demás, repartidores (como venían usando la app).
-const rolDe = u => ROLES[u.rol] ? u.rol : (u.admin ? "ambos" : "repartidor");
-const puede = (u, page) => { const r = rolDe(u); return r === "ambos" || (page === "ruta" ? r === "repartidor" : r === "despachador"); };
+const APP_KEY = id => "rutaEntregas.app." + id;   // última pantalla elegida por cada usuario (en este celular)
+// Usuarios de antes de los roles: el administrador queda como despachador; los demás, repartidores (como venían usando la app).
+const rolDe = u => ROLES[u.rol] ? u.rol : (u.admin ? "despachador" : "repartidor");
+// Eligen pantalla: el administrador (siempre) y los despachadores. Los repartidores solo entran a Ruta.
+const eligeApp = u => !!u.admin || rolDe(u) === "despachador";
+const puede = (u, page) => page === "ruta" || eligeApp(u);
 const q = id => document.getElementById(id);
 const ls = {
   get(k){ try{ const v = localStorage.getItem(k); return v ? JSON.parse(v) : null; }catch(e){ return null; } },
@@ -77,10 +81,11 @@ async function checkPin(u, pin){
 let started = null, locked = true;
 function fmtWait(s){ return s >= 60 ? Math.ceil(s/60) + " min" : s + " s"; }
 function setInert(on){ document.querySelectorAll("body > header, body > main, body > .toolbar, body > .drive, body > nav.tabs").forEach(e => { e.inert = on; }); }
-function enter(u){
+function enter(u, destino){
   ss.set({id:u.id, away:null});
-  // Pantalla que no es de su rol: se abre la suya (la sesión sigue, no pide el PIN otra vez).
-  if(!puede(u, PAGE)){ location.replace(PAGINA[PAGE === "ruta" ? "bodega" : "ruta"]); return; }
+  // Pantalla elegida al entrar, o la que no es de su rol: se abre la otra (la sesión sigue, no pide el PIN otra vez).
+  if(destino && destino !== PAGE && puede(u, destino)){ location.replace(PAGINA[destino]); return; }
+  if(!puede(u, PAGE)){ location.replace(PAGINA.ruta); return; }
   if(started && started !== u.id){ location.reload(); return; }
   locked = false; q("lock").hidden = true; setInert(false); pinBuf = "";
   if(started) return;
@@ -88,7 +93,7 @@ function enter(u){
   window.RUTA_USER = window.BODEGA_USER = {id:u.id, name:u.name, admin:!!u.admin, rol:rolDe(u)};
   q("btnUserName").textContent = u.name;
   const otra = q("btnOtraApp");
-  if(otra){ otra.hidden = rolDe(u) !== "ambos"; otra.onclick = () => { location.href = PAGINA[PAGE === "ruta" ? "bodega" : "ruta"]; }; }
+  if(otra){ otra.hidden = !eligeApp(u); otra.onclick = () => { location.href = PAGINA[PAGE === "ruta" ? "bodega" : "ruta"]; }; }
   // Los archivos de la app se cargan en orden y solo después de entrar con el PIN.
   // Cuando carga el último, la app está completa: se vuelve a pintar (lo de los archivos finales, como «Parquea una vez»)
   // y se marca RUTA_LISTA (la usan las pruebas automáticas).
@@ -132,7 +137,20 @@ function showLogin(id){
     box.appendChild(b);
   });
   q("lkWho").textContent = (d.users.length < 2 ? "Hola, " + sel.name + ". " : "") + "Escribe tu PIN";
+  pintarApp();
   pinBuf = ""; drawDots(); tick();
+}
+// Selector «Entrar a: Ruta | Bodega»: solo para el administrador y los despachadores. Recuerda la última elección.
+let appSel = PAGE;
+function pintarApp(){
+  const box = q("lkApp"); if(!box) return;
+  const ve = !!sel && eligeApp(sel);
+  box.hidden = !ve;
+  appSel = ve ? (ls.get(APP_KEY(sel.id)) || PAGE) : "ruta";
+  box.querySelectorAll("button[data-app]").forEach(b => {
+    b.setAttribute("aria-pressed", String(b.dataset.app === appSel));
+    b.onclick = () => { appSel = b.dataset.app; ls.set(APP_KEY(sel.id), appSel); pintarApp(); };
+  });
 }
 function drawDots(){
   const n = sel ? sel.pinLen || 4 : 4, el = q("lkDots"); el.innerHTML = "";
@@ -151,7 +169,7 @@ async function tryPin(){
   busy = true; tick(); q("lkMsg").textContent = "Verificando…";
   const u = sel, ok = await checkPin(u, pinBuf).catch(() => false);
   busy = false; pinBuf = ""; drawDots();
-  if(ok){ q("lkMsg").textContent = ""; ls.set("rutaEntregas.lastUser", u.id); enter(u); return; }
+  if(ok){ q("lkMsg").textContent = ""; ls.set("rutaEntregas.lastUser", u.id); enter(u, eligeApp(u) ? appSel : "ruta"); return; }
   const a = ls.get(authKey(u.id)) || {fails:0};
   q("lkMsg").textContent = a.fails >= FREE_TRIES ? "" : "PIN incorrecto. Te quedan " + (FREE_TRIES - a.fails) + " intento(s) antes de esperar.";
   if(navigator.vibrate) navigator.vibrate(120);
@@ -189,8 +207,8 @@ q("lkSetup").addEventListener("submit", async e => {
   if(err){ q("suMsg").textContent = err; return; }
   q("suMsg").textContent = "Creando…";
   const d = loadDb();
-  // El primer usuario es administrador y hace las dos cosas; los demás los agrega él con su rol.
-  const u = {id: "u" + Date.now().toString(36) + Math.random().toString(36).slice(2,6), name, admin: !d.users.length, rol: d.users.length ? (PAGE === "bodega" ? "despachador" : "repartidor") : "ambos", created: Date.now(), ...(await makeCred(p1))};
+  // El primer usuario es administrador (elige Ruta o Bodega); los demás los agrega él con su rol.
+  const u = {id: "u" + Date.now().toString(36) + Math.random().toString(36).slice(2,6), name, admin: !d.users.length, rol: d.users.length && PAGE !== "bodega" ? "repartidor" : "despachador", created: Date.now(), ...(await makeCred(p1))};
   // Primer usuario: hereda los pedidos e historial que ya había en el celular.
   if(!d.users.length){
     const [kS, kH] = dataKeys(u.id), st = ls.get(LEGACY.state), hi = ls.get(LEGACY.hist);
@@ -275,7 +293,7 @@ function renderUsers(){
       bd.onclick = () => ask({title:"Eliminar a " + u.name, msg:"Se borran su usuario, sus pedidos y su historial de este celular. Escribe BORRAR para confirmar.", fields:[{id:"c",label:"Confirmación",type:"text"}], yes:"Eliminar", danger:true,
         onOk: async v => v.c.trim().toUpperCase() === "BORRAR" ? (removeUser(u.id), "") : "Escribe BORRAR para confirmar.", after: renderUsers});
       const br = document.createElement("button"); br.type = "button"; br.className = "small"; br.textContent = "Cambiar rol";
-      br.onclick = () => { const dd = loadDb(), x = dd.users.find(y => y.id === u.id); if(!x) return; const ks = Object.keys(ROLES); x.rol = ks[(ks.indexOf(rolDe(x)) + 1) % ks.length]; saveDb(dd); renderUsers(); };
+      br.onclick = () => { const dd = loadDb(), x = dd.users.find(y => y.id === u.id); if(!x) return; x.rol = rolDe(x) === "repartidor" ? "despachador" : "repartidor"; if(x.rol === "repartidor") ls.del(APP_KEY(x.id)); saveDb(dd); renderUsers(); };
       acts.append(br, bp, ba, bd); row.appendChild(acts);
     }
     list.appendChild(row);

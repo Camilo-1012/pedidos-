@@ -185,6 +185,11 @@ details summary{cursor:pointer;font-weight:600}
 .lkUsers{display:flex;flex-wrap:wrap;gap:8px;justify-content:center}
 .lkUsers button{background:transparent;color:var(--bg);border-color:rgba(255,255,255,.3)}
 .lkUsers button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+/* Entrar a Ruta o Bodega (solo administrador y despachadores) */
+.lkApp{display:grid;grid-template-columns:auto 1fr 1fr;gap:8px;align-items:center;width:100%}
+.lkApp span{font-size:14px;opacity:.8}
+.lkApp button{background:transparent;color:var(--bg);border-color:rgba(255,255,255,.3);min-height:44px}
+.lkApp button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
 .dots{display:flex;gap:14px;justify-content:center;min-height:18px}
 .dots i{width:16px;height:16px;border-radius:50%;border:2px solid var(--accent)}
 .dots i.on{background:var(--accent)}

@@ -3,47 +3,60 @@ const { test, expect } = require("@playwright/test");
 const fs = require("fs"), path = require("path");
 const A = require("./ayuda");
 
-// Una sola app, dos pantallas: el rol de cada usuario decide si entra a Ruta (repartidor) o a Bodega (despachador).
-test("roles: el administrador cambia de pantalla sin PIN; un repartidor no entra a Bodega y un despachador no entra a Ruta", async ({ page }) => {
+// Una sola app, dos pantallas: el administrador y los despachadores eligen en el PIN si entran a Ruta o a Bodega;
+// los repartidores no ven esa opción y siempre entran a Ruta.
+test("roles: elegir Ruta o Bodega en el PIN solo para administrador y despachadores; el repartidor siempre a Ruta", async ({ page }) => {
   const errs = A.vigilarErrores(page);
-  await A.entrar(page);                                              // primer usuario: administrador, «ambos»
-  await A.menu(page, "btnOtraApp");
+  const teclear = async pin => { for(const d of pin) await page.click(`#lkPad button[aria-label="${d}"]`); };
+  const menuRuta = async id => { if(await page.locator("#hdrMenu").isHidden()) await page.click("#btnMenu"); await page.click("#" + id); };
+  await A.entrar(page);                                              // primer usuario: administrador
+  await A.menu(page, "btnOtraApp");                                   // de Bodega a Ruta sin PIN
   await page.waitForURL(/\/$/);
   await page.waitForFunction(() => window.RUTA_LISTA === true);
-  await expect(page.locator("#lock")).toBeHidden();                  // no pidió el PIN otra vez
-  if(await page.locator("#hdrMenu").isHidden()) await page.click("#btnMenu");
-  await expect(page.locator("#btnOtraApp")).toHaveText("Ir a Bodega");
+  await expect(page.locator("#lock")).toBeHidden();
   // El administrador agrega a Jairo desde Ruta: queda como repartidor.
-  const menuRuta = async id => { if(await page.locator("#hdrMenu").isHidden()) await page.click("#btnMenu"); await page.click("#" + id); };
   await menuRuta("btnUser");
   await page.click("#usAdd");
   await page.fill("#ak_n", "Jairo"); await page.fill("#ak_p", "1357"); await page.fill("#ak_p2", "1357");
   await page.click("#akYes");
-  await expect(page.locator("#usList")).toContainText("Jairo");
-  await expect(page.locator("#usList .urow", { hasText: "Jairo" })).toContainText("Repartidor");
+  await expect(page.locator("#usList .urow", { hasText: "Jairo" })).toContainText("Repartidor (solo Ruta)");
+  await expect(page.locator("#usList .urow", { hasText: "Camilo" })).toContainText("Administrador · Despachador");
   await page.click("#usSwitch");
-  const teclear = async pin => { for(const d of pin) await page.click(`#lkPad button[aria-label="${d}"]`); };
-  await page.locator("#lkUsers button", { hasText: "Jairo" }).click(); await teclear("1357");
+  // Pantalla del PIN: con Camilo (admin) aparece «Entrar a»; con Jairo (repartidor), no.
+  await page.locator("#lkUsers button", { hasText: "Camilo" }).click();
+  await expect(page.locator("#lkApp")).toBeVisible();
+  await page.locator("#lkUsers button", { hasText: "Jairo" }).click();
+  await expect(page.locator("#lkApp")).toBeHidden();
+  await teclear("1357");
   await expect(page.locator("#lock")).toBeHidden();
-  // Jairo intenta abrir Bodega: vuelve a Ruta.
+  // Jairo intenta abrir Bodega: vuelve a Ruta y no tiene «Ir a Bodega».
   await page.goto("/bodega.html");
   await page.waitForURL(/\/$/);
   await page.waitForFunction(() => window.RUTA_LISTA === true);
-  if(await page.locator("#hdrMenu").isHidden()) await page.click("#btnMenu");
-  await expect(page.locator("#btnOtraApp")).toBeHidden();
   await page.click("#btnMenu");
-  // El administrador lo pasa a despachador («Cambiar rol» rota repartidor → despachador → ambos).
-  await menuRuta("btnLock");
-  await page.locator("#lkUsers button", { hasText: "Camilo" }).click(); await teclear(A.PIN);
-  await expect(page.locator("#lock")).toBeHidden();
-  await menuRuta("btnUser");
-  await page.locator("#usList .urow", { hasText: "Jairo" }).locator("button", { hasText: "Cambiar rol" }).click();
-  await expect(page.locator("#usList .urow", { hasText: "Jairo" })).toContainText("Despachador (bodega)");
-  await page.click("#usSwitch");
-  await page.locator("#lkUsers button", { hasText: "Jairo" }).click(); await teclear("1357");
+  await expect(page.locator("#btnOtraApp")).toBeHidden();
+  // Camilo elige «Bodega» en el PIN y entra directo a Bodega.
+  await page.click("#btnLock");
+  await page.locator("#lkUsers button", { hasText: "Camilo" }).click();
+  await page.locator('#lkApp button[data-app="bodega"]').click();
+  await expect(page.locator('#lkApp button[data-app="bodega"]')).toHaveAttribute("aria-pressed", "true");
+  await teclear(A.PIN);
   await page.waitForURL(/bodega\.html$/);
   await page.waitForFunction(() => window.BODEGA_DATOS === true);
   await expect(page.locator("#lock")).toBeHidden();
+  // Pasa a Jairo a despachador: ahora él también ve «Entrar a» (y recuerda su elección).
+  await A.menu(page, "btnUser");
+  await page.locator("#usList .urow", { hasText: "Jairo" }).locator("button", { hasText: "Cambiar rol" }).click();
+  await expect(page.locator("#usList .urow", { hasText: "Jairo" })).toContainText("Despachador (Ruta y Bodega)");
+  await page.click("#usSwitch");
+  await page.locator("#lkUsers button", { hasText: "Jairo" }).click();
+  await expect(page.locator("#lkApp")).toBeVisible();
+  await page.locator('#lkApp button[data-app="ruta"]').click();
+  await teclear("1357");
+  await page.waitForURL(/\/$/);
+  await page.waitForFunction(() => window.RUTA_LISTA === true);
+  await page.click("#btnMenu");
+  await expect(page.locator("#btnOtraApp")).toBeVisible();
   expect(errs).toEqual([]);
 });
 
