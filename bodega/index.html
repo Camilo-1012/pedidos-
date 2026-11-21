@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1c2321">
+<meta name="description" content="Recepción de paquetes en bodega, despacho a repartidores y devoluciones.">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="Bodega">
+<title>Bodega · Recepción y despacho</title>
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <div class="hdrRow">
+      <h1>Bodega</h1>
+      <button type="button" class="small hbtn icon" id="btnMenu" aria-label="Menú: usuario, equipo, repartidores y bloquear" aria-expanded="false" aria-controls="hdrMenu"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 6h18v2H3V6Zm0 5h18v2H3v-2Zm0 5h18v2H3v-2Z"/></svg></button>
+    </div>
+    <div class="hdrMenu" id="hdrMenu" hidden>
+      <button type="button" class="small hbtn" id="btnInstall" hidden>Instalar la app</button>
+      <button type="button" class="small hbtn" id="btnUser"><span id="btnUserName">Usuario</span></button>
+      <button type="button" class="small hbtn" id="btnReps">Repartidores</button>
+      <button type="button" class="small hbtn" id="btnZonas">Zonas</button>
+      <button type="button" class="small hbtn" id="btnTeam">Equipo (nube)</button>
+      <button type="button" class="small hbtn" id="btnExcel">Excel del día</button>
+      <button type="button" class="small hbtn" id="btnMore">Más</button>
+      <button type="button" class="small hbtn" id="btnLock">Bloquear</button>
+    </div>
+    <button type="button" class="small hbtn syncChip" id="syncChip" hidden></button>
+    <div class="upd" id="upd" hidden role="status"><span id="updTxt">Hay una versión nueva de la app.</span><button type="button" class="primary small" id="updBtn">Actualizar</button></div>
+    <span class="net" id="net" hidden>Sin internet: la app sigue funcionando y sube las lecturas cuando vuelva la señal.</span>
+    <div class="stats">
+      <div class="stat"><b id="stBodega">0</b><span>en bodega</span></div>
+      <div class="stat"><b id="stRuta">0</b><span>en ruta</span></div>
+      <div class="stat"><b id="stEntHoy">0</b><span>entregados hoy</span></div>
+    </div>
+  </div>
+</header>
+
+<main>
+  <!-- ================= RECIBIR ================= -->
+  <section class="card view" id="vRecibir" aria-labelledby="hRec">
+    <h2 id="hRec">Recibir paquetes</h2>
+    <label for="recLote">Lote de recepción
+      <select id="recLote"></select>
+    </label>
+    <button type="button" id="recNuevo">Nuevo lote (llegó un camión o una entrega)</button>
+    <div id="recInfo" hidden>
+      <div class="kpis" id="recKpis"></div>
+      <div class="row">
+        <button type="button" class="primary big" id="recScan">Escanear guías</button>
+        <button type="button" id="recEscribir">Escribir guía</button>
+      </div>
+      <div class="row">
+        <button type="button" id="recManifiesto">Cargar listado esperado</button>
+        <button type="button" id="recFaltan">Ver faltantes</button>
+        <button type="button" id="recCerrar">Cerrar lote</button>
+      </div>
+      <label class="chk" id="recUbicLbl" hidden><input type="checkbox" id="recUbic"> Pedir calle y carrera al recibir (para la zona)</label>
+      <p class="hint" id="recNota"></p>
+      <div id="recZonas"></div>
+      <h3>Últimas lecturas</h3>
+      <ul class="lista" id="recLista"></ul>
+    </div>
+  </section>
+
+  <!-- ================= DESPACHAR ================= -->
+  <section class="card view" id="vDespachar" aria-labelledby="hDes" hidden>
+    <h2 id="hDes">Despachar a repartidor</h2>
+    <div class="reps" id="desReps" role="group" aria-label="Repartidor"></div>
+    <div id="desInfo" hidden>
+      <div class="kpis" id="desKpis"></div>
+      <div class="row">
+        <button type="button" class="primary big" id="desScan">Escanear guías</button>
+        <button type="button" id="desEscribir">Escribir guía</button>
+      </div>
+      <button type="button" class="dark" id="desPlanilla">Planilla de salida</button>
+      <div id="desZonas"></div>
+      <h3>Lleva (en ruta, por liquidar)</h3>
+      <ul class="lista" id="desLista"></ul>
+    </div>
+  </section>
+
+  <!-- ================= DEVOLUCIONES ================= -->
+  <section class="card view" id="vDevolver" aria-labelledby="hDev" hidden>
+    <h2 id="hDev">Devoluciones y cierre</h2>
+    <div class="reps" id="devReps" role="group" aria-label="Repartidor"></div>
+    <div id="devInfo" hidden>
+      <div class="kpis" id="devKpis"></div>
+      <label for="devMotivo">Motivo de la devolución
+        <select id="devMotivo">
+          <option>No estaba</option><option>Dirección errada</option><option>Rechazado por el cliente</option>
+          <option>Dañado</option><option>Reprogramado</option><option>Otro</option>
+        </select>
+      </label>
+      <div class="row">
+        <button type="button" class="primary big" id="devScan">Escanear devueltos</button>
+        <button type="button" id="devEscribir">Escribir guía</button>
+      </div>
+      <button type="button" class="dark" id="devCerrar">Cerrar liquidación del repartidor</button>
+      <p class="hint">Al cerrar, los paquetes que no devolvió quedan como entregados, salvo los que marques como faltantes.</p>
+      <h3>Pendientes por liquidar</h3>
+      <ul class="lista" id="devLista"></ul>
+    </div>
+  </section>
+
+  <!-- ================= CONSULTAR ================= -->
+  <section class="card view" id="vConsultar" aria-labelledby="hCon" hidden>
+    <h2 id="hCon">Consultar</h2>
+    <form class="row" id="conForm">
+      <input id="conGuia" placeholder="Guía o sus últimos 4+ números" autocomplete="off" inputmode="text" aria-label="Guía">
+      <button type="submit" class="primary">Buscar</button>
+      <button type="button" id="conScan">Escanear</button>
+    </form>
+    <div id="conRes"></div>
+    <div class="row">
+      <button type="button" id="conBodega">En bodega</button>
+      <button type="button" id="conRuta">En ruta</button>
+      <button type="button" id="conConflictos">Conflictos <span class="chip warn" id="conNConf" hidden></span></button>
+      <button type="button" id="conNovedades">Con novedad</button>
+      <button type="button" id="conZonas">Por zona</button>
+    </div>
+    <div id="conListaBox"></div>
+    <h3>Histórico (nube)</h3>
+    <p class="hint">Todo lo registrado desde el primer día: quién recibió, quién despachó, a quién y cuándo, aunque este celular ya no lo tenga.</p>
+    <div class="row">
+      <button type="button" id="hisGuia">Historial completo de una guía</button>
+      <button type="button" class="dark" id="hisExcel">Excel por fechas</button>
+    </div>
+    <h3>Resumen de hoy</h3>
+    <div class="tabla" id="conResumen"></div>
+  </section>
+</main>
+
+<nav class="tabs" aria-label="Secciones">
+  <button type="button" data-v="vRecibir" aria-current="page">Recibir</button>
+  <button type="button" data-v="vDespachar">Despachar</button>
+  <button type="button" data-v="vDevolver">Devolver</button>
+  <button type="button" data-v="vConsultar">Consultar</button>
+</nav>
+
+<!-- ================= ESCÁNER CONTINUO ================= -->
+<dialog id="dlgScan" class="scan" aria-labelledby="scTitle">
+  <form method="dialog" id="frmScan">
+    <div class="dlgHead"><h2 id="scTitle">Escanear</h2><button type="button" class="primary small" id="scClose">Terminar</button></div>
+    <p class="scTarget" id="scTarget"></p>
+    <div class="scVideo"><video id="scVideo" playsinline muted></video><div class="scAim" aria-hidden="true"></div></div>
+    <p class="hint" id="scMsg" role="status"></p>
+    <div class="scCount"><b id="scN">0</b><span id="scNLbl">leídas en esta pasada</span></div>
+    <div class="scAsk" id="scAsk" hidden role="alertdialog" aria-labelledby="scAskTxt">
+      <p id="scAskTxt"></p>
+      <div class="row"><button type="button" id="scAskNo">Omitir</button><button type="button" class="primary" id="scAskYes">Sí</button></div>
+    </div>
+    <div class="scUbic" id="scUbic" hidden role="group" aria-labelledby="ubTit">
+      <p id="ubTit" style="margin:0"><b>Ubicación de <span id="ubGuia"></span></b> · solo números, sin placa</p>
+      <div class="row ubNums">
+        <label for="ubCl">Calle<input id="ubCl" inputmode="numeric" autocomplete="off" maxlength="6"></label>
+        <label for="ubKr">Carrera<input id="ubKr" inputmode="numeric" autocomplete="off" maxlength="6"></label>
+      </div>
+      <p class="hint" id="ubPrev" aria-live="polite"></p>
+      <p class="uerr" id="ubErr" role="alert"></p>
+      <div class="row"><button type="button" id="ubSaltar">Saltar</button><button type="button" class="primary" id="ubOk">Guardar ubicación</button></div>
+      <p class="hint" style="margin:0">O toca la zona:</p>
+      <div class="zbtns" id="ubZonas"></div>
+    </div>
+    <div class="row">
+      <input id="scIn" placeholder="O escribe la guía" autocomplete="off" aria-label="Guía escrita">
+      <button type="button" id="scInBtn">Usar</button>
+    </div>
+    <div class="row">
+      <button type="button" class="small" id="scUndo">Deshacer la última</button>
+      <button type="button" class="small" id="scNov">Novedad a la última</button>
+      <button type="button" class="small" id="scTorch" hidden>Linterna</button>
+    </div>
+    <ul class="lista" id="scLista"></ul>
+  </form>
+</dialog>
+
+<!-- ================= LISTADOS / PLANILLA ================= -->
+<dialog id="dlgLista" aria-labelledby="ltTitle">
+  <form method="dialog">
+    <div class="dlgHead"><h2 id="ltTitle"></h2><button type="submit" class="small">Cerrar</button></div>
+    <div id="ltBody"></div>
+    <div class="row" id="ltActs"></div>
+  </form>
+</dialog>
+
+<!-- ================= REPARTIDORES ================= -->
+<dialog id="dlgReps" aria-labelledby="rpTitle">
+  <form method="dialog">
+    <div class="dlgHead"><h2 id="rpTitle">Repartidores</h2><button type="submit" class="small">Cerrar</button></div>
+    <p class="hint" id="rpNota"></p>
+    <div id="rpList" style="display:flex;flex-direction:column;gap:8px"></div>
+    <button type="button" class="primary" id="rpAdd">Agregar repartidor</button>
+  </form>
+</dialog>
+
+<!-- ================= ZONAS ================= -->
+<dialog id="dlgZonas" aria-labelledby="znTitle">
+  <form method="dialog">
+    <div class="dlgHead"><h2 id="znTitle">Zonas</h2><button type="submit" class="small">Cerrar</button></div>
+    <p class="hint" id="znNota"></p>
+    <div id="znList" style="display:flex;flex-direction:column;gap:8px"></div>
+    <button type="button" class="primary" id="znAdd">Agregar zona</button>
+  </form>
+</dialog>
+
+<!-- ================= EQUIPO (SUPABASE) ================= -->
+<dialog id="dlgTeam" aria-labelledby="tmTitle">
+  <form method="dialog" id="frmTeam">
+    <div class="dlgHead"><h2 id="tmTitle">Equipo en la nube</h2><button type="submit" class="small">Cerrar</button></div>
+    <p class="hint">Conecta este celular a la cuenta de la bodega para que todas las lecturas se compartan entre los celulares. Sin conexión, la app sigue funcionando y sube lo pendiente cuando vuelve la señal.</p>
+    <div id="tmOff">
+      <label for="tmEmail">Correo<input id="tmEmail" type="email" autocomplete="username"></label>
+      <label for="tmPass">Contraseña<input id="tmPass" type="password" autocomplete="current-password"></label>
+      <button type="button" class="primary" id="tmConnect">Conectar</button>
+    </div>
+    <div id="tmOn" hidden>
+      <p id="tmWho" style="margin:0"></p>
+      <p class="hint" id="tmStat" role="status"></p>
+      <div class="row"><button type="button" class="primary" id="tmSync">Sincronizar ahora</button><button type="button" class="danger" id="tmDisc">Desconectar</button></div>
+    </div>
+    <p class="uerr" id="tmErr" role="alert"></p>
+  </form>
+</dialog>
+
+<!-- ================= MÁS ================= -->
+<dialog id="dlgMore" aria-labelledby="moTitle">
+  <form method="dialog">
+    <div class="dlgHead"><h2 id="moTitle">Más opciones</h2><button type="submit" class="small">Cerrar</button></div>
+    <button type="button" id="moUpd">Buscar actualización</button>
+    <label class="chk"><input type="checkbox" id="moSonido"> Sonido al leer cada guía</label>
+    <p class="hint" id="moVer"></p>
+    <p class="hint">Se guarda solo lo necesario para el control de la bodega: guía, empresa, estado, repartidor y fechas. No se guardan nombre, teléfono ni dirección del cliente (Ley 1581 de 2012).</p>
+    <button type="button" class="danger" id="moBorrar">Borrar los datos de este celular</button>
+  </form>
+</dialog>
+
+<div class="lock" id="lock" hidden>
+  <div class="lockBox">
+    <img class="logo" src="icons/icon-192.png" alt="">
+    <h1>Bodega</h1>
+    <form id="lkSetup" class="lkPane" hidden>
+      <p style="margin:0">Crea tu usuario. Quien lo cree queda como administrador: puede agregar a otras personas de este celular y restablecerles el PIN.</p>
+      <label for="suName">Nombre<input id="suName" class="name" autocomplete="off" maxlength="24" required></label>
+      <label for="suPin">PIN de 4 a 6 números<input id="suPin" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="new-password" required></label>
+      <label for="suPin2">Repite el PIN<input id="suPin2" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="new-password" required></label>
+      <p class="lkMsg" id="suMsg" role="alert"></p>
+      <button type="submit" class="primary">Crear y entrar</button>
+      <p class="hint" style="color:inherit;opacity:.75;margin:0" id="suNote"></p>
+    </form>
+    <div id="lkLogin" class="lkPane" hidden>
+      <div class="lkUsers" id="lkUsers"></div>
+      <p id="lkWho" style="margin:0;font-size:17px"></p>
+      <div class="dots" id="lkDots" aria-hidden="true"></div>
+      <p class="lkMsg" id="lkMsg" role="alert" aria-live="assertive"></p>
+      <div class="keypad" id="lkPad"></div>
+      <button type="button" class="linkish" id="lkForgot">¿Olvidaste tu PIN?</button>
+    </div>
+  </div>
+</div>
+
+<dialog id="dlgUsers" aria-labelledby="usTitle">
+  <form method="dialog">
+    <div class="dlgHead"><h2 id="usTitle">Usuarios de este celular</h2><button type="submit" class="small">Cerrar</button></div>
+    <p class="hint" id="usWho" style="margin:0"></p>
+    <div id="usList" style="display:flex;flex-direction:column;gap:8px"></div>
+    <div class="row">
+      <button type="button" id="usAdd">Agregar usuario</button>
+      <button type="button" id="usMyPin">Cambiar mi PIN</button>
+    </div>
+    <label for="usLock">Pedir el PIN al volver a la app
+      <select id="usLock">
+        <option value="0">Siempre, apenas vuelvo</option>
+        <option value="5">Si estuve fuera más de 5 minutos</option>
+        <option value="15">Si estuve fuera más de 15 minutos</option>
+        <option value="30">Si estuve fuera más de 30 minutos</option>
+        <option value="-1">Solo al abrir la app de nuevo</option>
+      </select>
+    </label>
+    <button type="button" class="dark" id="usSwitch">Cambiar de usuario</button>
+    <p class="hint" style="margin:0">Los usuarios son de este celular y sirven para saber quién hizo cada lectura. Los repartidores no necesitan usuario: se manejan en «Repartidores».</p>
+  </form>
+</dialog>
+
+<dialog id="dlgAsk" aria-labelledby="akTitle">
+  <form id="frmAsk">
+    <h2 id="akTitle"></h2>
+    <p class="hint" id="akMsg" style="margin:0"></p>
+    <div id="akFields" style="display:flex;flex-direction:column;gap:10px"></div>
+    <p class="uerr" id="akErr" role="alert"></p>
+    <div class="row">
+      <button type="button" id="akNo">Cancelar</button>
+      <button type="submit" class="primary" id="akYes">Guardar</button>
+    </div>
+  </form>
+</dialog>
+
+<div class="toast" id="toast" role="status"></div>
+
+<script src="scan/zxing.min.js"></script>
+<script src="js/00-acceso.js"></script>
+</body>
+</html>

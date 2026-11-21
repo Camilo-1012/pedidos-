@@ -1,0 +1,87 @@
+# Pruebas automáticas y publicación.
+# En cada cambio a main: corre las pruebas en un celular simulado y, solo si TODAS pasan, publica la app en GitHub Pages.
+# Requisito (una vez): Settings → Pages → Build and deployment → Source: «GitHub Actions».
+name: Pruebas y publicación
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pruebas-${{ github.ref }}
+  cancel-in-progress: false   # no cortar una publicación a medias (deja a GitHub Pages trabado)
+
+jobs:
+  pruebas:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # Límites de tiempo: a veces los espejos de apt o la descarga del navegador se quedan colgados.
+      # Con el límite, el paso falla en pocos minutos y el reintento de abajo lo vuelve a intentar.
+      - name: Navegador de pruebas (Chromium)
+        timeout-minutes: 8
+        run: npx playwright install --with-deps chromium || (sleep 20 && npx playwright install --with-deps chromium)
+      - name: Correr las pruebas
+        run: npx playwright test
+        env:
+          CI: "true"
+          PW_EXPERIMENTAL_SERVICE_WORKER_NETWORK_EVENTS: "1"
+      - name: Guardar el reporte si algo falla
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: reporte-de-pruebas
+          path: playwright-report
+          retention-days: 14
+
+  publicar:
+    needs: pruebas
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 8
+      # Si una publicación anterior quedó colgada en GitHub Pages, bloquea las nuevas («in progress deployment»):
+      # se cancelan las de los commits anteriores. Si no hay ninguna, no pasa nada.
+      - name: Cancelar publicaciones anteriores trabadas
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for sha in $(git log -n 8 --format=%H | tail -n +2); do
+            if gh api -X POST "repos/${{ github.repository }}/pages/deployments/$sha/cancel" >/dev/null 2>&1; then echo "Cancelada la publicación trabada de $sha"; fi
+          done
+      - name: Armar el sitio (solo los archivos de la app, sin pruebas)
+        run: |
+          mkdir _site
+          rsync -a --exclude '.git' --exclude '.github' --exclude 'tests' --exclude 'supabase' --exclude 'node_modules' \
+            --exclude 'package.json' --exclude 'package-lock.json' --exclude 'playwright.config.js' \
+            --exclude 'test-results' --exclude 'playwright-report' --exclude '_site' ./ _site/
+      - uses: actions/configure-pages@v6
+      # El nombre lleva el número de intento: así «Re-run» no choca con el archivo del intento anterior.
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: _site
+          name: github-pages-${{ github.run_attempt }}
+      - id: deploy
+        uses: actions/deploy-pages@v5
+        with:
+          artifact_name: github-pages-${{ github.run_attempt }}

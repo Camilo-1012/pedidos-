@@ -1,0 +1,65 @@
+// Capturas de pantalla para revisar la interfaz (solo se generan con CAPTURAS=1; no corren en GitHub Actions).
+const { test, expect } = require("@playwright/test");
+const A = require("./ayuda");
+const DIR = process.env.CAPTURAS_DIR || "test-results/capturas";
+test.skip(!process.env.CAPTURAS, "solo con CAPTURAS=1");
+test("capturas", async ({ page }) => {
+  await A.entrar(page);
+  for(const n of ["Jairo", "Pedro", "Luisa", "Andrés"]) await A.agregarRep(page, n);
+  const zonas = [["Z1 Tibabuyes", 132, 145, 104, 130, "r0"], ["Z2 Lisboa", 140, 160, 131, 150, "r1"], ["Z3 Rincón", 125, 135, null, null, "r2"], ["Z4 Berlín", 146, 160, 104, 130, "r3"]];
+  await page.evaluate(zs => { const reps = repsActivos(); zs.forEach(([n, a, b, c, d, r], i) => registrar("ZONA", null, {zid: "z" + i, nombre: n, color: COLORES_ZONA[i][0], cl: [a, b], kr: [c, d], rid: reps[+r.slice(1)].rid, activa: true})); }, zonas);
+  await A.nuevoLote(page, "Xcargo", "Camión 7 a. m.");
+  await page.click("#recManifiesto");
+  await page.fill("#mfTxt", Array.from({length: 12}, (_, i) => "XC" + (88120400 + i)).join("\n"));
+  await page.click("#ltActs button.primary");
+  await page.click("#recScan");
+  const ubic = [["140","110"],["150","140"],["130",""],["155","120"],["138","125"],["142","135"],["128","100"],["",""],["150","110"]];
+  for(let i = 0; i < 9; i++){
+    const p = A.leer(page, "XC" + (88120400 + i));
+    await expect(page.locator("#scUbic")).toBeVisible();
+    if(i === 8){ await page.fill("#ubCl", "150"); await page.fill("#ubKr", "110"); await page.screenshot({ path: DIR + "/8-ubicacion-al-recibir.png" }); }
+    if(ubic[i][0]){ await page.fill("#ubCl", ubic[i][0]); await page.fill("#ubKr", ubic[i][1]); await page.click("#ubOk"); } else await page.click("#ubSaltar");
+    await p;
+  }
+  await A.leer(page, "XC88120401");
+  const ult = A.leer(page, "XC99000001"); await page.click("#ubSaltar"); await ult;
+  await page.screenshot({ path: DIR + "/2-escaner-recepcion.png" });
+  await page.click("#scClose");
+  await page.screenshot({ path: DIR + "/1-recibir.png", fullPage: true });
+  await page.click('nav.tabs button[data-v="vDespachar"]');
+  await page.locator("#desReps button", { hasText: "Jairo" }).click();
+  await page.click("#desScan");
+  for(let i = 0; i < 5; i++) await A.leer(page, "XC" + (88120400 + i));
+  await page.click("#scClose");
+  await page.locator("#desReps button", { hasText: "Pedro" }).click();
+  await page.click("#desScan");
+  const p = A.leer(page, "XC88120402");
+  await expect(page.locator("#scAsk")).toBeVisible();
+  await page.screenshot({ path: DIR + "/4-pregunta-reasignar.png" });
+  await page.click("#scAskYes"); await p;
+  for(let i = 5; i < 8; i++) await A.leer(page, "XC" + (88120400 + i));
+  await page.click("#scClose");
+  await page.locator("#desReps button", { hasText: "Jairo" }).click();
+  await page.screenshot({ path: DIR + "/3-despachar.png", fullPage: true });
+  await page.click("#desPlanilla");
+  await page.screenshot({ path: DIR + "/5-planilla.png" });
+  await page.locator("#dlgLista .dlgHead button").click();
+  await page.click('nav.tabs button[data-v="vDevolver"]');
+  await page.click("#devScan"); await A.leer(page, "XC88120401"); await page.click("#scClose");
+  await page.click("#devCerrar");
+  await page.selectOption('#ltBody select >> nth=1', "FALTANTE");
+  await page.screenshot({ path: DIR + "/6-liquidacion.png" });
+  await page.click("#ltActs button.primary"); await A.responder(page, {});
+  await page.click('nav.tabs button[data-v="vConsultar"]');
+  await page.fill("#conGuia", "0401"); await page.click("#conForm button[type=submit]");
+  await page.screenshot({ path: DIR + "/7-consultar.png", fullPage: true });
+  await page.click("#conZonas");
+  await page.locator("#conListaBox").scrollIntoViewIfNeeded();
+  await page.screenshot({ path: DIR + "/10-consultar-por-zona.png" });
+  await page.click('nav.tabs button[data-v="vDespachar"]');
+  await page.locator("#desReps button", { hasText: "Luisa" }).click();
+  await page.locator("#desZonas").scrollIntoViewIfNeeded();
+  await page.screenshot({ path: DIR + "/9-despachar-zonas.png" });
+  await A.menu(page, "btnZonas");
+  await page.screenshot({ path: DIR + "/11-zonas.png" });
+});
