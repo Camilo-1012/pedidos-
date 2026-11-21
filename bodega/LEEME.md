@@ -26,6 +26,13 @@ Bodega es la **pantalla del despachador de la misma app** Ruta de Entregas (repo
 - Pruebas: `tests/bodega/` (corren con todas las demás; Supabase simulado en `tests/bodega/nube.js`). Capturas: `CAPTURAS=1 npx playwright test tests/bodega/capturas.spec.js`.
 - El repo `Camilo-1012/Bodega` (v1.0–v1.2) quedó importado aquí con su historial (`git subtree`) y se archiva en solo lectura.
 
+## Conexión con Ruta (v2.31)
+- **Vincular** (una vez, administrador con la nube conectada): ☰ → Repartidores → «Vincular app» y elegir la cuenta de Ruta del repartidor (tabla `bodega_vinculos`).
+- **Bodega → Ruta:** lo que se le despacha le aparece en su Ruta como pedido con su guía y «Falta la dirección» (función `bodega_mis_asignados()`, solo guía, empresa, hora y calle/carrera). Al escanear la etiqueta, Ruta reconoce la guía y abre ESA parada con lo leído; o se toca «Completar». Si la bodega se lo pasa a otro o lo recibe como devuelto, se quita (si aún no tenía dirección) o se marca «La bodega ya no te lo tiene asignado».
+- **Ruta → Bodega:** «Entregado» llega como **entregado definitivo** (reportado por el repartidor); «No estaba» como `NO_ENTREGADO` (sigue en ruta, «debe volver»). Deshacer en Ruta = `ANULAR`. Sin señal, se encolan y suben al volver (`js/16-bodega.js`).
+- En la liquidación de un repartidor con app, lo no reportado queda por defecto «sigue con él» (no se da por entregado).
+- Seguridad: el repartidor no lee `bodega_eventos`; solo puede reportar guías que hoy están en ruta con él y deshacer sus propios reportes (RLS).
+
 ## Histórico (auditoría)
 Todo movimiento queda en Supabase (`bodega_eventos`) y **no se borra**: quién recibió, quién despachó a qué repartidor, quién liquidó, desde qué celular y a qué hora subió. En Consultar → «Histórico (nube)»: historial completo de una guía y Excel por fechas y repartidor (resumen por día, movimientos y recepción por lote). El celular guarda 30 días; la nube, todo.
 

@@ -15,7 +15,7 @@ const ITER = 150000, MAX_USERS = 6, FREE_TRIES = 5;
 const PAGE = document.body.dataset.app === "bodega" ? "bodega" : "ruta";
 const APP_FILES = PAGE === "bodega"
   ? ["js/15-excel.js","bodega/js/01-base.js","bodega/js/02-datos.js","bodega/js/03-escaner.js","bodega/js/04-recepcion.js","bodega/js/05-despacho.js","bodega/js/06-devolucion.js","bodega/js/07-consulta.js","bodega/js/08-excel.js","bodega/js/09-sync.js","bodega/js/10-zonas.js","bodega/js/11-arranque.js"]
-  : ["js/01-direcciones.js","js/02-ruta.js","js/03-mapas.js","js/04-jornada.js","js/05-pantalla.js","js/06-escaner.js","js/07-cargue.js","js/08-voz.js","js/09-arranque.js","js/10-conduccion.js","js/11-equipo.js","js/12-aviso.js","js/13-buscar.js","js/14-apps.js","js/15-excel.js"];
+  : ["js/01-direcciones.js","js/02-ruta.js","js/03-mapas.js","js/04-jornada.js","js/05-pantalla.js","js/06-escaner.js","js/07-cargue.js","js/08-voz.js","js/09-arranque.js","js/10-conduccion.js","js/11-equipo.js","js/12-aviso.js","js/13-buscar.js","js/14-apps.js","js/15-excel.js","js/16-bodega.js"];
 /* ---- Roles ---- */
 const ROLES = {repartidor:"Repartidor (solo Ruta)", despachador:"Despachador (Ruta y Bodega)"};
 const PAGINA = {ruta:"./", bodega:"bodega.html"};

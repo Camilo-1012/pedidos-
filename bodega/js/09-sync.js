@@ -90,6 +90,7 @@ async function doSync(manual){
         if(rows.length < LOTE_BAJAR) break;
       }
     }
+    await traerVinculos();
     sync.last = Date.now(); sync.err = rechazados ? `${rechazados} lectura(s) no las aceptó el servidor (permiso). Revisa el rol de esta cuenta.` : "";
     if(llegaron && !manual) toast(`Llegaron ${llegaron} lectura(s) de otros celulares.`);
     if(manual) toast(llegaron ? `Sincronizado: llegaron ${llegaron} lectura(s).` : "Sincronizado.");
@@ -179,4 +180,35 @@ async function nubeRango(desde, hasta, progreso){
     if(rows.length < LOTE_BAJAR || out.length > 300000) break;
   }
   return out;
+}
+
+/* ---- Conexión con Ruta (v2.31): repartidor de la bodega ↔ su cuenta de Ruta ----
+   Con el vínculo, lo que se le despacha le aparece en su Ruta y sus «Entregado» / «No estaba» llegan aquí solos. */
+const VINC = new Map((sync && sync.vinc || []).map(v => [v.rid, v]));   // rid → {rid, user_id, nombre}
+async function traerVinculos(){
+  try{
+    const rows = await sb("bodega_vinculos?select=rid,user_id,nombre") || [];
+    VINC.clear(); rows.forEach(v => VINC.set(v.rid, v));
+    if(sync){ sync.vinc = rows; saveSync(); }
+  }catch(e){ if(e.status !== 404) console.warn("vínculos", e); }   // 404: aún no se corrió la parte nueva de bodega.sql
+}
+async function vincularApp(r){
+  if(!syncOn()){ toast("Conecta primero la nube (☰ → Equipo) con una cuenta de administrador."); return; }
+  if(!navigator.onLine){ toast("Vincular necesita internet."); return; }
+  let cuentas;
+  try{ cuentas = await sb("rpc/bodega_cuentas_ruta", {method:"POST", body:"{}"}) || []; }
+  catch(e){ toast("No se pudo leer el equipo de Ruta (" + (e.message || e) + "). ¿Se corrió supabase/bodega.sql?"); return; }
+  if(!cuentas.length){ toast("No hay cuentas en el equipo de Ruta (o esta cuenta no es administradora)."); return; }
+  const otro = uid => [...VINC.values()].find(x => x.user_id === uid && x.rid !== r.rid);
+  const act = VINC.get(r.rid);
+  const v = await pedir({title:"App de Ruta de " + r.nombre, msg:"Elige su cuenta de Ruta. Lo que le despaches le aparecerá en su app, y sus «Entregado» y «No estaba» llegarán aquí solos.",
+    fields:[{id:"u", label:"Cuenta de Ruta", type:"select", value: act ? act.user_id : "", options:[["", "— Sin vincular"], ...cuentas.map(c => [c.user_id, c.nombre + (otro(c.user_id) ? " (ya es de " + repNombre(otro(c.user_id).rid) + ")" : "")])]}],
+    yes:"Guardar", check: v => v.u && otro(v.u) ? "Esa cuenta ya está vinculada a otro repartidor: desvincúlala primero." : ""});
+  if(!v) return;
+  try{
+    if(!v.u){ if(act) await sb(`bodega_vinculos?rid=eq.${encodeURIComponent(r.rid)}`, {method:"DELETE", headers:{Prefer:"return=minimal"}}); }
+    else await sb("bodega_vinculos?on_conflict=rid", {method:"POST", headers:{Prefer:"resolution=merge-duplicates,return=minimal"}, body:JSON.stringify([{rid: r.rid, user_id: v.u, nombre: (cuentas.find(c => c.user_id === v.u) || {}).nombre || ""}])});
+    await traerVinculos(); pintarReps(); pintarTodo();
+    toast(v.u ? `${r.nombre} quedó vinculado: lo que le despaches le saldrá en su app.` : `${r.nombre} quedó sin app vinculada.`);
+  }catch(e){ toast("No se pudo guardar (" + (e.message || e) + "). Solo un administrador puede vincular."); }
 }

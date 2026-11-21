@@ -2,14 +2,16 @@
    con novedad; resumen del día por repartidor. */
 "use strict";
 const TXT_EV = {ESPERADO:"En listado esperado", RECIBIDO:"Recibida en bodega", NOVEDAD:"Novedad", UBICACION:"Ubicación", ASIGNADO:"Despachada", DEVUELTO:"Devuelta",
-  ENTREGADO:"Entregada (liquidación)", FALTANTE:"Marcada faltante", ANULAR:"Lectura deshecha"};
+  ENTREGADO:"Entregada", NO_ENTREGADO:"No estaba (reporte del repartidor)", FALTANTE:"Marcada faltante", ANULAR:"Lectura deshecha"};
 function detalleEv(e){
   const d = e.d || {};
   switch(e.tipo){
     case "ESPERADO": case "RECIBIDO": return (LOTES.get(d.lid) || {}).nombre || (d.lid ? "" : "sin lote");
     case "ASIGNADO": return "a " + repNombre(d.rid) + (d.reasigna && d.de ? " (antes la tenía " + repNombre(d.de) + ")" : "");
     case "DEVUELTO": return "por " + repNombre(d.rid) + (d.motivo ? " · " + d.motivo : "");
-    case "ENTREGADO": case "FALTANTE": return repNombre(d.rid);
+    case "ENTREGADO": return d.por_rep ? "reportó " + repNombre(d.rid) + " desde su app" : "al liquidar a " + repNombre(d.rid);
+    case "NO_ENTREGADO": return repNombre(d.rid) + (d.motivo ? " · " + d.motivo : "");
+    case "FALTANTE": return repNombre(d.rid);
     case "NOVEDAD": return d.nota || "";
     case "UBICACION": return d.zid ? "zona elegida: " + ((ZONAS.get(d.zid) || {}).nombre || "zona borrada") : `Calle ${txtVia(d.cl) || "?"} · Carrera ${txtViaKr(d.kr) || "?"}`;
     default: return "";

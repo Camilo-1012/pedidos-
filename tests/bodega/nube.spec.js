@@ -119,7 +119,7 @@ test("histórico: una guía de hace 3 meses (que ya no está en el celular) se c
   const [dl] = await Promise.all([b.page.waitForEvent("download"), A.responder(b.page, { de: dia, a: dia })]);
   const x = A.leerXlsx(await dl.path());
   expect(x["Movimientos"].slice(1).map(f => [f[1], f[2], f[4], f[5]])).toEqual([
-    ["HIST000001", "Recibida en bodega", "", "Ana"], ["HIST000001", "Despachada", "Jairo", "Luis"], ["HIST000001", "Entregada (liquidación)", "Jairo", "Ana"]]);
+    ["HIST000001", "Recibida en bodega", "", "Ana"], ["HIST000001", "Despachada", "Jairo", "Luis"], ["HIST000001", "Entregada", "Jairo", "Ana"]]);
   expect(x["Resumen por día"][2]).toEqual([dia, "Jairo", "", 1, "", 1]);
   expect(x["Recepción por lote"][1].slice(0, 2)).toEqual(["Camión agosto", "iMile"]);
   expect(b.errs).toEqual([]);

@@ -111,6 +111,8 @@ async function doSync(manual){
       borrar.forEach(id=>delete known[id]);
     }
     sync.last = Date.now(); sync.err = "";
+    // Bodega (js/16-bodega.js): sube los reportes de entrega y trae lo que la bodega asignó (no frena el equipo si falla).
+    if(typeof bodegaSync === "function") await bodegaSync(manual);
     if(added || removed || updated){
       saveSilently(); render();
       if(added) optimize(true, {estable:true});

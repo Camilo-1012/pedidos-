@@ -1,7 +1,7 @@
 /* Arranque de la pantalla Bodega: versión, navegación entre secciones, menú, repartidores, actualizaciones y carga de datos.
    Es la misma app que Ruta de Entregas: al publicar, el mismo número aquí, en js/09-arranque.js (APP_VERSION) y en sw.js (CACHE). */
 "use strict";
-const APP_VERSION = "2.30";
+const APP_VERSION = "2.31";
 
 /* ---- Secciones ---- */
 const VISTAS = ["vRecibir", "vDespachar", "vDevolver", "vConsultar"];
@@ -57,7 +57,8 @@ function pintarReps(){
     const row = document.createElement("div"); row.className = "urow" + (r.activo ? "" : " inactivo");
     row.innerHTML = `<div><b></b><div class="hint" style="margin:0"></div></div>`;
     row.querySelector("b").textContent = r.nombre;
-    row.querySelector(".hint").textContent = (r.activo ? "Activo" : "Inactivo") + (enRuta ? ` · ${enRuta} en ruta` : "");
+    const v = VINC.get(r.rid);
+    row.querySelector(".hint").textContent = (r.activo ? "Activo" : "Inactivo") + (enRuta ? ` · ${enRuta} en ruta` : "") + (v ? ` · 📱 App de Ruta: ${v.nombre || "vinculada"}` : " · Sin app vinculada");
     if(admin){
       const acts = document.createElement("div"); acts.className = "row";
       const bn = document.createElement("button"); bn.type = "button"; bn.className = "small"; bn.textContent = "Cambiar nombre";
@@ -67,7 +68,9 @@ function pintarReps(){
         if(r.activo && enRuta && !await confirmar("Desactivar a " + r.nombre, `Tiene ${enRuta} paquete(s) en ruta. Liquídalo antes, o quedarán pendientes a su nombre.`, "Desactivar igual", true)) return;
         registrar("REP", null, {rid: r.rid, nombre: r.nombre, activo: !r.activo}); pintarReps(); pintarTodo();
       };
-      acts.append(bn, ba); row.appendChild(acts);
+      const bv = document.createElement("button"); bv.type = "button"; bv.className = "small"; bv.textContent = v ? "Cambiar app" : "Vincular app";
+      bv.onclick = () => vincularApp(r);
+      acts.append(bn, bv, ba); row.appendChild(acts);
     }
     $("rpList").appendChild(row);
   });

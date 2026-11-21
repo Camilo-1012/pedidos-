@@ -7,9 +7,15 @@ function pintarDevolver(){
   botonesReps($("devReps"), r && r.rid, elegirRep);
   $("devInfo").hidden = !r; if(!r) return;
   const x = delRepartidor(r.rid);
-  kpis($("devKpis"), [[x.enRuta.length, "por liquidar", "zone"], [x.asignadosDia.length, "asignados hoy"], [x.devueltosDia.length, "devueltos hoy", "warn"], [x.entregadosDia.length, "entregados hoy", "ok"]]);
+  const noEstaba = x.enRuta.filter(p => p.noEstaba).length;
+  kpis($("devKpis"), [[x.enRuta.length, "por liquidar", "zone"], [noEstaba, "«no estaba»: deben volver", noEstaba ? "warn" : ""], [x.devueltosDia.length, "devueltos hoy"], [x.entregadosDia.length, "entregados hoy" + (VINC.has(r.rid) ? " (en vivo)" : ""), "ok"]]);
   $("devCerrar").disabled = !x.enRuta.length;
-  pintarLista($("devLista"), x.enRuta.map(p => liPaq(p, "Salió " + fechaHora(p.asignado))), 40, "No tiene paquetes por liquidar.");
+  $("devNota").textContent = VINC.has(r.rid)
+    ? `${r.nombre} usa la app: sus «Entregado» y «No estaba» llegan solos. Escanea lo que devuelve; al cerrar, lo que no reportó sigue con él, salvo lo que marques.`
+    : "Al cerrar, los paquetes que no devolvió quedan como entregados, salvo los que marques como faltantes.";
+  // Primero los «No estaba» (son los que tienen que volver a la bodega).
+  const orden = x.enRuta.slice().sort((a, b) => (b.noEstaba ? 1 : 0) - (a.noEstaba ? 1 : 0));
+  pintarLista($("devLista"), orden.map(p => liPaq(p, "Salió " + fechaHora(p.asignado))), 40, "No tiene paquetes por liquidar.");
 }
 async function devolverGuia(g){
   const r = repActual(); if(!r) return {tipo:"mal", txt:"Elige primero el repartidor."};
@@ -42,10 +48,12 @@ $("devCerrar").onclick = () => {
   const r = repActual(); if(!r) return;
   const x = delRepartidor(r.rid); if(!x.enRuta.length) return;
   mostrarListado("Liquidar a " + r.nombre,
-    `<p class="hint">Estos paquetes no se devolvieron. Por defecto quedan como <b>entregados</b>. Cambia los que no aparecen (faltante) o los que el repartidor sigue llevando.</p>
+    (VINC.has(r.rid)
+      ? `<p class="hint">${esc(r.nombre)} usa la app: sus entregas ya llegaron solas. Estos paquetes no los reportó como entregados ni los devolvió: por defecto <b>siguen con él</b>. Cambia los que entregó sin marcar o los que no aparecen (faltante).</p>`
+      : `<p class="hint">Estos paquetes no se devolvieron. Por defecto quedan como <b>entregados</b>. Cambia los que no aparecen (faltante) o los que el repartidor sigue llevando.</p>`) + `
      <div class="row"><button type="button" class="small" id="lqTodos">Todos entregados</button></div>
      <ul class="lista">${x.enRuta.map(p => `<li class="paq"><div><b>${esc(p.guia)}</b> ${p.emp ? `<span class="chip">${esc(p.emp)}</span>` : ""}<div class="hint">Salió ${esc(fechaHora(p.asignado))}</div></div>
-       <select data-guia="${esc(p.guia)}" aria-label="Resultado de ${esc(p.guia)}"><option value="ENTREGADO">Entregado</option><option value="FALTANTE">Faltante</option><option value="SIGUE">Sigue con él</option></select></li>`).join("")}</ul>
+       <select data-guia="${esc(p.guia)}" aria-label="Resultado de ${esc(p.guia)}"><option value="ENTREGADO">Entregado</option><option value="FALTANTE">Faltante</option><option value="SIGUE"${VINC.has(r.rid) ? " selected" : ""}>Sigue con él</option></select>${p.noEstaba ? `<div class="hint">No estaba ${esc(horaDe(p.noEstaba))}: debe devolverlo</div>` : ""}</li>`).join("")}</ul>
      <p class="hint" id="lqRes" role="status"></p>`,
     [["Cancelar", () => $("dlgLista").close()], ["Confirmar liquidación", () => confirmarLiquidacion(r), "primary"]]);
   const res = () => {

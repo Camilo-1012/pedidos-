@@ -4,7 +4,7 @@
    otro celular se acomodan en su lugar cuando llegan, y no hay sobrescrituras que pierdan información.
    Se guarda en IndexedDB (aguanta decenas de miles de eventos; localStorage no). */
 "use strict";
-const TIPOS = ["REP","ZONA","LOTE","LOTE_CERRADO","ESPERADO","RECIBIDO","NOVEDAD","UBICACION","ASIGNADO","DEVUELTO","ENTREGADO","FALTANTE","ANULAR"];
+const TIPOS = ["REP","ZONA","LOTE","LOTE_CERRADO","ESPERADO","RECIBIDO","NOVEDAD","UBICACION","ASIGNADO","DEVUELTO","ENTREGADO","NO_ENTREGADO","FALTANTE","ANULAR"];
 const ESTADOS = {ESPERADO:"Esperado (sin recibir)", BODEGA:"En bodega", RUTA:"En ruta", ENTREGADO:"Entregado", FALTANTE:"Faltante"};
 const RETENER_DIAS = 30;   // en el celular: paquetes cerrados (entregados/faltantes) hace más de 30 días se quitan
 
@@ -47,7 +47,7 @@ function calcPaq(guia){
   const evs = (POR_GUIA.get(guia) || []).slice().sort(ordenEv);
   const anulados = new Set(evs.filter(e => e.tipo === "ANULAR").map(e => e.d.ref));
   const p = {guia, emp:"", estado:"", espLote:"", recLote:"", rid:"", ultRid:"", recibido:"", asignado:"", cerrado:"",
-    devs:0, motivo:"", nov:[], conflicto:"", sinRecibir:false, ult:"", cl:null, kr:null, zidManual:"", evs:[]};
+    devs:0, motivo:"", nov:[], conflicto:"", sinRecibir:false, ult:"", cl:null, kr:null, zidManual:"", noEstaba:"", intentos:0, porRep:false, evs:[]};
   for(const e of evs){
     if(e.tipo === "ANULAR" || anulados.has(e.id)) continue;
     p.evs.push(e); p.ult = e.at;
@@ -65,10 +65,13 @@ function calcPaq(guia){
         p.conflicto = p.estado === "RUTA" && p.rid && p.rid !== d.rid && !d.reasigna
           ? `Asignada a ${repNombre(p.rid)} y a ${repNombre(d.rid)} (lecturas de dos celulares, quizá sin señal).` : "";
         if(p.estado !== "BODEGA" && p.estado !== "RUTA") p.sinRecibir = true;
-        p.estado = "RUTA"; p.rid = p.ultRid = d.rid; p.asignado = e.at; p.cerrado = "";
+        p.estado = "RUTA"; p.rid = p.ultRid = d.rid; p.asignado = e.at; p.cerrado = ""; p.noEstaba = ""; p.porRep = false;
         break;
-      case "DEVUELTO": p.conflicto = ""; p.estado = "BODEGA"; p.devs++; p.motivo = d.motivo || ""; p.ultRid = d.rid || p.rid; p.rid = ""; break;
-      case "ENTREGADO": p.conflicto = ""; p.estado = "ENTREGADO"; p.cerrado = e.at; p.ultRid = d.rid || p.rid; break;
+      case "DEVUELTO": p.noEstaba = ""; p.conflicto = ""; p.estado = "BODEGA"; p.devs++; p.motivo = d.motivo || ""; p.ultRid = d.rid || p.rid; p.rid = ""; break;
+      // Entregado: al liquidar (despachador) o reportado por el repartidor desde su Ruta (d.por_rep), que es definitivo.
+      case "ENTREGADO": p.conflicto = ""; p.noEstaba = ""; p.estado = "ENTREGADO"; p.cerrado = e.at; p.ultRid = d.rid || p.rid; p.porRep = !!d.por_rep; break;
+      // «No estaba» reportado desde la Ruta: sigue en ruta con él y debe volver a la bodega (o reintentar).
+      case "NO_ENTREGADO": if(p.estado === "RUTA"){ p.noEstaba = e.at; p.intentos++; p.motivo = d.motivo || "No estaba"; } break;
       case "FALTANTE": p.conflicto = ""; p.estado = "FALTANTE"; p.cerrado = e.at; p.ultRid = d.rid || p.rid; p.rid = ""; break;
       case "NOVEDAD": p.nov.push({at: e.at, nota: d.nota, por: e.por}); break;
       // Ubicación para la zona: solo número de calle y de carrera (sin placa, Ley 1581) o una zona elegida a mano.

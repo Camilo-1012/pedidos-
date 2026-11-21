@@ -37,7 +37,7 @@ create table if not exists public.bodega_eventos (
 alter table public.bodega_eventos drop constraint if exists bodega_eventos_tipo_check;
 alter table public.bodega_eventos drop constraint if exists bodega_eventos_tipo_ok;
 alter table public.bodega_eventos add constraint bodega_eventos_tipo_ok check (tipo in
-  ('REP','ZONA','LOTE','LOTE_CERRADO','ESPERADO','RECIBIDO','NOVEDAD','UBICACION','ASIGNADO','DEVUELTO','ENTREGADO','FALTANTE','ANULAR'));
+  ('REP','ZONA','LOTE','LOTE_CERRADO','ESPERADO','RECIBIDO','NOVEDAD','UBICACION','ASIGNADO','DEVUELTO','ENTREGADO','NO_ENTREGADO','FALTANTE','ANULAR'));
 alter table public.bodega_eventos drop constraint if exists bodega_eventos_guia_ok;
 alter table public.bodega_eventos add constraint bodega_eventos_guia_ok check ((tipo in ('REP','ZONA','LOTE','LOTE_CERRADO')) = (guia is null));
 create index if not exists bodega_eventos_srv on public.bodega_eventos (srv_at);
@@ -87,6 +87,91 @@ create policy "bodega: agregar eventos" on public.bodega_eventos
 revoke all on public.bodega_eventos, public.bodega_miembros from anon;
 grant select, insert on public.bodega_eventos to authenticated;
 grant select on public.bodega_miembros to authenticated;
+
+-- =====================================================================================
+-- CONEXIÓN CON RUTA (v2.31): el despachador asigna y al repartidor le aparece en su Ruta; el repartidor reporta
+-- «Entregado» y «No estaba». Cada repartidor usa su propia cuenta de Ruta (equipo_miembros, ver equipo.sql).
+-- =====================================================================================
+
+-- Repartidor de la bodega (rid, el de los eventos REP) ↔ cuenta de Ruta. Solo el administrador de la bodega lo cambia.
+create table if not exists public.bodega_vinculos (
+  rid     text primary key,
+  user_id uuid not null unique references auth.users(id) on delete cascade,
+  nombre  text,
+  creado  timestamptz not null default now()
+);
+alter table public.bodega_vinculos enable row level security;
+drop policy if exists "bodega: ver vinculos" on public.bodega_vinculos;
+create policy "bodega: ver vinculos" on public.bodega_vinculos
+  for select to authenticated using (public.bodega_es_miembro() or user_id = auth.uid());
+drop policy if exists "bodega: admin vincula" on public.bodega_vinculos;
+create policy "bodega: admin vincula" on public.bodega_vinculos
+  for all to authenticated using (public.bodega_es_admin()) with check (public.bodega_es_admin());
+revoke all on public.bodega_vinculos from anon;
+grant select, insert, update, delete on public.bodega_vinculos to authenticated;
+
+-- Para que el administrador elija a quién vincular: las cuentas del equipo de Ruta (solo nombre e id).
+create or replace function public.bodega_cuentas_ruta() returns table(user_id uuid, nombre text)
+language sql stable security definer set search_path = public as $$
+  select m.user_id, m.nombre from public.equipo_miembros m where public.bodega_es_admin() order by m.nombre;
+$$;
+-- Repartidor (rid) de la cuenta que llama, o null si no está vinculada.
+create or replace function public.bodega_mi_rid() returns text
+language sql stable security definer set search_path = public as $$
+  select rid from public.bodega_vinculos where user_id = auth.uid();
+$$;
+
+-- Último movimiento que cambia el estado de cada guía (sin los deshechos con ANULAR), de los últimos 20 días.
+create or replace function public.bodega_estado_guias() returns table(guia text, tipo text, rid text, at timestamptz)
+language sql stable security definer set search_path = public as $$
+  select distinct on (e.guia) e.guia, e.tipo, e.d->>'rid', e.at
+  from public.bodega_eventos e
+  where e.guia is not null and e.at > now() - interval '20 days'
+    and e.tipo in ('RECIBIDO','ASIGNADO','DEVUELTO','ENTREGADO','FALTANTE')
+    and not exists (select 1 from public.bodega_eventos a where a.tipo = 'ANULAR' and a.d->>'ref' = e.id::text)
+  order by e.guia, e.at desc, e.id desc;
+$$;
+revoke execute on function public.bodega_estado_guias() from public, anon, authenticated;   -- uso interno
+
+-- ¿La guía está hoy en ruta con ese repartidor?
+create or replace function public.bodega_asignada_a(g text, r text) returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (select 1 from public.bodega_estado_guias() x where x.guia = g and x.tipo = 'ASIGNADO' and x.rid = r);
+$$;
+
+-- Lo que la Ruta del repartidor muestra como «asignado por la bodega»: solo guía, empresa, hora y la calle/carrera
+-- que anotó la bodega (sin datos del cliente). Si la cuenta no está vinculada, no devuelve nada.
+create or replace function public.bodega_mis_asignados()
+returns table(guia text, emp text, asignado timestamptz, cl int, kr int, rid text)
+language sql stable security definer set search_path = public as $$
+  with mi as (select rid from public.bodega_vinculos where user_id = auth.uid())
+  select x.guia,
+    (select r.d->>'emp' from public.bodega_eventos r where r.guia = x.guia and r.tipo in ('RECIBIDO','ESPERADO') and r.d ? 'emp' order by r.at desc limit 1),
+    x.at,
+    (select (u.d->>'cl')::int from public.bodega_eventos u where u.guia = x.guia and u.tipo = 'UBICACION' and u.d ? 'cl' order by u.at desc limit 1),
+    (select (u.d->>'kr')::int from public.bodega_eventos u where u.guia = x.guia and u.tipo = 'UBICACION' and u.d ? 'kr' order by u.at desc limit 1),
+    x.rid
+  from public.bodega_estado_guias() x join mi on x.rid = mi.rid
+  where x.tipo = 'ASIGNADO'
+  order by x.at;
+$$;
+grant execute on function public.bodega_mis_asignados(), public.bodega_mi_rid(), public.bodega_cuentas_ruta() to authenticated;
+create index if not exists bodega_eventos_ref on public.bodega_eventos ((d->>'ref')) where tipo = 'ANULAR';
+
+-- ¿El evento «ref» es un reporte (ENTREGADO / NO_ENTREGADO) hecho por quien llama? (el repartidor no lee la tabla)
+create or replace function public.bodega_es_mi_reporte(ref text) returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (select 1 from public.bodega_eventos x where x.id::text = ref and x.user_id = auth.uid() and x.tipo in ('ENTREGADO','NO_ENTREGADO'));
+$$;
+
+-- El repartidor solo puede: reportar ENTREGADO o NO_ENTREGADO de guías que hoy están en ruta con él, a su nombre,
+-- y deshacer (ANULAR) sus propios reportes. No puede leer la tabla de eventos (solo bodega_mis_asignados()).
+drop policy if exists "bodega: repartidor reporta" on public.bodega_eventos;
+create policy "bodega: repartidor reporta" on public.bodega_eventos
+  for insert to authenticated with check (
+    (tipo in ('ENTREGADO','NO_ENTREGADO') and d->>'rid' = public.bodega_mi_rid() and public.bodega_asignada_a(guia, d->>'rid'))
+    or (tipo = 'ANULAR' and public.bodega_mi_rid() is not null and public.bodega_es_mi_reporte(d->>'ref'))
+  );
 
 -- ---------------- Miembros: CAMBIA LOS CORREOS ----------------
 insert into public.bodega_miembros (user_id, nombre, rol)

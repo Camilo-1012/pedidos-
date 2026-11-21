@@ -87,7 +87,9 @@ function wazeUrl(s){
   return "https://waze.com/ul?q=" + encodeURIComponent(navQuery(s)) + "&navigate=yes";
 }
 function openExternal(url){ const a = document.createElement("a"); a.href = url; a.target = "_blank"; a.rel = "noopener"; document.body.appendChild(a); a.click(); a.remove(); }
-function nextStop(){ return state.stops.find(q=>q.status==="pend" && q.x!==null) || state.stops.find(q=>q.status==="pend") || state.stops.find(q=>q.status==="fail"); }
+// Los paquetes de la bodega que aún no tienen dirección no cuentan como «siguiente» (no hay a dónde ir).
+const sinDirBod = q=>typeof sinDireccion === "function" && sinDireccion(q);
+function nextStop(){ return state.stops.find(q=>q.status==="pend" && q.x!==null) || state.stops.find(q=>q.status==="pend" && !sinDirBod(q)) || state.stops.find(q=>q.status==="fail" && !sinDirBod(q)); }
 function mapsUrl(s){ return "https://www.google.com/maps/dir/?api=1&destination=" + encodeURIComponent(navQuery(s)) + "&travelmode=" + (esPie() ? "walking" : "driving"); }
 function mapsMultiUrl(stops){
   return "https://www.google.com/maps/dir/" + stops.map(s=>encodeURIComponent(navQuery(s))).join("/") ;
@@ -108,7 +110,13 @@ function renderPaso(){
   if(!reales.length){ box.hidden = true; return; }
   const q = l=>l.reduce((a,s)=>a+(s.qty||1),0);
   let txt, sub, btns;
-  if(pend.length > fall.length){
+  const sinDir = pend.filter(sinDirBod);
+  if(sinDir.length){
+    // Paquetes que asignó la bodega y aún no tienen dirección: primero se completan (escaneando cada etiqueta).
+    txt = `${q(pend)} pedido(s) por entregar · ${sinDir.length} sin dirección`;
+    sub = "La bodega te asignó paquetes: escanea cada etiqueta (la app la reconoce) o toca «Completar» y pon la dirección.";
+    btns = [["Escanear y completar", "primary", "btnScan"], ["Ordenar ruta", "", "btnSort"]];
+  } else if(pend.length > fall.length){
     const conocidas = new Set(state.suggestedIds||[]);
     const sinOrden = pend.filter(s=>!conocidas.has(s.id)).length;
     txt = `${q(pend)} pedido(s) por entregar` + (sinOrden ? ` · ${sinOrden} sin ordenar` : "");
@@ -232,19 +240,21 @@ function render(){
   // Tarjetas compactas (por defecto): Waze, Llamar, Entregado y «⋯»; el resto aparece al tocar «⋯».
   const compactas = !state.tarjetasCompletas;
   const html = state.stops.map((s,idx)=>{
-    const isDone = s.status==="done", isFail = s.status==="fail", unk = s.x===null;
+    const isDone = s.status==="done", isFail = s.status==="fail", unk = s.x===null, sinDir = sinDirBod(s);
     const numTxt = isDone ? "✓" : String(s.num);
     const cls = "stop" + (isDone?" done":"") + (isFail?" fail":"") + (unk&&!isDone?" unk":"") + (compactas?" compacta":"") + (compactas && abiertas.has(s.id)?" abierta":"");
     return `<li class="${cls}" data-id="${s.id}">
       <div class="num" aria-label="Parada ${numTxt}${(s.qty||1)>1?", "+s.qty+" paquetes":""}">${numTxt}${(s.qty||1)>1?`<span class="qty">×${s.qty}</span>`:""}</div>
       <div>
-        <div class="addr">${esc(s.label || s.addr)}</div>
+        <div class="addr">${sinDir ? "Falta la dirección" : esc(s.label || s.addr)}</div>
         ${s.guia ? `<div class="guiaLine">${guias(s).map(g=>`<span>${esc(g)}</span>`).join("")}</div>` : ""}
         <div class="meta">
           ${s.zone?`<span class="chip zone">ST ${esc(s.zone)}</span>`:""}
           <span class="chip unit">${esc(unitText(s))}</span>
           ${s.barrio?`<span class="chip">${esc(s.barrio)}</span>`:""}
-          ${unk?'<span class="chip warn">Revisar dirección</span>':""}
+          ${s.bodega?`<span class="chip bod">Bodega${s.bodega.emp ? " · " + esc(s.bodega.emp) : ""}</span>`:""}
+          ${s.bodegaFuera && !isDone?'<span class="chip warn">La bodega ya no te lo tiene asignado</span>':""}
+          ${unk && !sinDir?'<span class="chip warn">Revisar dirección</span>':""}
           ${s.geo==="barrio"?`<span class="chip warn">Ubicada por barrio (aprox.)</span>`:""}
           ${s.geo==="gps" && !isDone?`<span class="chip ok">Ubicación exacta</span>`:""}
           ${!isDone && zoneIssue(s)?`<span class="chip warn">Fuera de tu zona: ${esc(zoneIssue(s))}</span>`:""}
@@ -259,7 +269,7 @@ function render(){
         ${s.notes?`<div class="who">${esc(s.notes)}</div>`:""}
       </div>
       <div class="actions">
-        <a class="btn small waze" href="${wazeUrl(s)}" target="_blank" rel="noopener">Waze</a>
+        ${sinDir ? `<button class="small primary" data-act="edit">Completar</button>` : `<a class="btn small waze" href="${wazeUrl(s)}" target="_blank" rel="noopener">Waze</a>`}
         ${compactas ? "" : `<a class="btn small" href="${mapsUrl(s)}" target="_blank" rel="noopener">Maps</a>`}
         ${s.phone && dialNumber(s.phone)?`<a class="btn small" href="tel:${dialNumber(s.phone)}">Llamar</a>`:`<button class="small" data-act="edit">Tel.</button>`}
         <button class="small ${isDone?"":"primary"}" data-act="done">${isDone?"Deshacer":"Entregado"}</button>
@@ -293,6 +303,7 @@ function render(){
 
 function toggleDone(s){
   const i = state.stops.indexOf(s); if(i<0) return;
+  const antes = s.status;
   {
       const from = currentOrigin();
       s.status = s.status==="done" ? "pend" : "done";
@@ -306,11 +317,13 @@ function toggleDone(s){
         recordDay();
         if(state.autoWaze !== false){ const nx = nextStop(); if(nx){ save(); render(); openExternal(wazeUrl(nx)); return; } else toast("¡Terminaste! No quedan entregas pendientes."); } }
       else { if(state.lastDoneId===s.id) state.lastDoneId = null; recordDay(); }   // al deshacer, baja el acumulado
+        if(typeof bodegaReportar === "function") bodegaReportar(s, antes);   // paquetes de la bodega: avisa a la bodega
         save(); render();
 }
 // «No estaba»: queda como intento fallido al final de los pendientes (o se quita la marca).
 function toggleFail(s){
   const i = state.stops.indexOf(s); if(i<0) return;
+  const antes = s.status;
   s.status = s.status==="fail" ? "pend" : "fail";
   if(s.status==="fail"){
     s.failAt = Date.now(); s.failCount = (s.failCount||0)+1;
@@ -319,6 +332,7 @@ function toggleFail(s){
     state.stops.splice(firstDone<0?state.stops.length:firstDone,0,s);
     toast("Marcado como no estaba. Se movió al final de los pendientes.");
   }
+  if(typeof bodegaReportar === "function") bodegaReportar(s, antes);
   save(); render();
 }
 function onListClick(e){
@@ -473,7 +487,7 @@ $("fUnit").addEventListener("change", ()=>{
 });
 $("qtyPlus").onclick  = ()=>{ $("fQty").value = Math.min(99,(parseInt($("fQty").value,10)||1)+1); };
 // Varios paquetes a la misma dirección van en una sola parada con su cantidad.
-function stopKey(x){ const p = parseAddress(x.label || x.addr); return p ? p.label.toUpperCase() : norm(x.addr); }
+function stopKey(x){ const p = parseAddress(x.label || x.addr); if(!p && !String(x.addr||"").trim()) return "#" + (x.id || Math.random()); return p ? p.label.toUpperCase() : norm(x.addr); }
 function guias(st){ return (st.guia||"").split(/[,\s]+/).filter(Boolean); }
 function hasGuia(g){ return !!findGuia(g); }
 // Busca la parada que tiene esa guía (exacta). «except» deja por fuera la parada que se está editando.
@@ -514,6 +528,7 @@ $("frmEdit").addEventListener("submit", e=>{
     if(d.guia){ const dup = guias(d).find(hasGuia); if(dup){ $("dlgEdit").close(); dupAlert(dup); return; } }
     state.stops = state.stops.filter(s=>!s.example);
     const r = addOrMerge(d);
+    if(typeof bodegaAvisoNuevo === "function") bodegaAvisoNuevo(r.stop);
     if(r.filled) toast(`Guía agregada a la parada que ya tenías: ${r.stop.label||r.stop.addr}.`);
     else if(r.mismos) toast(`Agregado aparte. Ojo: ahora hay ${r.mismos+1} pedidos para ${r.stop.label||r.stop.addr}.`);
     else toast(p ? "Paquete agregado en su lugar de la ruta." : "Agregado, pero la dirección quedó para revisar.");

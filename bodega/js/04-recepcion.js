@@ -8,7 +8,9 @@ function chipEstado(p){
 function liPaq(p, extra){
   const z = ZONAS.size ? zonaDe(p) : null;
   const marcas = [ZONAS.size ? chipZona(z) : "", p.emp ? `<span class="chip">${esc(p.emp)}</span>` : "", p.nov.length ? `<span class="chip warn">Novedad</span>` : "",
-    p.conflicto ? `<span class="chip bad">Conflicto</span>` : "", p.devs ? `<span class="chip">Devuelto ${p.devs}×</span>` : ""].join("");
+    p.conflicto ? `<span class="chip bad">Conflicto</span>` : "",
+    p.estado === "RUTA" && p.noEstaba ? `<span class="chip warn">No estaba ${esc(horaDe(p.noEstaba))} · debe volver</span>` : "",
+    p.estado === "ENTREGADO" && p.porRep ? `<span class="chip ok">Reportado por el repartidor</span>` : "", p.devs ? `<span class="chip">Devuelto ${p.devs}×</span>` : ""].join("");
   return `<li class="paq" data-guia="${esc(p.guia)}"><div><b>${esc(p.guia)}</b> ${chipEstado(p)}${marcas}</div>${extra ? `<div class="hint">${extra}</div>` : ""}</li>`;
 }
 function kpis(el, lista){ el.innerHTML = lista.map(([n, t, cls]) => `<div class="kpi ${cls || ""}"><b>${n}</b><span>${esc(t)}</span></div>`).join(""); }

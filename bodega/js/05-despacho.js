@@ -5,7 +5,7 @@ function botonesReps(box, sel, alElegir){
   const reps = repsActivos();
   if(!reps.length){ box.innerHTML = `<p class="hint">No hay repartidores. Agrégalos en el menú ☰ → Repartidores.</p>`; return; }
   const enRuta = new Map(); for(const p of PAQ.values()) if(p.estado === "RUTA") enRuta.set(p.rid, (enRuta.get(p.rid) || 0) + 1);
-  box.innerHTML = reps.map(r => `<button type="button" data-rid="${esc(r.rid)}" aria-pressed="${r.rid === sel}">${esc(r.nombre)}<small>${enRuta.get(r.rid) || 0} en ruta</small></button>`).join("");
+  box.innerHTML = reps.map(r => `<button type="button" data-rid="${esc(r.rid)}" aria-pressed="${r.rid === sel}">${esc(r.nombre)}<small>${enRuta.get(r.rid) || 0} en ruta${VINC.has(r.rid) ? " · 📱" : ""}</small></button>`).join("");
   box.querySelectorAll("button").forEach(b => b.onclick = () => alElegir(b.dataset.rid));
 }
 const repActual = () => { const r = REPS.get(prefs.rep); return r && r.activo ? r : null; };
@@ -40,7 +40,7 @@ async function asignarGuia(g){
   const q = paq(g), z = zonaDe(q);
   // Zona de otro repartidor: solo se avisa (puede ser un apoyo), no se bloquea.
   const otraZona = z && z.rid && z.rid !== r.rid;
-  return {tipo:"ok", txt:"Para " + r.nombre + (z ? " · " + z.nombre : "") + (otraZona ? " · ⚠ zona de " + repNombre(z.rid) : "") + (q.nov.length ? " · tiene novedad: " + q.nov[q.nov.length - 1].nota : ""), evs, cls: q.nov.length || otraZona ? "aviso" : ""};
+  return {tipo:"ok", txt:"Para " + r.nombre + (VINC.has(r.rid) ? " · ya le sale en su app" : "") + (z ? " · " + z.nombre : "") + (otraZona ? " · ⚠ zona de " + repNombre(z.rid) : "") + (q.nov.length ? " · tiene novedad: " + q.nov[q.nov.length - 1].nota : ""), evs, cls: q.nov.length || otraZona ? "aviso" : ""};
 }
 const cfgDespacho = () => ({
   titulo:"Despachar", alLeer: asignarGuia,

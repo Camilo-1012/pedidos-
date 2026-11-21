@@ -66,6 +66,7 @@ textarea{min-height:110px;resize:vertical}
 .chip.ok{color:var(--ok);border-color:currentColor}
 .chip.warn{color:var(--warn);border-color:currentColor}
 .chip.zone{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.chip.bod{background:var(--ink);color:var(--bg);border-color:var(--ink)}
 .chip.ex{color:var(--muted);border-style:dashed}
 .progress{height:6px;background:var(--line);border-radius:3px;overflow:hidden}
 .progress i{display:block;height:100%;width:0;background:var(--accent);transition:width .2s}

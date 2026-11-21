@@ -249,7 +249,9 @@ async function scanTick(){
       if(live.mode==="find"){ const g = live.codeGuia; live.done = true; stopScan(); return showFind(g); }
       if(live.mode==="verify"){ (live.seen||(live.seen=new Set())).add(live.codeGuia); verifyGuia(live.codeGuia); live.codeGuia = ""; return; }
       if(live.mode==="assign"){ (live.seen||(live.seen=new Set())).add(live.codeGuia); const g = live.codeGuia; live.codeGuia = ""; assignGuia(g); return; }
-      if(hasGuia(live.codeGuia)){ const g = live.codeGuia; stopScan(); dupAlert(g); return; }
+      // Paquete de la bodega aún sin dirección: se sigue leyendo la etiqueta para sacar la dirección (no es repetido).
+      if(hasGuia(live.codeGuia) && typeof porCompletar === "function" && porCompletar(live.codeGuia)){ setStat("stCode", true, "Código: " + live.codeGuia + " · asignado por la bodega"); }
+      else if(hasGuia(live.codeGuia)){ const g = live.codeGuia; stopScan(); dupAlert(g); return; }
     }
   }catch(e){ console.warn(e); }
   finally{ scanBusy = false; }
@@ -329,6 +331,7 @@ async function finishScan(extra){
   if(extra) for(const k in extra) if(extra[k] && !d[k]) d[k] = extra[k];
   if(live.guia) d.guia = live.guia;
   stopScan();
+  if(d.guia && typeof completarBodega === "function" && completarBodega(d)){ fromScan = true; return; }
   if(d.guia && hasGuia(d.guia)){ dupAlert(d.guia); return; }
   fromScan = true;
   openEdit(d, true);
@@ -387,6 +390,7 @@ $("scanShot").onclick = async ()=>{
   if(!parseAddress(d.addr) && keep.best) d.addr = keep.best;
   for(const k of ["phone","name","zone","barrio","type","unit"]) if(!d[k] && keep[k]) d[k] = keep[k];
   if(keep.guia) d.guia = keep.guia;
+  if(d.guia && typeof completarBodega === "function" && completarBodega(d)){ fromScan = true; return; }
   if(d.guia && hasGuia(d.guia)){ dupAlert(d.guia); return; }
   fromScan = true; openEdit(d, true);
   if(!parseAddress(d.addr)) toast("No pude leer la dirección. Corrígela a mano o dicta con «Dictar».");
@@ -412,6 +416,7 @@ $("photo").addEventListener("change", async e=>{
     const d = codes.addr ? {...codes.addr} : await ocrSource(bmp, true);
     if(codes.guia) d.guia = codes.guia;
     $("ocrBox").hidden = true;
+    if(d.guia && typeof completarBodega === "function" && completarBodega(d)) return;
     if(d.guia && hasGuia(d.guia)){ dupAlert(d.guia); return; }
     openEdit(d, true);
     if(!parseAddress(d.addr)) toast("No pude leer bien la dirección. Corrígela a mano.");
