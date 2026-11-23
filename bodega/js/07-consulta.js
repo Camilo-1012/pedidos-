@@ -6,7 +6,8 @@ const TXT_EV = {ESPERADO:"En listado esperado", RECIBIDO:"Recibida en bodega", N
 function detalleEv(e){
   const d = e.d || {};
   switch(e.tipo){
-    case "ESPERADO": case "RECIBIDO": return (LOTES.get(d.lid) || {}).nombre || (d.lid ? "" : "sin lote");
+    case "ESPERADO": return (LOTES.get(d.lid) || {}).nombre || (d.lid ? "" : "sin lote");
+    case "RECIBIDO": return ((LOTES.get(d.lid) || {}).nombre || (d.lid ? "" : "sin lote")) + (d.al_despachar ? " · al despacharla (sin escaneo de recepción)" : "");
     case "ASIGNADO": return "a " + repNombre(d.rid) + (d.reasigna && d.de ? " (antes la tenía " + repNombre(d.de) + ")" : "");
     case "DEVUELTO": return "por " + repNombre(d.rid) + (d.motivo ? " · " + d.motivo : "");
     case "ENTREGADO": return d.por_rep ? "reportó " + repNombre(d.rid) + " desde su app" : "al liquidar a " + repNombre(d.rid);

@@ -81,3 +81,72 @@ test("columna elegida a mano se recuerda; archivos que no son listados se explic
   await expect(page.locator("#imErr")).toContainText("es un programa (.exe)");
   await expect(page.locator("#imPaso2")).toBeHidden();
 });
+
+test("Despachar un paquete del listado importado lo cuenta como recibido en su lote, sin preguntar; uno fuera de listado sí pregunta", async ({ page }) => {
+  const errs = A.vigilarErrores(page);
+  await A.entrar(page);
+  await A.agregarRep(page, "Jairo");
+  await A.nuevoLote(page, "Xcargo", "Camión");
+  await abrir(page);
+  await page.setInputFiles("#imFile", ARCH("listado-ejemplo.xlsx"));
+  await page.click("#imOk");
+  expect(await A.kpi(page, "recKpis", 0)).toBe("4");          // esperados
+  expect(await A.kpi(page, "recKpis", 1)).toBe("0");          // recibidos
+  await page.click('nav.tabs button[data-v="vDespachar"]');
+  await page.locator("#desReps button", { hasText: "Jairo" }).click();
+  await page.click("#desScan");
+  expect((await A.leer(page, "XC1000000001")).txt).toBe("Recibida y para Jairo");
+  expect((await A.leer(page, "XC1000000002")).txt).toBe("Recibida y para Jairo");
+  // Fuera de todo listado: pregunta antes (puede ser un error de lectura).
+  const p = A.leer(page, "ZZ99999999");
+  await expect(page.locator("#scAsk")).toContainText("no está en ningún listado");
+  await page.click("#scAskYes"); await p;
+  await page.click("#scClose");
+  await page.click('nav.tabs button[data-v="vRecibir"]');
+  expect(await A.kpi(page, "recKpis", 1)).toBe("3");          // recibidos: los 2 del listado + el de fuera (entró al lote abierto)
+  expect(await A.kpi(page, "recKpis", 2)).toBe("2");          // faltan
+  expect(await A.kpi(page, "recKpis", 3)).toBe("1");          // fuera del listado
+  const h = await page.evaluate(() => paq("XC1000000001"));
+  expect([h.estado, h.recLote === h.espLote]).toEqual(["RUTA", true]);
+  expect(await page.evaluate(() => detalleEv([...EV.values()].find(e => e.tipo === "RECIBIDO" && e.guia === "XC1000000001")))).toContain("al despacharla");
+  expect(errs).toEqual([]);
+});
+
+test("Listado de 100 (Xcargo + iMile): despachar sin recibir antes descuenta de faltantes y separa por empresa según el código", async ({ page }) => {
+  const errs = A.vigilarErrores(page);
+  await A.entrar(page);
+  await A.agregarRep(page, "Jairo"); await A.agregarRep(page, "Pedro");
+  await A.nuevoLote(page, "Otra", "Mixto");                   // lote sin empresa definida: la da el código
+  await abrir(page);
+  await page.setInputFiles("#imFile", ARCH("prueba-100-paquetes.xlsx"));
+  await expect(kpiImp(page, 0)).toHaveText("100");
+  await page.click("#imOk");
+  const [xc, im] = await page.evaluate(() => { const ps = paquetes(() => true); return [ps.filter(p => p.emp === "Xcargo").map(p => p.guia), ps.filter(p => p.emp === "iMile").map(p => p.guia)]; });
+  expect([xc.length, im.length]).toEqual([60, 40]);
+  expect(xc.every(g => g.length === 16) && im.every(g => g.length === 13)).toBe(true);
+  await page.click('nav.tabs button[data-v="vDespachar"]');
+  await page.locator("#desReps button", { hasText: "Jairo" }).click();
+  await page.click("#desScan");
+  for(const g of [...xc.slice(0, 3), ...im.slice(0, 2)]) expect((await A.leer(page, g)).txt).toBe("Recibida y para Jairo");
+  await expect(page.locator("#scTarget")).toContainText("lleva 5 (3 Xcargo · 2 iMile)");
+  await page.click("#scClose");
+  await expect(page.locator("#desReps button", { hasText: "Jairo" })).toContainText("5 en ruta (3 Xcargo · 2 iMile)");
+  await expect(page.locator("#desEmp .kpi")).toHaveText(["3lleva de Xcargo", "2lleva de iMile"]);
+  await page.click("#desPlanilla");
+  await expect(page.locator("#planilla")).toContainText("Xcargo: 3 · iMile: 2");
+  await page.locator("#dlgLista .dlgHead button").click();
+  // Un código suelto (fuera del listado) también se clasifica por su formato.
+  await page.locator("#desReps button", { hasText: "Pedro" }).click();
+  await expect(page.locator("#desEmp")).toBeHidden();
+  await page.click("#desScan");
+  const p = A.leer(page, "6110599999999"); await page.click("#scAskYes"); await p;
+  await page.click("#scClose");
+  expect(await page.evaluate(() => paq("6110599999999").emp)).toBe("iMile");
+  // Recibir: los despachados cuentan como recibidos del lote, sin escanear dos veces.
+  await page.click('nav.tabs button[data-v="vRecibir"]');
+  expect(await A.kpi(page, "recKpis", 0)).toBe("100");
+  expect(await A.kpi(page, "recKpis", 1)).toBe("6");          // 5 del listado + el suelto (entró al lote abierto)
+  expect(await A.kpi(page, "recKpis", 2)).toBe("95");         // faltan: solo descuentan los del listado
+  expect(await A.kpi(page, "recKpis", 3)).toBe("1");          // fuera del listado
+  expect(errs).toEqual([]);
+});

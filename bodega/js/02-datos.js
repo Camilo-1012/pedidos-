@@ -84,6 +84,7 @@ function calcPaq(guia){
     }
   }
   if(!p.evs.length) PAQ.delete(guia); else PAQ.set(guia, p);
+  p.emp = empresaPorGuia(guia) || p.emp;          // el formato del código manda sobre el lote o el listado
   return p;
 }
 function aplicarCatalogo(e){
