@@ -238,7 +238,9 @@ function detectarColumnas(tabla){
   return mejor;
 }
 const firmaEnc = fila => (fila || []).map(sinTilde).join("|");
-const MAPAS_KEY = "bodega.importar.mapas.v1";
+// v2.43: solo se recuerda lo que la persona cambió a mano (v1 guardaba todo, incluso lo que la detección no encontró,
+// y eso bloqueaba columnas que versiones nuevas sí reconocen, como «Calle[*]»). Las elecciones de v1 se descartan.
+const MAPAS_KEY = "bodega.importar.mapas.v2";
 
 /* ============ Pantalla: elegir archivo → revisar columnas → importar ============ */
 let imp = null;   // {nombre, tabla, filaEnc, map, emp, destino}
@@ -264,7 +266,7 @@ function abrirImportar(){
       // Lo elegido a mano se respeta (null = «no usar»); los campos nuevos que no estaban guardados se detectan.
       const map = {...det.map};
       if(guardado) for(const [k, v] of Object.entries(guardado)){ if(v === null || v === undefined) delete map[k]; else map[k] = v; }
-      imp = {nombre: f.name, tabla, filaEnc: det.fila, map};
+      imp = {nombre: f.name, tabla, filaEnc: det.fila, map, manual: new Set(guardado ? Object.keys(guardado) : [])};
       $("imErr").textContent = "";
       pintarPaso2();
     }catch(x){ imp = null; $("imErr").textContent = "No se pudo leer «" + f.name + "»: " + (x.message || x) + "."; }
@@ -298,7 +300,7 @@ function pintarPaso2(){
     <div class="kpis"><div class="kpi ok"><b>${r.validas}</b><span>guías a importar</span></div><div class="kpi${r.rep ? " warn" : ""}"><b>${r.rep}</b><span>repetidas en el archivo</span></div><div class="kpi${r.sinGuia ? " warn" : ""}"><b>${r.sinGuia}</b><span>filas sin guía válida</span></div><div class="kpi"><b>${imp.map.dir !== undefined ? r.conDir : "—"}</b><span>con dirección (zona)</span></div></div>
     ${r.yaEst ? `<p class="hint">${r.yaEst} guía(s) ya estaban en el listado de otro lote: se dejan donde están.</p>` : ""}
     <p class="hint">En el histórico solo queda la guía y la calle/carrera (para la zona). Dirección, teléfono, nombre, barrio y apto van aparte, solo para el repartidor al que se le asigne cada paquete, y se borran solos a los 30 días (Ley 1581).</p>`;
-  box.querySelectorAll("select[data-campo]").forEach(s => s.onchange = () => { imp.map[s.dataset.campo] = s.value === "" ? undefined : +s.value; pintarPaso2(); });
+  box.querySelectorAll("select[data-campo]").forEach(s => s.onchange = () => { imp.map[s.dataset.campo] = s.value === "" ? undefined : +s.value; imp.manual.add(s.dataset.campo); pintarPaso2(); });
   $("imOk").disabled = !r.validas;
 }
 function importarAhora(){
@@ -318,7 +320,7 @@ function importarAhora(){
     const lid = uuid(); registrar("LOTE", null, {lid, nombre: imp.nombre.replace(/\.[^.]+$/, "").slice(0, 40), emp: empFija, esperado: 0});
     prefs.lote = lid; savePrefs(); l = LOTES.get(lid);
   }
-  if(imp.filaEnc >= 0){ const m = store.get(MAPAS_KEY) || {}; m[firmaEnc(imp.tabla[imp.filaEnc])] = Object.fromEntries(Object.keys(CAMPOS).map(k => [k, imp.map[k] ?? null])); store.set(MAPAS_KEY, m); }
+  if(imp.filaEnc >= 0 && imp.manual.size){ const m = store.get(MAPAS_KEY) || {}; m[firmaEnc(imp.tabla[imp.filaEnc])] = Object.fromEntries([...imp.manual].map(k => [k, imp.map[k] ?? null])); store.set(MAPAS_KEY, m); }
   const vistos = new Set(); let nuevas = 0, zonas = 0, otras = 0, recibidas = 0;
   const datos = [];   // v2.41: datos de entrega para la Ruta del repartidor (van a otra tabla, no al histórico)
   const celda = (f, k) => imp.map[k] !== undefined ? String(f[imp.map[k]] ?? "").replace(/\s+/g, " ").trim() : "";

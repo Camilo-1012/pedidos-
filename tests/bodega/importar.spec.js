@@ -203,3 +203,13 @@ test("v2.42: formato real de Xcargo (cargue_pedidos.xlsx): columna «Calle[*]» 
   expect(await page.evaluate(() => ["calle150b#120c64", "crr 123#131c-56", "Centro comercial de prueba"].map(direccionLegible))).toEqual(["calle150b#120c64", "CARRERA 123#131C-56", "Centro comercial de prueba"]);
   expect(errs).toEqual([]);
 });
+
+test("v2.43: una elección vieja guardada (v1, sin la dirección) no impide reconocer «Calle[*]»", async ({ page }) => {
+  await A.entrar(page);
+  // Como quedó en el celular tras importar con v2.41: dirección «no usar» porque no se reconocía.
+  await page.evaluate(() => { const enc = ["Nombre(s) del cliente", "Celular", "Calle[*]", "Tracking number"]; localStorage.setItem("bodega.importar.mapas.v1", JSON.stringify({ [firmaEnc(enc)]: { guia: 3, dir: null, emp: null, tel: 1, nom: 0, bar: null, uni: null } })); });
+  await abrir(page);
+  await page.setInputFiles("#imFile", ARCH("formato-xcargo-real.xlsx"));
+  await expect(page.locator('#imPaso2 select[data-campo="dir"] option:checked')).toContainText("Calle[*]");
+  await expect(kpiImp(page, 3)).toHaveText("7");
+});
