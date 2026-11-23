@@ -422,3 +422,19 @@ li.stop.compacta.abierta .masBtn{background:var(--ink);color:var(--bg);border-co
 .letras button.abc{flex:1.3 0 52px;font-size:14px}
 .bqCargar{display:flex;flex-direction:column;gap:6px;border:1px dashed var(--line);border-radius:12px;padding:10px}
 .bqCargar.vacio{border-style:solid;border-color:var(--accent)}
+
+/* v2.35: Personas del equipo (crear usuarios desde la app) */
+#dlgPersonas .peBox{padding:16px;display:flex;flex-direction:column;gap:12px}
+.peForm{display:flex;flex-direction:column;gap:10px;padding:12px;border:1px solid var(--line);border-radius:12px}
+.peForm h3{margin:0}
+.peRol{border:0;padding:0;margin:0;display:flex;flex-direction:column;gap:8px}
+.peRol legend{font-weight:600;margin-bottom:4px}
+.peRol label,.peCheck{display:flex;flex-direction:row;align-items:center;gap:8px;font-weight:500}
+.peRol input,.peCheck input{width:22px;height:22px;flex:0 0 auto}
+.peRol small,.peCheck small,.peForm label small{opacity:.75;font-weight:400}
+.peLista{display:flex;flex-direction:column;gap:8px}
+.peCard{display:flex;flex-direction:column;gap:8px;padding:12px;border:1px solid var(--line);border-radius:12px}
+.peCard.off{opacity:.6}
+.peListo{padding:12px;border:2px solid var(--accent);border-radius:12px}
+.peDatos{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:17px;user-select:all}
+.peDatos b{font-family:ui-monospace,Menlo,Consolas,monospace;word-break:break-all}
