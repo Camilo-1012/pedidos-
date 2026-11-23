@@ -321,7 +321,27 @@ header.top .primary .ico{color:var(--accent-ink)}
 .hdrBtns .grow{flex:1 1 auto;min-height:44px;font-size:17px}
 /* Encabezado compacto: título + menú (usuario, equipo, bloquear); debajo Conducir y el estado del equipo */
 .hdrRow{display:flex;align-items:center;justify-content:space-between;gap:8px}
-.hdrMenu{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;justify-content:flex-end}
+/* Menú ☰ en lista (v2.32): selector de pantalla arriba y una opción por renglón, con ícono y descripción */
+.hdrMenu{display:flex;flex-direction:column;margin-top:10px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.16);border-radius:14px;padding:6px}
+.hdrMenu .mnItem{display:flex;align-items:center;justify-content:flex-start;gap:14px;width:100%;min-height:54px;padding:8px 12px;background:transparent;color:var(--bg);border:none;border-radius:10px;text-align:left;font-size:17px;font-weight:600}
+.hdrMenu .mnItem[hidden]{display:none}
+.hdrMenu .mnItem + .mnItem{border-top:1px solid rgba(255,255,255,.08);border-radius:0}
+.hdrMenu .mnItem:hover,.hdrMenu .mnItem:active{background:rgba(255,255,255,.08)}
+.hdrMenu .mnItem .ico{width:24px;height:24px;flex:none;color:var(--accent)}
+.hdrMenu .mnItem::after{content:"›";margin-left:auto;font-size:22px;opacity:.45}
+.hdrMenu .mnTxt{display:flex;flex-direction:column;line-height:1.2}
+.hdrMenu .mnTxt small{font-size:13px;font-weight:500;opacity:.65;margin-top:2px}
+.hdrMenu #btnLock{margin-top:4px;border-top:1px solid rgba(255,255,255,.2)}
+.hdrMenu #btnLock .ico{color:var(--bg);opacity:.85}
+.mnApp{padding:6px 6px 12px;border-bottom:1px solid rgba(255,255,255,.14);margin-bottom:4px}
+.mnApp[hidden]{display:none}
+.mnLbl{font-size:13px;color:var(--bg);opacity:.7}
+.mnSeg{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px}
+.mnSeg button{justify-content:flex-start;gap:10px;min-height:58px;padding:8px 12px;background:transparent;color:var(--bg);border:1px solid rgba(255,255,255,.3);text-align:left;font-size:16px}
+.mnSeg button span{display:flex;flex-direction:column;line-height:1.15}
+.mnSeg button small{font-size:12px;font-weight:500;opacity:.75}
+.mnSeg button .ico{width:22px;height:22px;flex:none}
+.mnSeg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);cursor:default}
 .hdrMenu[hidden]{display:none}
 header.top #btnMenu[aria-expanded="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
 header.top .syncChip{flex:0 0 auto;font-size:13px;white-space:nowrap}

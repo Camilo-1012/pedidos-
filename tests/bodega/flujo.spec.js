@@ -35,6 +35,8 @@ test("roles: elegir Ruta o Bodega en el PIN solo para administrador y despachado
   await page.waitForFunction(() => window.RUTA_LISTA === true);
   await page.click("#btnMenu");
   await expect(page.locator("#btnOtraApp")).toBeHidden();
+  await expect(page.locator("#mnApp")).toBeHidden();                              // menú: sin «Trabajar como»
+  await expect(page.locator("#btnUserRol")).toHaveText("Repartidor");
   // Camilo elige «Bodega» en el PIN y entra directo a Bodega.
   await page.click("#btnLock");
   await page.locator("#lkUsers button", { hasText: "Camilo" }).click();
@@ -57,6 +59,8 @@ test("roles: elegir Ruta o Bodega en el PIN solo para administrador y despachado
   await page.waitForFunction(() => window.RUTA_LISTA === true);
   await page.click("#btnMenu");
   await expect(page.locator("#btnOtraApp")).toBeVisible();
+  await expect(page.locator('#mnApp button[aria-pressed="true"]')).toContainText("Repartidor");   // está en Ruta
+  await expect(page.locator("#btnOtraApp")).toContainText("Despachador");
   expect(errs).toEqual([]);
 });
 

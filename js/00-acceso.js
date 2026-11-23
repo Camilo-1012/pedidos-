@@ -92,8 +92,11 @@ function enter(u, destino){
   started = u.id;
   window.RUTA_USER = window.BODEGA_USER = {id:u.id, name:u.name, admin:!!u.admin, rol:rolDe(u)};
   q("btnUserName").textContent = u.name;
-  const otra = q("btnOtraApp");
-  if(otra){ otra.hidden = !eligeApp(u); otra.onclick = () => { location.href = PAGINA[PAGE === "ruta" ? "bodega" : "ruta"]; }; }
+  const rolTxt = q("btnUserRol"); if(rolTxt) rolTxt.textContent = (u.admin ? "Administrador · " : "") + (rolDe(u) === "despachador" ? "Despachador" : "Repartidor");
+  // Menú «Trabajar como: Repartidor (Ruta) | Despachador (Bodega)»: solo administrador y despachadores.
+  const mn = q("mnApp"), otra = q("btnOtraApp"), otraPag = PAGE === "ruta" ? "bodega" : "ruta";
+  if(mn) mn.hidden = !eligeApp(u);
+  if(otra){ otra.hidden = !eligeApp(u); otra.onclick = () => { ls.set(APP_KEY(u.id), otraPag); location.href = PAGINA[otraPag]; }; }
   // Los archivos de la app se cargan en orden y solo después de entrar con el PIN.
   // Cuando carga el último, la app está completa: se vuelve a pintar (lo de los archivos finales, como «Parquea una vez»)
   // y se marca RUTA_LISTA (la usan las pruebas automáticas).

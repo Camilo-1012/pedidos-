@@ -24,15 +24,21 @@
       <button type="button" class="small hbtn icon" id="btnMenu" aria-label="Menú: usuario, equipo, repartidores y bloquear" aria-expanded="false" aria-controls="hdrMenu"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 6h18v2H3V6Zm0 5h18v2H3v-2Zm0 5h18v2H3v-2Z"/></svg></button>
     </div>
     <div class="hdrMenu" id="hdrMenu" hidden>
-      <button type="button" class="small hbtn" id="btnInstall" hidden>Instalar la app</button>
-      <button type="button" class="small hbtn" id="btnUser"><span id="btnUserName">Usuario</span></button>
-      <button type="button" class="small hbtn" id="btnReps">Repartidores</button>
-      <button type="button" class="small hbtn" id="btnZonas">Zonas</button>
-      <button type="button" class="small hbtn" id="btnTeam">Equipo (nube)</button>
-      <button type="button" class="small hbtn" id="btnExcel">Excel del día</button>
-      <button type="button" class="small hbtn" id="btnMore">Más</button>
-      <button type="button" class="small hbtn" id="btnOtraApp" hidden>Ir a Ruta</button>
-      <button type="button" class="small hbtn" id="btnLock">Bloquear</button>
+      <div class="mnApp" id="mnApp" hidden role="group" aria-label="Trabajar como">
+        <span class="mnLbl">Trabajar como</span>
+        <div class="mnSeg">
+          <button type="button" id="btnOtraApp" aria-pressed="false" data-app="ruta"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M6 3a3 3 0 0 0-1 5.8V14a5 5 0 0 0 5 5h4.2a3 3 0 1 0 0-2H10a3 3 0 0 1-3-3V8.8A3 3 0 0 0 6 3Zm12 0a3 3 0 0 0-1 5.8V11h2V8.8A3 3 0 0 0 18 3Z"/></svg><span>Repartidor<small>Ruta</small></span></button>
+          <button type="button" aria-pressed="true" data-app="bodega"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2 3 6.5v11L12 22l9-4.5v-11L12 2Zm0 2.2 6.3 3.2L12 10.6 5.7 7.4 12 4.2ZM5 9.1l6 3v7.6l-6-3V9.1Zm8 10.6v-7.6l6-3v7.6l-6 3Z"/></svg><span>Despachador<small>Bodega</small></span></button>
+        </div>
+      </div>
+      <button type="button" class="mnItem" id="btnUser"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 12a4.5 4.5 0 1 0 0-9 4.5 4.5 0 0 0 0 9Zm0 2c-4.4 0-8 2.2-8 5v2h16v-2c0-2.8-3.6-5-8-5Z"/></svg><span class="mnTxt"><span id="btnUserName">Usuario</span><small id="btnUserRol">Usuarios y PIN</small></span></button>
+      <button type="button" class="mnItem" id="btnReps"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm8 0a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM9 13c-3.9 0-7 1.8-7 4.2V20h14v-2.8C16 14.8 12.9 13 9 13Zm8 0c-.6 0-1.2 0-1.7.1 1.6 1 2.7 2.4 2.7 4.1V20h4v-2.8c0-2.4-2.2-4.2-5-4.2Z"/></svg><span class="mnTxt">Repartidores<small>Agregar, vincular su app</small></span></button>
+      <button type="button" class="mnItem" id="btnZonas"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7Zm0 9.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5Z"/></svg><span class="mnTxt">Zonas<small>Rangos de calles y carreras</small></span></button>
+      <button type="button" class="mnItem" id="btnTeam"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M19 18H6.5a4.5 4.5 0 0 1-.8-8.9A6 6 0 0 1 17.3 8 5 5 0 0 1 19 18Z"/></svg><span class="mnTxt">Equipo (nube)<small>Compartir lecturas entre celulares</small></span></button>
+      <button type="button" class="mnItem" id="btnExcel"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 4h18v16H3V4Zm2 2v3h6V6H5Zm8 0v3h6V6h-6Zm-8 5v3h6v-3H5Zm8 0v3h6v-3h-6Zm-8 5v2h6v-2H5Zm8 0v2h6v-2h-6Z"/></svg><span class="mnTxt">Excel del día<small>Resumen, paquetes y movimientos</small></span></button>
+      <button type="button" class="mnItem" id="btnMore"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M5 10a2 2 0 1 0 0 4 2 2 0 0 0 0-4Zm7 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4Zm7 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4Z"/></svg><span class="mnTxt">Más opciones<small>Sonido, actualizar, versión</small></span></button>
+      <button type="button" class="mnItem" id="btnInstall" hidden><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M11 3h2v9.2l3.3-3.3 1.4 1.4L12 16l-5.7-5.7 1.4-1.4 3.3 3.3V3ZM5 19h14v2H5v-2Z"/></svg><span class="mnTxt">Instalar la app<small>En la pantalla de inicio</small></span></button>
+      <button type="button" class="mnItem" id="btnLock"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2a5 5 0 0 0-5 5v3H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2h-1V7a5 5 0 0 0-5-5Zm-3 8V7a3 3 0 1 1 6 0v3H9Z"/></svg><span class="mnTxt">Bloquear<small>Pide el PIN otra vez</small></span></button>
     </div>
     <button type="button" class="small hbtn syncChip" id="syncChip" hidden></button>
     <div class="upd" id="upd" hidden role="status"><span id="updTxt">Hay una versión nueva de la app.</span><button type="button" class="primary small" id="updBtn">Actualizar</button></div>

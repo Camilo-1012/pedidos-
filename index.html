@@ -24,11 +24,17 @@
       <button type="button" class="small hbtn icon" id="btnMenu" aria-label="Menú: usuario, equipo y bloquear" aria-expanded="false" aria-controls="hdrMenu"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 6h18v2H3V6Zm0 5h18v2H3v-2Zm0 5h18v2H3v-2Z"/></svg></button>
     </div>
     <div class="hdrMenu" id="hdrMenu" hidden>
-      <button type="button" class="small hbtn" id="btnInstall" hidden>Instalar la app</button>
-      <button type="button" class="small hbtn" id="btnUser" title="Usuarios"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 12a4.5 4.5 0 1 0 0-9 4.5 4.5 0 0 0 0 9Zm0 2c-4.4 0-8 2.2-8 5v2h16v-2c0-2.8-3.6-5-8-5Z"/></svg><span id="btnUserName">Usuario</span></button>
-      <button type="button" class="small hbtn" id="btnTeam" hidden title="Equipo"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm8 0a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM9 13c-3.9 0-7 1.8-7 4.2V20h14v-2.8C16 14.8 12.9 13 9 13Zm8 0c-.6 0-1.2 0-1.7.1 1.6 1 2.7 2.4 2.7 4.1V20h4v-2.8c0-2.4-2.2-4.2-5-4.2Z"/></svg><span id="btnTeamTxt">Equipo</span></button>
-      <button type="button" class="small hbtn" id="btnOtraApp" hidden>Ir a Bodega</button>
-      <button type="button" class="small hbtn" id="btnLock" aria-label="Bloquear" title="Bloquear"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2a5 5 0 0 0-5 5v3H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2h-1V7a5 5 0 0 0-5-5Zm-3 8V7a3 3 0 1 1 6 0v3H9Z"/></svg>Bloquear</button>
+      <div class="mnApp" id="mnApp" hidden role="group" aria-label="Trabajar como">
+        <span class="mnLbl">Trabajar como</span>
+        <div class="mnSeg">
+          <button type="button" aria-pressed="true" data-app="ruta"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M6 3a3 3 0 0 0-1 5.8V14a5 5 0 0 0 5 5h4.2a3 3 0 1 0 0-2H10a3 3 0 0 1-3-3V8.8A3 3 0 0 0 6 3Zm12 0a3 3 0 0 0-1 5.8V11h2V8.8A3 3 0 0 0 18 3Z"/></svg><span>Repartidor<small>Ruta</small></span></button>
+          <button type="button" id="btnOtraApp" aria-pressed="false" data-app="bodega"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2 3 6.5v11L12 22l9-4.5v-11L12 2Zm0 2.2 6.3 3.2L12 10.6 5.7 7.4 12 4.2ZM5 9.1l6 3v7.6l-6-3V9.1Zm8 10.6v-7.6l6-3v7.6l-6 3Z"/></svg><span>Despachador<small>Bodega</small></span></button>
+        </div>
+      </div>
+      <button type="button" class="mnItem" id="btnUser"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 12a4.5 4.5 0 1 0 0-9 4.5 4.5 0 0 0 0 9Zm0 2c-4.4 0-8 2.2-8 5v2h16v-2c0-2.8-3.6-5-8-5Z"/></svg><span class="mnTxt"><span id="btnUserName">Usuario</span><small id="btnUserRol">Usuarios y PIN</small></span></button>
+      <button type="button" class="mnItem" id="btnTeam" hidden><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm8 0a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM9 13c-3.9 0-7 1.8-7 4.2V20h14v-2.8C16 14.8 12.9 13 9 13Zm8 0c-.6 0-1.2 0-1.7.1 1.6 1 2.7 2.4 2.7 4.1V20h4v-2.8c0-2.4-2.2-4.2-5-4.2Z"/></svg><span class="mnTxt"><span id="btnTeamTxt">Equipo</span><small>Sincronizar entre celulares</small></span></button>
+      <button type="button" class="mnItem" id="btnInstall" hidden><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M11 3h2v9.2l3.3-3.3 1.4 1.4L12 16l-5.7-5.7 1.4-1.4 3.3 3.3V3ZM5 19h14v2H5v-2Z"/></svg><span class="mnTxt">Instalar la app<small>En la pantalla de inicio</small></span></button>
+      <button type="button" class="mnItem" id="btnLock"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2a5 5 0 0 0-5 5v3H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2h-1V7a5 5 0 0 0-5-5Zm-3 8V7a3 3 0 1 1 6 0v3H9Z"/></svg><span class="mnTxt">Bloquear<small>Pide el PIN otra vez</small></span></button>
     </div>
     <div class="hdrBtns">
       <button type="button" class="small primary grow" id="btnDriveTop"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2 4 21l8-4 8 4L12 2Z"/></svg>Conducir</button>
