@@ -19,6 +19,8 @@ function pintarDespachar(){
   const x = delRepartidor(r.rid);
   pintarZonasRep(r);
   pintarZonasDespacho(r.rid);
+  const sinZona = faltaZona(r);
+  ["desScan", "desEscribir"].forEach(id => { $(id).classList.toggle("bloq", sinZona); $(id).setAttribute("aria-disabled", String(sinZona)); });
   kpis($("desKpis"), [[x.asignadosDia.length, "asignados hoy"], [x.enRuta.length, "en ruta (por liquidar)", "zone"], [x.devueltosDia.length, "devueltos hoy"], [x.entregadosDia.length, "entregados hoy", "ok"]]);
   // Lo que lleva, por empresa (Xcargo / iMile), para cuadrar con cada operador.
   const ce = conteoEmp(x.enRuta);
@@ -29,6 +31,7 @@ function pintarDespachar(){
 
 async function asignarGuia(g){
   const r = repActual(); if(!r) return {tipo:"mal", txt:"Elige primero el repartidor."};
+  if(faltaZona(r)) return {tipo:"mal", txt:"Marca primero la zona de " + r.nombre + "."};
   const p = paq(g), evs = [];
   if(p && p.estado === "RUTA"){
     if(p.rid === r.rid) return {tipo:"rep", txt:"Ya la lleva " + r.nombre};
@@ -87,6 +90,7 @@ function corregirAsignacion(g, alTerminar){
     }, "danger"], ["Cancelar", () => $("dlgLista").close()]]);
   $("ccReps").querySelectorAll("button[data-rid]").forEach(b => b.onclick = () => {
     const r = REPS.get(b.dataset.rid); if(!r) return;
+    if(faltaZona(r)){ toast(`${r.nombre} no tiene zona: márcasela primero en Despachar.`); return; }
     registrar("ASIGNADO", g, {rid: r.rid, reasigna: true, de: p.rid, motivo: "Corrección", ...zonaParaRuta(paq(g), r.rid)});
     fin(`${g}: pasada de ${quien} a ${r.nombre}.`);
   });
@@ -107,8 +111,18 @@ const cfgDespacho = () => ({
   objetivo: () => { const r = repActual(); if(!r) return ""; const zs = zonasDeRep(r.rid).map(z => z.nombre); const l = delRepartidor(r.rid).enRuta; return `Para: ${r.nombre}${zs.length ? " · " + zs.join(", ") : ""} · lleva ${l.length}${l.length ? " (" + txtEmp(l) + ")" : ""}`; },
   contador: () => "asignadas en esta pasada", alCerrar: pintarTodo
 });
-$("desScan").onclick = () => repActual() && abrirEscaner(cfgDespacho());
-$("desEscribir").onclick = () => repActual() && escribirGuia(cfgDespacho());
+// v2.37: con zonas creadas, es obligatorio marcarle al repartidor su(s) zona(s) antes de despachar (para que no se olvide).
+const faltaZona = r => !!r && zonasActivas().length > 0 && !zonasDeRep(r.rid).length;
+function exigirZona(){
+  const r = repActual(); if(!r) return false;
+  if(!faltaZona(r)) return true;
+  toast(`Primero marca la zona de ${r.nombre}.`);
+  const box = $("desZonasRep");
+  if(box){ box.scrollIntoView({behavior: "smooth", block: "center"}); box.classList.remove("falta"); void box.offsetWidth; box.classList.add("falta"); }
+  return false;
+}
+$("desScan").onclick = () => exigirZona() && abrirEscaner(cfgDespacho());
+$("desEscribir").onclick = () => exigirZona() && escribirGuia(cfgDespacho());
 
 /* ---- Planilla de salida ---- */
 // Planilla agrupada por zona (y dentro, por calle y carrera): así el repartidor carga en orden.

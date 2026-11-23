@@ -194,7 +194,7 @@ function pintarZonasRep(r){
   if(!r){ box.innerHTML = ""; return; }
   if(!zs.length){ box.innerHTML = `<p class="hint">Para asignarle zonas, créalas primero en ☰ → Zonas.</p>`; return; }
   const mias = new Set(zonasDeRep(r.rid).map(z => z.zid));
-  box.innerHTML = `<h3>Zonas de ${esc(r.nombre)}</h3><p class="hint" style="margin:0">${mias.size ? "Toca para quitar o agregar. Al escanear se avisa si un paquete es de otra zona." : "Toca las zonas que va a llevar hoy."}</p>
+  box.innerHTML = `<h3>Zonas de ${esc(r.nombre)}</h3><p class="${mias.size ? "hint" : "uerr"}" style="margin:0">${mias.size ? "Toca para quitar o agregar. Al escanear se avisa si un paquete es de otra zona." : "Obligatorio: toca la(s) zona(s) que va a llevar antes de despachar."}</p>
     <div class="zsel" role="group" aria-label="Zonas de ${esc(r.nombre)}">${zs.map(z => {
       const otros = repsDeZona(z.zid).filter(x => x.rid !== r.rid).map(x => x.nombre);
       return `<button type="button" style="--zc:${esc(z.color || "#455a64")}" data-zid="${esc(z.zid)}" aria-pressed="${mias.has(z.zid)}">${esc(z.nombre)}${otros.length ? `<small> · ${esc(otros.join(", "))}</small>` : ""}</button>`;
