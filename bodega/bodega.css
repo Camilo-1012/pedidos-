@@ -107,3 +107,5 @@ li.lec.mal span{color:var(--bad)}
 .zsel button[aria-pressed="true"]{background:var(--zc);color:#fff;border-color:var(--zc)}
 .zsel button[aria-pressed="true"]::before{content:"✓"}
 .reps button small.zs{color:var(--accent);opacity:.9}
+#desEmp[hidden]{display:none}
+#desEmp{grid-template-columns:repeat(auto-fit,minmax(0,1fr))}

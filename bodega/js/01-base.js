@@ -56,6 +56,17 @@ function guiasDeTexto(txt){
   return [...out];
 }
 const EMPRESAS = ["Xcargo", "iMile", "Otra"];
+// Empresa según el formato del código de barras (de las etiquetas reales):
+//   Xcargo: número TN de 16 dígitos (ej. 2696272261037341) · iMile: 13 dígitos (ej. 6110526489004).
+// Si el código no encaja en ningún formato, se usa la empresa del listado importado o la del lote.
+const EMP_PATRONES = [["Xcargo", /^\d{16}$/], ["iMile", /^\d{13}$/]];
+function empresaPorGuia(g){ for(const [emp, re] of EMP_PATRONES) if(re.test(g)) return emp; return ""; }
+// «3 Xcargo · 2 iMile» (las que no se sabe, al final como «sin empresa»).
+function conteoEmp(lista){
+  const m = new Map(); lista.forEach(p => m.set(p.emp || "", (m.get(p.emp || "") || 0) + 1));
+  return [...m].sort((a, b) => (!a[0]) - (!b[0]) || EMPRESAS.indexOf(a[0]) - EMPRESAS.indexOf(b[0]));
+}
+const txtEmp = lista => conteoEmp(lista).map(([e, n]) => n + " " + (e || "sin empresa")).join(" · ");
 
 /* ---- Sonido y vibración al leer: tono alto = bien, doble tono bajo = revisar ---- */
 let audioCtx = null;
