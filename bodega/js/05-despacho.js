@@ -33,7 +33,7 @@ async function asignarGuia(g){
   if(p && p.estado === "RUTA"){
     if(p.rid === r.rid) return {tipo:"rep", txt:"Ya la lleva " + r.nombre};
     if(!await preguntarEnEscaner(`${g} la tiene ${repNombre(p.rid)}. ¿Pasársela a ${r.nombre}?`, "Pasar a " + r.nombre)) return {tipo:"mal", txt:"Omitida: la sigue teniendo " + repNombre(p.rid)};
-    evs.push(registrar("ASIGNADO", g, {rid: r.rid, reasigna: true, de: p.rid}).id);
+    evs.push(registrar("ASIGNADO", g, {rid: r.rid, reasigna: true, de: p.rid, ...zonaParaRuta(p, r.rid)}).id);
     return {tipo:"ok", txt:`Pasada de ${repNombre(p.rid)} a ${r.nombre}`, evs};
   }
   let recibida = false;
@@ -49,12 +49,18 @@ async function asignarGuia(g){
     evs.push(registrar("RECIBIDO", g, {lid, emp: (p && p.emp) || (l && l.emp) || "", al_despachar: true}).id);
     recibida = true;
   }
-  evs.push(registrar("ASIGNADO", g, {rid: r.rid}).id);
+  evs.push(registrar("ASIGNADO", g, {rid: r.rid, ...zonaParaRuta(paq(g), r.rid)}).id);
   const q = paq(g), z = zonaDe(q);
   // Paquete de una zona que no es de este repartidor: solo se avisa (puede ser un apoyo), no se bloquea.
   const mias = zonasDeRep(r.rid), otraZona = z && mias.length && !mias.some(m => m.zid === z.zid);
   const deQuien = otraZona ? repsDeZona(z.zid).map(x => x.nombre).join(", ") : "";
   return {tipo:"ok", txt:(recibida ? "Recibida y para " : "Para ") + r.nombre + (VINC.has(r.rid) ? " · ya le sale en su app" : "") + (z ? " · " + z.nombre : "") + (otraZona ? " · ⚠ no es de sus zonas" + (deQuien ? " (es de " + deQuien + ")" : "") : "") + (q.nov.length ? " · tiene novedad: " + q.nov[q.nov.length - 1].nota : ""), evs, cls: q.nov.length || otraZona ? "aviso" : ""};
+}
+// La zona viaja con la asignación: así le aparece al repartidor en su Ruta (su app no conoce las zonas de la bodega).
+// zona = la del paquete; zonas = las que tiene marcadas el repartidor en este momento.
+function zonaParaRuta(p, rid){
+  const z = p && zonaDe(p), mias = zonasDeRep(rid).map(x => x.nombre);
+  return {...(z ? {zona: z.nombre} : {}), ...(mias.length ? {zonas: mias.slice(0, 10)} : {})};
 }
 const cfgDespacho = () => ({
   titulo:"Despachar", alLeer: asignarGuia,

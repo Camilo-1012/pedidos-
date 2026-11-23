@@ -109,6 +109,8 @@ function renderPaso(){
   const pend = reales.filter(s=>s.status!=="done"), fall = pend.filter(s=>s.status==="fail"), hechos = reales.filter(s=>s.status==="done");
   if(!reales.length){ box.hidden = true; return; }
   const q = l=>l.reduce((a,s)=>a+(s.qty||1),0);
+  // Zonas que la bodega le asignó hoy a este repartidor (v2.36).
+  const zonasBod = typeof bod !== "undefined" && bod.rid && Array.isArray(bod.zonas) && bod.zonas.length && pend.some(s=>s.bodega) ? bod.zonas : null;
   let txt, sub, btns;
   const sinDir = pend.filter(sinDirBod);
   if(sinDir.length){
@@ -132,7 +134,7 @@ function renderPaso(){
     btns = [["Reporte del día", "primary", "btnReport"], ["Excel", "", "histCsvPed"], ["Guardar respaldo", "", "btnBackup"], ["Jornada nueva", "dark", "btnNew"]];
   }
   box.hidden = false;
-  $("pasoTxt").innerHTML = `${esc(txt)}<small>${esc(sub)}</small>`;
+  $("pasoTxt").innerHTML = `${zonasBod ? `<span class="zonasHoy">Tu zona: ${esc(zonasBod.join(", "))}</span>` : ""}${esc(txt)}<small>${esc(sub)}</small>`;
   $("pasoBtns").innerHTML = btns.map(([t, c, go])=>`<button type="button" class="${c}" data-go="${go}">${esc(t)}</button>`).join("");
 }
 document.getElementById("pasoBtns").addEventListener("click", e=>{ const b = e.target.closest("button[data-go]"); if(b) $(b.dataset.go).click(); });
@@ -253,6 +255,7 @@ function render(){
           <span class="chip unit">${esc(unitText(s))}</span>
           ${s.barrio?`<span class="chip">${esc(s.barrio)}</span>`:""}
           ${s.bodega?`<span class="chip bod">Bodega${s.bodega.emp ? " · " + esc(s.bodega.emp) : ""}</span>`:""}
+          ${s.bodega && s.bodega.zona?`<span class="chip zona">Zona ${esc(s.bodega.zona)}</span>`:""}
           ${s.bodegaFuera && !isDone?'<span class="chip warn">La bodega ya no te lo tiene asignado</span>':""}
           ${unk && !sinDir?'<span class="chip warn">Revisar dirección</span>':""}
           ${s.geo==="barrio"?`<span class="chip warn">Ubicada por barrio (aprox.)</span>`:""}
