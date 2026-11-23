@@ -8,9 +8,9 @@ function agregarBodega(sb){
   const B = db.bod;
   const json = (route, status, body) => route.fulfill({ status, contentType: "application/json", body: body === undefined ? "" : JSON.stringify(body) });
   const uidDe = req => { const m = /Bearer tok-(.+)$/.exec(req.headers()["authorization"] || ""); return m ? m[1] : null; };
-  const miembro = uid => B.miembros.find(m => m.user_id === uid);
+  const miembro = uid => !db.miembros.some(m => m.user_id === uid && m.activo === false) && B.miembros.find(m => m.user_id === uid);
   const admin = uid => (miembro(uid) || {}).rol === "admin";
-  const miRid = uid => (B.vinculos.find(v => v.user_id === uid) || {}).rid || null;
+  const miRid = uid => db.miembros.some(m => m.user_id === uid && m.activo === false) ? null : (B.vinculos.find(v => v.user_id === uid) || {}).rid || null;
   // Igual a bodega_estado_guias(): último movimiento que cambia el estado, sin los anulados.
   function estado(){
     const anul = new Set(B.eventos.filter(e => e.tipo === "ANULAR").map(e => e.d.ref));

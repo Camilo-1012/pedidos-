@@ -1,7 +1,7 @@
 /* Arranque de la pantalla Bodega: versión, navegación entre secciones, menú, repartidores, actualizaciones y carga de datos.
    Es la misma app que Ruta de Entregas: al publicar, el mismo número aquí, en js/09-arranque.js (APP_VERSION) y en sw.js (CACHE). */
 "use strict";
-const APP_VERSION = "2.34";
+const APP_VERSION = "2.35";
 
 /* ---- Secciones ---- */
 const VISTAS = ["vRecibir", "vDespachar", "vDevolver", "vConsultar"];
@@ -49,7 +49,7 @@ $("moBorrar").onclick = async () => {
 function pintarReps(){
   const todos = [...REPS.values()].sort((a, b) => (b.activo - a.activo) || a.nombre.localeCompare(b.nombre, "es"));
   const admin = USER.admin;
-  $("rpNota").textContent = admin ? "Los repartidores no necesitan usuario ni celular en esta app. Desactivar no borra su historial." : "Solo un administrador agrega o cambia repartidores.";
+  $("rpNota").textContent = admin ? "Para que a un repartidor le salgan sus paquetes en su celular, créalo en ☰ → Personas (queda vinculado solo) o usa «Vincular app». Desactivar no borra su historial." : "Solo un administrador agrega o cambia repartidores.";
   $("rpAdd").hidden = !admin;
   $("rpList").innerHTML = todos.length ? "" : `<p class="hint">Aún no hay repartidores.</p>`;
   todos.forEach(r => {

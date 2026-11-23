@@ -1,6 +1,6 @@
 /* Service worker: guarda la app en el celular para que abra sin internet.
    Al publicar cambios, sube el número de CACHE para que los celulares descarguen la versión nueva. */
-const CACHE = "ruta-v2.34";
+const CACHE = "ruta-v2.35";
 const CORE = [
   "./", "index.html", "manifest.webmanifest",
   "icons/icon-192.png", "icons/icon-512.png", "icons/maskable-512.png", "icons/apple-touch-icon.png",
@@ -9,7 +9,7 @@ const CORE = [
   "ocr/tesseract.min.js", "ocr/worker.min.js", "ocr/spa-traineddata.wasm",
   "ocr/tesseract-core-simd-lstm.wasm.js", "ocr/tesseract-core-lstm.wasm.js",
   "css/app.css", "js/00-acceso.js", "js/01-direcciones.js", "js/02-ruta.js", "js/03-mapas.js", "js/04-jornada.js",
-  "js/05-pantalla.js", "js/06-escaner.js", "js/07-cargue.js", "js/08-voz.js", "js/09-arranque.js", "js/10-conduccion.js", "js/11-equipo.js", "js/12-aviso.js", "js/13-buscar.js", "js/14-apps.js", "js/15-excel.js", "js/16-bodega.js",
+  "js/05-pantalla.js", "js/06-escaner.js", "js/07-cargue.js", "js/08-voz.js", "js/09-arranque.js", "js/10-conduccion.js", "js/11-equipo.js", "js/12-aviso.js", "js/13-buscar.js", "js/14-apps.js", "js/15-excel.js", "js/16-bodega.js", "js/17-personas.js",
   "bodega.html", "bodega/bodega.css", "bodega/js/01-base.js", "bodega/js/02-datos.js", "bodega/js/03-escaner.js", "bodega/js/04-recepcion.js",
   "bodega/js/05-despacho.js", "bodega/js/06-devolucion.js", "bodega/js/07-consulta.js", "bodega/js/08-excel.js", "bodega/js/09-sync.js",
   "bodega/js/10-zonas.js", "bodega/js/12-importar.js", "bodega/js/11-arranque.js",
