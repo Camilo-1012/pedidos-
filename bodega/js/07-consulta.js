@@ -8,7 +8,7 @@ function detalleEv(e){
   switch(e.tipo){
     case "ESPERADO": return (LOTES.get(d.lid) || {}).nombre || (d.lid ? "" : "sin lote");
     case "RECIBIDO": return ((LOTES.get(d.lid) || {}).nombre || (d.lid ? "" : "sin lote")) + (d.al_despachar ? " · al despacharla (sin escaneo de recepción)" : "");
-    case "ASIGNADO": return "a " + repNombre(d.rid) + (d.reasigna && d.de ? " (antes la tenía " + repNombre(d.de) + ")" : "");
+    case "ASIGNADO": return "a " + repNombre(d.rid) + (d.reasigna && d.de ? " (antes la tenía " + repNombre(d.de) + ")" : "") + (d.motivo ? " · " + d.motivo.toLowerCase() : "");
     case "DEVUELTO": return "por " + repNombre(d.rid) + (d.motivo ? " · " + d.motivo : "");
     case "ENTREGADO": return d.por_rep ? "reportó " + repNombre(d.rid) + " desde su app" : "al liquidar a " + repNombre(d.rid);
     case "NO_ENTREGADO": return repNombre(d.rid) + (d.motivo ? " · " + d.motivo : "");
@@ -21,13 +21,16 @@ function detalleEv(e){
 function verPaquete(g){
   const p = paq(g); if(!p){ $("conRes").innerHTML = `<p class="hint">No hay registro de ${esc(g)} en este celular.</p>`; return; }
   const todos = (POR_GUIA.get(g) || []).slice().sort(ordenEv), anul = new Set(todos.filter(e => e.tipo === "ANULAR").map(e => e.d.ref));
+  const motivoAnul = new Map(todos.filter(e => e.tipo === "ANULAR" && e.d.motivo).map(e => [e.d.ref, e.d.motivo.toLowerCase() + " · " + (e.por || "")]));
   $("conRes").innerHTML = `<div class="ficha"><div><b class="guiaG">${esc(p.guia)}</b> ${chipEstado(p)} ${p.emp ? `<span class="chip">${esc(p.emp)}</span>` : ""}</div>
     ${ZONAS.size ? `<div class="row" style="align-items:center">${chipZona(zonaDe(p))}<span class="hint">${esc(ubicTxt(p))}</span><button type="button" class="small" id="conUbic">Ubicación</button></div>` : ""}
     ${p.conflicto ? `<p class="alerta">${esc(p.conflicto)}</p><div class="row" id="conResolver"></div>` : ""}
     ${p.estado === "BODEGA" ? `<p class="hint">En bodega hace ${diasDesde(p.recibido)} día(s)${p.motivo ? " · última devolución: " + esc(p.motivo) : ""}.</p>` : ""}
+    ${p.estado === "RUTA" ? `<div class="row" style="align-items:center"><span class="hint">La tiene ${esc(repNombre(p.rid))}.</span><button type="button" class="small" id="conCorregir">Corregir asignación</button></div>` : ""}
     <button type="button" class="small" id="conNube">Historial completo (nube)</button>
-    <ol class="linea">${todos.filter(e => e.tipo !== "ANULAR").map(e => `<li class="${anul.has(e.id) ? "anulado" : ""}"><time>${esc(fechaHora(e.at))}</time> <b>${esc(TXT_EV[e.tipo] || e.tipo)}</b> ${esc(detalleEv(e))}<span class="hint"> · ${esc(e.por || "")}${e.sub ? "" : " · sin subir"}${anul.has(e.id) ? " · deshecha" : ""}</span></li>`).join("")}</ol></div>`;
+    <ol class="linea">${todos.filter(e => e.tipo !== "ANULAR").map(e => `<li class="${anul.has(e.id) ? "anulado" : ""}"><time>${esc(fechaHora(e.at))}</time> <b>${esc(TXT_EV[e.tipo] || e.tipo)}</b> ${esc(detalleEv(e))}<span class="hint"> · ${esc(e.por || "")}${e.sub ? "" : " · sin subir"}${anul.has(e.id) ? (motivoAnul.has(e.id) ? " · corregida: " + esc(motivoAnul.get(e.id)) : " · deshecha") : ""}</span></li>`).join("")}</ol></div>`;
   $("conNube").onclick = () => historialNube(g);
+  if($("conCorregir")) $("conCorregir").onclick = () => corregirAsignacion(g, () => verPaquete(g));
   if($("conUbic")) $("conUbic").onclick = async () => { const u = guardarUbicacion(g, await pedirUbicacion(g)); if(u){ verPaquete(g); pintarTodo(); } };
   if(p.conflicto){
     // Resolver: confirmar quién la tiene de verdad (queda como reasignación explícita).

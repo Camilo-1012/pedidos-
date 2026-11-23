@@ -24,7 +24,7 @@ function pintarDespachar(){
   const ce = conteoEmp(x.enRuta);
   $("desEmp").hidden = !ce.length;
   if(ce.length) kpis($("desEmp"), ce.map(([e, n]) => [n, "lleva de " + (e || "sin empresa")]));
-  pintarLista($("desLista"), x.enRuta.map(p => liPaq(p, "Asignado " + fechaHora(p.asignado) + (diaDe(p.asignado) !== hoy() ? " · de otro día" : ""))), 40, "Todavía no lleva paquetes.");
+  pintarLista($("desLista"), x.enRuta.map(p => liPaq(p, "Asignado " + fechaHora(p.asignado) + (diaDe(p.asignado) !== hoy() ? " · de otro día" : "") + " · toca para corregir")), 40, "Todavía no lleva paquetes.");
 }
 
 async function asignarGuia(g){
@@ -56,6 +56,46 @@ async function asignarGuia(g){
   const deQuien = otraZona ? repsDeZona(z.zid).map(x => x.nombre).join(", ") : "";
   return {tipo:"ok", txt:(recibida ? "Recibida y para " : "Para ") + r.nombre + (VINC.has(r.rid) ? " · ya le sale en su app" : "") + (z ? " · " + z.nombre : "") + (otraZona ? " · ⚠ no es de sus zonas" + (deQuien ? " (es de " + deQuien + ")" : "") : "") + (q.nov.length ? " · tiene novedad: " + q.nov[q.nov.length - 1].nota : ""), evs, cls: q.nov.length || otraZona ? "aviso" : ""};
 }
+/* ---- Corregir una asignación equivocada (v2.37) ----
+   Desde Despachar → «Lleva» (tocar el paquete) o desde Consultar. Nada se borra: queda en el histórico que se asignó
+   y que se corrigió (quién y cuándo).
+   - Pasar a otro repartidor: nueva asignación (reasigna), sin escanear.
+   - Quitar la asignación: ANULAR de la última asignación → el paquete vuelve a como estaba antes (en bodega, o con
+     el repartidor anterior si fue una reasignación). Al repartidor le sale de su Ruta al sincronizar. */
+function ultimaAsignacion(g){
+  const evs = POR_GUIA.get(g) || [], anul = new Set(evs.filter(e => e.tipo === "ANULAR").map(e => e.d.ref));
+  return evs.filter(e => e.tipo === "ASIGNADO" && !anul.has(e.id)).sort(ordenEv).pop() || null;
+}
+function corregirAsignacion(g, alTerminar){
+  const p = paq(g);
+  if(!p || p.estado !== "RUTA"){ toast(p ? "Solo se corrige un paquete que está en ruta (ahora: " + (ESTADOS[p.estado] || p.estado).toLowerCase() + ")." : "No hay registro de esa guía."); return; }
+  const ult = ultimaAsignacion(g), quien = repNombre(p.rid);
+  const antes = ult && ult.d && ult.d.reasigna && ult.d.de ? repNombre(ult.d.de) : "";
+  const fin = msg => { $("dlgLista").close(); pintarTodo(); toast(msg); if(alTerminar) alTerminar(); };
+  const otros = repsActivos().filter(r => r.rid !== p.rid);
+  mostrarListado("Corregir " + g,
+    `<p style="margin:0">La tiene <b>${esc(quien)}</b> desde ${esc(fechaHora(p.asignado))}.${VINC.has(p.rid) ? " Al corregir, le sale de su app al sincronizar." : ""}</p>
+     ${p.noEstaba || p.porRep ? `<p class="alerta">${esc(quien)} ya reportó este paquete desde su app; revisa con él antes de cambiarlo.</p>` : ""}
+     <h3 style="margin:12px 0 6px">Pasar a otro repartidor</h3>
+     <div class="reps" id="ccReps">${otros.map(r => `<button type="button" data-rid="${esc(r.rid)}">${esc(r.nombre)}${zonasDeRep(r.rid).length ? `<small class="zs">${esc(zonasDeRep(r.rid).map(z => z.nombre).join(", "))}</small>` : ""}</button>`).join("") || `<p class="hint">No hay otros repartidores activos.</p>`}</div>
+     <h3 style="margin:12px 0 6px">O quitar la asignación</h3>
+     <p class="hint" style="margin:0">Si fue un error: ${antes ? `vuelve a <b>${esc(antes)}</b> (la tenía antes)` : "el paquete vuelve a <b>en bodega</b>"}. Queda en el histórico como corregida.</p>`,
+    [["Quitar asignación", () => {
+      if(!ult){ toast("No se encontró la asignación."); return; }
+      registrar("ANULAR", g, {ref: ult.id, motivo: "Asignación equivocada"});
+      fin(antes ? `${g}: vuelve a ${antes}.` : `${g}: quitada a ${quien}, vuelve a bodega.`);
+    }, "danger"], ["Cancelar", () => $("dlgLista").close()]]);
+  $("ccReps").querySelectorAll("button[data-rid]").forEach(b => b.onclick = () => {
+    const r = REPS.get(b.dataset.rid); if(!r) return;
+    registrar("ASIGNADO", g, {rid: r.rid, reasigna: true, de: p.rid, motivo: "Corrección", ...zonaParaRuta(paq(g), r.rid)});
+    fin(`${g}: pasada de ${quien} a ${r.nombre}.`);
+  });
+}
+$("desLista").addEventListener("click", e => {
+  const li = e.target.closest("li[data-guia]"); if(!li || e.target.closest("button")) return;
+  corregirAsignacion(li.dataset.guia);
+});
+
 // La zona viaja con la asignación: así le aparece al repartidor en su Ruta (su app no conoce las zonas de la bodega).
 // zona = la del paquete; zonas = las que tiene marcadas el repartidor en este momento.
 function zonaParaRuta(p, rid){
