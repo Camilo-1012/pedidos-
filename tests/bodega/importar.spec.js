@@ -186,3 +186,20 @@ test("v2.40: por defecto, importar = ya llegaron: quedan «en bodega» y el cont
   expect(await page.evaluate(() => [...EV.values()].filter(e => e.tipo === "RECIBIDO").length)).toBe(100);
   expect(errs).toEqual([]);
 });
+
+test("v2.42: formato real de Xcargo (cargue_pedidos.xlsx): columna «Calle[*]» y direcciones mal escritas", async ({ page }) => {
+  const errs = A.vigilarErrores(page);
+  await A.entrar(page);
+  await abrir(page);
+  await page.setInputFiles("#imFile", ARCH("formato-xcargo-real.xlsx"));
+  for (const [k, txt] of [["guia", "Tracking number"], ["dir", "Calle[*]"], ["tel", "Celular"], ["nom", "Nombre(s) del cliente"]])
+    await expect(page.locator(`#imPaso2 select[data-campo="${k}"] option:checked`)).toContainText(txt);
+  await expect(kpiImp(page, 0)).toHaveText("8");
+  await expect(kpiImp(page, 3)).toHaveText("7");                 // con dirección (zona): todas menos el centro comercial
+  await page.click("#imOk");
+  const r = await page.evaluate(() => ["2690000000000002", "2690000000000003", "2690000000000004", "2690000000000005", "2690000000000006", "6110000000008"].map(g => [paq(g).cl, paq(g).kr, paq(g).emp]));
+  expect(r).toEqual([[133, 152, "Xcargo"], [131, 123, "Xcargo"], [143, 140, "Xcargo"], [130, 126, "Xcargo"], [133, 124, "Xcargo"], [141, 109, "iMile"]]);
+  // Al repartidor le llega la dirección ya legible (la original si se entendía; si no, la arreglada).
+  expect(await page.evaluate(() => ["calle150b#120c64", "crr 123#131c-56", "Centro comercial de prueba"].map(direccionLegible))).toEqual(["calle150b#120c64", "CARRERA 123#131C-56", "Centro comercial de prueba"]);
+  expect(errs).toEqual([]);
+});

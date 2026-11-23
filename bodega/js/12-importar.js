@@ -59,8 +59,31 @@ const leerDireccion = (() => {
   }
   return parseAddress;
 })();
+/* v2.42: direcciones como las escriben los clientes en el listado real de Xcargo (cargue_pedidos.xlsx, 540 filas):
+   «crr 123#130c-56», «Carrera 152 #131-B 09», «calle142 biss #140 A 35», «Cra 126 n 130 65», «Carrera Carrera124bbis#132/24»…
+   Se arreglan SOLO para leerlas (zona y dirección que le llega al repartidor); el lector de la Ruta no cambia. */
+function arreglarDireccion(txt){
+  let t = " " + String(txt || "").toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "") + " ";
+  t = t.replace(/\bCARRETERA\s+(?=(CRA|CARRERA|KRA|KR|CR|CALLE|CLL|CL)\b)/g, "")      // «Carretera Cra 152…»
+       .replace(/\b(CRRA|CRR|CARRARA|CARERE|CARRETERA|CARRRERA|CARERA|CRRERA)(?=\s*\d|\s)/g, "CARRERA")
+       .replace(/\bTRA?NVERSAL/g, "TRANSVERSAL")
+       .replace(/\b(CARRERA|CALLE)\s+\1(?=\s*\d|\b)/g, "$1")                    // «Carrera Carrera», «Calle calle»
+       .replace(/\b(CALLE|CARRERA|CRA|CL|KR|AK|AC|DG|TV)\s*-\s*(?=\d)/g, "$1 ")      // «Calle-131»
+       .replace(/BISS\b/g, "BIS")
+       .replace(/(\d)\s*\/\s*(\d)/g, "$1-$2")                                      // «#132/24»
+       .replace(/([0-9A-H])\s+N\.?\s*(?=\d)/g, "$1 # ")                               // «152 N 143», «132 D N 158»
+       .replace(/(\d)\s*-\s*([A-H])\s*(\d{1,3})\b/g, "$1$2-$3")                      // «#131-B 09» → «#131B-09»
+       .replace(/^(\s*[A-Z]+\.?\s*\d{1,3}\s*[A-H]?(?:\s*BIS)?\s*[A-H]?)\s*-\s+(?=\d)/, "$1 # ");   // «calle 137- 128b 01»
+  return t.replace(/\s+/g, " ").trim();
+}
+// La que mejor se lee: la original si se entiende; si no, la arreglada (si con eso sí se entiende).
+function direccionLegible(txt){
+  if(leerDireccion(txt)) return String(txt || "").trim();
+  const a = arreglarDireccion(txt);
+  return leerDireccion(a) ? a : String(txt || "").trim();
+}
 function calleCarrera(txt){
-  const p = leerDireccion(txt); if(!p) return null;
+  const p = leerDireccion(txt) || leerDireccion(arreglarDireccion(txt)); if(!p) return null;
   const a = p.parts, s = n => n;   // solo el número (las letras y el «bis» no cambian la zona)
   let cl, kr;
   if(a.axis === "calle"){ cl = a.p.n; kr = a.g.n; } else { kr = a.p.n; cl = a.g.n; }
@@ -183,7 +206,7 @@ async function leerTabla(archivo){
 const sinTilde = s => String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
 const CAMPOS = {
   guia: {txt:"Guía (obligatoria)", claves:["guia","numero de guia","no guia","n guia","nro guia","tracking","tracking number","numero de seguimiento","waybill","awb","codigo de envio","id envio","envio","orden","order","pedido","numero de orden","shipment"]},
-  dir:  {txt:"Dirección (para la zona)", claves:["direccion","direccion destino","direccion de entrega","address","shipping address","dir","domicilio"]},
+  dir:  {txt:"Dirección (para la zona)", claves:["direccion","direccion destino","direccion de entrega","address","shipping address","dir","domicilio","calle","destino","direccion completa"]},
   emp:  {txt:"Empresa", claves:["empresa","operador","transportadora","carrier","courier","aliado"]},
   // v2.41: datos de entrega que le llegan al repartidor (no van al histórico; se borran a los 30 días).
   tel:  {txt:"Teléfono (para el repartidor)", claves:["telefono","celular","tel","phone","movil","whatsapp","contacto","telefono destinatario","receiver phone"]},
@@ -301,7 +324,7 @@ function importarAhora(){
   const celda = (f, k) => imp.map[k] !== undefined ? String(f[imp.map[k]] ?? "").replace(/\s+/g, " ").trim() : "";
   for(const f of filasDatos()){
     const g = normGuia(f[imp.map.guia]); if(!g || vistos.has(g)) continue; vistos.add(g);
-    const dat = {guia: g, direccion: celda(f, "dir").slice(0, 200), telefono: celda(f, "tel").replace(/[^\d+ ]/g, "").slice(0, 40), nombre: celda(f, "nom").slice(0, 80), barrio: celda(f, "bar").slice(0, 80), unidad: celda(f, "uni").slice(0, 120)};
+    const dat = {guia: g, direccion: direccionLegible(celda(f, "dir")).slice(0, 200), telefono: celda(f, "tel").replace(/[^\d+ ]/g, "").slice(0, 40), nombre: celda(f, "nom").slice(0, 80), barrio: celda(f, "bar").slice(0, 80), unidad: celda(f, "uni").slice(0, 120)};
     if(dat.direccion || dat.telefono || dat.nombre) datos.push(dat);
     const p = paq(g);
     if(p && p.espLote && p.espLote !== l.lid){
