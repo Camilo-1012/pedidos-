@@ -58,7 +58,10 @@
     <label for="recLote">Lote de recepción
       <select id="recLote"></select>
     </label>
-    <button type="button" id="recNuevo">Nuevo lote (llegó un camión o una entrega)</button>
+    <div class="row">
+      <button type="button" id="recNuevo">Nuevo lote (llegó un camión o una entrega)</button>
+      <button type="button" class="dark" id="recManifiesto">Importar listado (Excel o CSV)</button>
+    </div>
     <div id="recInfo" hidden>
       <div class="kpis" id="recKpis"></div>
       <div class="row">
@@ -66,7 +69,6 @@
         <button type="button" id="recEscribir">Escribir guía</button>
       </div>
       <div class="row">
-        <button type="button" id="recManifiesto">Cargar listado esperado</button>
         <button type="button" id="recFaltan">Ver faltantes</button>
         <button type="button" id="recCerrar">Cerrar lote</button>
       </div>

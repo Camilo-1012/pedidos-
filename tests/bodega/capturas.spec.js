@@ -10,6 +10,7 @@ test("capturas", async ({ page }) => {
   await page.evaluate(zs => { const reps = repsActivos(); zs.forEach(([n, a, b, c, d, r], i) => registrar("ZONA", null, {zid: "z" + i, nombre: n, color: COLORES_ZONA[i][0], cl: [a, b], kr: [c, d], rid: reps[+r.slice(1)].rid, activa: true})); }, zonas);
   await A.nuevoLote(page, "Xcargo", "Camión 7 a. m.");
   await page.click("#recManifiesto");
+  await page.click("#ltBody summary");                        // «O pega las guías»
   await page.fill("#mfTxt", Array.from({length: 12}, (_, i) => "XC" + (88120400 + i)).join("\n"));
   await page.click("#ltActs button.primary");
   await page.click("#recScan");

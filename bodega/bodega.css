@@ -76,7 +76,7 @@ li.lec.mal span{color:var(--bad)}
   #dlgLista .dlgHead,#dlgLista #ltActs{display:none!important}
   :root{--ink:#000;--surface:#fff;--bg:#fff;--line:#999;color-scheme:light}
 }
-#desPlanilla,#devCerrar,#recNuevo{width:100%}
+#desPlanilla,#devCerrar{width:100%}
 /* Zonas (v1.1) */
 .chip.zona{background:var(--zc);color:#fff;border-color:var(--zc)}
 .chip.zsin{border-style:dashed}
