@@ -50,6 +50,13 @@ function reconciliar(rows){
     const st = paradaDeGuia(g);
     const info = {emp: empDeGuia(g) || r.emp || "", at: r.asignado || "", cl: r.cl ?? null, kr: r.kr ?? null, zona: r.zona || ""};
     if(st){
+      // Ya entregado en este celular pero la bodega lo sigue teniendo asignado (reporte que no salió, o reasignado
+      // después de entregarlo): se le vuelve a avisar, una vez por cada asignación (v2.38).
+      if(st.status==="done" && bod.rid){
+        st.bev = st.bev || {}; const ev = st.bev[g] || (st.bev[g] = {});
+        const enCola = bod.cola.some(e=>e.guia===g && e.tipo==="ENTREGADO");
+        if(!enCola && ev.ENTasig !== info.at){ const e = nuevoEvento("ENTREGADO", g, {rid: bod.rid, por_rep: true, reenvio: true}); ev.ENT = e.id; delete ev.ENTanul; ev.ENTasig = info.at; bod.cola.push(e); cambios++; }
+      }
       const antes = st.bodega || {};
       if(!st.bodega || st.bodegaFuera || antes.zona !== info.zona || antes.emp !== info.emp){ st.bodega = {...antes, ...info}; delete st.bodegaFuera; cambios++; }
       continue;
@@ -92,7 +99,7 @@ function bodegaReportar(s, antes){
   s.bev = s.bev || {};
   for(const g0 of guias(s)){
     const g = gNorm(g0), r = s.bev[g] || (s.bev[g] = {});
-    if(s.status==="done" && antes!=="done"){ const e = nuevoEvento("ENTREGADO", g, {rid: bod.rid, por_rep: true}); r.ENT = e.id; delete r.ENTanul; bod.cola.push(e); }
+    if(s.status==="done" && antes!=="done"){ const e = nuevoEvento("ENTREGADO", g, {rid: bod.rid, por_rep: true}); r.ENT = e.id; delete r.ENTanul; r.ENTasig = (s.bodega && s.bodega.at) || ""; bod.cola.push(e); }
     if(antes==="done" && s.status!=="done" && r.ENT && !r.ENTanul){ bod.cola.push(nuevoEvento("ANULAR", g, {ref: r.ENT})); r.ENTanul = true; }
     if(s.status==="fail" && antes!=="fail"){ const e = nuevoEvento("NO_ENTREGADO", g, {rid: bod.rid, motivo: "No estaba"}); r.NO = e.id; delete r.NOanul; bod.cola.push(e); }
     if(antes==="fail" && s.status!=="fail" && r.NO && !r.NOanul){ bod.cola.push(nuevoEvento("ANULAR", g, {ref: r.NO})); r.NOanul = true; }
@@ -130,6 +137,7 @@ async function bodegaSync(forzar){
     if(!forzar && Date.now() - bod.ult < BOD_CADA) return;
     bod.ult = Date.now();
     await traerAsignados();
+    if(bod.cola.length) await subirCola();   // lo que reconciliar dejó para reenviar sube de una vez
     bod.sinFuncion = false;
   }catch(e){
     // La base aún no tiene la conexión con la bodega (no se ha corrido supabase/bodega.sql): no se insiste hasta reabrir.

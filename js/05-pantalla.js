@@ -316,11 +316,12 @@ function toggleDone(s){
         const lc = legCost(from, s); s.legEst = lc ? lc.sec : null; s.legKm = lc ? lc.m : null;
       } else { delete s.doneAt; delete s.legEst; delete s.legKm; }
     }
+      // Paquetes de la bodega: se avisa ANTES de cualquier salida (abrir Waze termina la función antes; v2.38).
+      if(typeof bodegaReportar === "function") bodegaReportar(s, antes);
       if(s.status==="done"){ state.stops.splice(i,1); state.stops.push(s); if(s.x!==null) state.lastDoneId = s.id; { const nx = nextStop(); toast(((s.qty||1)>1 ? `Entregados ${s.qty} paquetes.` : "Entregado.") + (nx ? ` Sigue con la parada ${stopNum(nx)}.` : "")); }
         recordDay();
         if(state.autoWaze !== false){ const nx = nextStop(); if(nx){ save(); render(); openExternal(wazeUrl(nx)); return; } else toast("¡Terminaste! No quedan entregas pendientes."); } }
       else { if(state.lastDoneId===s.id) state.lastDoneId = null; recordDay(); }   // al deshacer, baja el acumulado
-        if(typeof bodegaReportar === "function") bodegaReportar(s, antes);   // paquetes de la bodega: avisa a la bodega
         save(); render();
 }
 // «No estaba»: queda como intento fallido al final de los pendientes (o se quita la marca).
