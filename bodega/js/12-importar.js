@@ -263,6 +263,7 @@ function pintarPaso2(){
     ${Object.entries(CAMPOS).map(([k, d]) => `<label>${esc(d.txt)}<select data-campo="${k}">${opciones(k)}</select></label>`).join("")}
     <label>Empresa de todo el listado (si no viene en una columna)<select id="imEmp">${EMPRESAS.map(e => `<option${(l && l.emp) === e ? " selected" : ""}>${e}</option>`).join("")}</select></label>
     <label>Guardar en<select id="imDest">${l && !l.cerrado ? `<option value="actual">El lote abierto: ${esc(l.nombre)}</option>` : ""}<option value="nuevo">Un lote nuevo: ${esc(imp.nombre.replace(/\.[^.]+$/, "").slice(0, 30))}</option></select></label>
+    <label class="peCheck"><input type="checkbox" id="imRecibir"${prefs.importarRecibe === false ? "" : " checked"}> Ya están en bodega <small>(quedan como recibidos; el control es la asignación a cada repartidor)</small></label>
     <div class="kpis"><div class="kpi ok"><b>${r.validas}</b><span>guías a importar</span></div><div class="kpi${r.rep ? " warn" : ""}"><b>${r.rep}</b><span>repetidas en el archivo</span></div><div class="kpi${r.sinGuia ? " warn" : ""}"><b>${r.sinGuia}</b><span>filas sin guía válida</span></div><div class="kpi"><b>${imp.map.dir !== undefined ? r.conDir : "—"}</b><span>con dirección (zona)</span></div></div>
     ${r.yaEst ? `<p class="hint">${r.yaEst} guía(s) ya estaban en el listado de otro lote: se dejan donde están.</p>` : ""}
     <p class="hint">Se guarda la guía y, de la dirección, solo el número de calle y de carrera (para la zona). Nombre, teléfono y dirección completa no se guardan.</p>`;
@@ -278,23 +279,33 @@ function importarAhora(){
   }
   if(imp.map.guia === undefined){ $("imErr").textContent = "Elige la columna de la guía."; return; }
   const empFija = $("imEmp").value;
+  // v2.40: por defecto, importar = los paquetes ya llegaron (quedan «en bodega»). Sin marcar: solo esperados.
+  const recibir = !$("imRecibir") || $("imRecibir").checked;
+  prefs.importarRecibe = recibir; savePrefs();
   let l = loteActual();
   if($("imDest").value === "nuevo" || !l || l.cerrado){
     const lid = uuid(); registrar("LOTE", null, {lid, nombre: imp.nombre.replace(/\.[^.]+$/, "").slice(0, 40), emp: empFija, esperado: 0});
     prefs.lote = lid; savePrefs(); l = LOTES.get(lid);
   }
   if(imp.filaEnc >= 0){ const m = store.get(MAPAS_KEY) || {}; m[firmaEnc(imp.tabla[imp.filaEnc])] = imp.map; store.set(MAPAS_KEY, m); }
-  const vistos = new Set(); let nuevas = 0, zonas = 0, otras = 0;
+  const vistos = new Set(); let nuevas = 0, zonas = 0, otras = 0, recibidas = 0;
   for(const f of filasDatos()){
     const g = normGuia(f[imp.map.guia]); if(!g || vistos.has(g)) continue; vistos.add(g);
     const p = paq(g);
-    if(p && p.espLote && p.espLote !== l.lid){ otras++; continue; }
+    if(p && p.espLote && p.espLote !== l.lid){
+      otras++;
+      // Ya estaba esperada en otro lote: se deja en su lote, pero si llegó, queda en bodega.
+      if(recibir && p.estado === "ESPERADO"){ registrar("RECIBIDO", g, {lid: p.espLote, emp: p.emp || empFija, al_importar: true}); recibidas++; }
+      continue;
+    }
     const emp = (imp.map.emp !== undefined && EMPRESAS.find(e => sinTilde(f[imp.map.emp]).includes(sinTilde(e)))) || empFija;
     if(!p || !p.espLote){ registrar("ESPERADO", g, {lid: l.lid, emp}); nuevas++; }
+    const q = paq(g);
+    if(recibir && q && q.estado === "ESPERADO"){ registrar("RECIBIDO", g, {lid: q.espLote || l.lid, emp: q.emp || emp, al_importar: true}); recibidas++; }
     const cc = imp.map.dir !== undefined ? calleCarrera(f[imp.map.dir]) : null;
     if(cc && !tieneUbic(paq(g))){ registrar("UBICACION", g, cc); zonas++; }
   }
   $("dlgLista").close(); mostrarVista("vRecibir"); pintarTodo();
-  toast(`Importadas ${nuevas} guía(s) en «${l.nombre}»` + (zonas ? ` · ${zonas} con zona` : "") + (otras ? ` · ${otras} ya estaban en otro lote` : "") + ".");
+  toast(`Importadas ${nuevas} guía(s) en «${l.nombre}»` + (recibidas ? ` · ${recibidas} en bodega` : "") + (zonas ? ` · ${zonas} con zona` : "") + (otras ? ` · ${otras} ya estaban en otro lote` : "") + ".");
 }
 $("recManifiesto").onclick = abrirImportar;

@@ -7,7 +7,7 @@ function detalleEv(e){
   const d = e.d || {};
   switch(e.tipo){
     case "ESPERADO": return (LOTES.get(d.lid) || {}).nombre || (d.lid ? "" : "sin lote");
-    case "RECIBIDO": return ((LOTES.get(d.lid) || {}).nombre || (d.lid ? "" : "sin lote")) + (d.al_despachar ? " · al despacharla (sin escaneo de recepción)" : "");
+    case "RECIBIDO": return ((LOTES.get(d.lid) || {}).nombre || (d.lid ? "" : "sin lote")) + (d.al_despachar ? " · al despacharla (sin escaneo de recepción)" : d.al_importar ? " · al importar el listado" : "");
     case "ASIGNADO": return "a " + repNombre(d.rid) + (d.reasigna && d.de ? " (antes la tenía " + repNombre(d.de) + ")" : "") + (d.motivo ? " · " + d.motivo.toLowerCase() : "");
     case "DEVUELTO": return "por " + repNombre(d.rid) + (d.motivo ? " · " + d.motivo : "");
     case "ENTREGADO": return d.por_rep ? "reportó " + repNombre(d.rid) + " desde su app" : "al liquidar a " + repNombre(d.rid);

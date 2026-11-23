@@ -21,6 +21,7 @@ test("Excel .xlsx: encuentra la fila de encabezados, detecta columnas, avisa rep
   await expect(kpiImp(page, 1)).toHaveText("1");             // repetida
   await expect(kpiImp(page, 2)).toHaveText("1");             // fila sin guía
   await expect(kpiImp(page, 3)).toHaveText("3");             // con dirección reconocible
+  await page.uncheck("#imRecibir");                          // modo «solo esperados»
   await page.click("#imOk");
   await expect(page.locator("#dlgLista")).toBeHidden();
   expect(await A.kpi(page, "recKpis", 0)).toBe("4");          // esperados en el lote nuevo
@@ -89,6 +90,7 @@ test("Despachar un paquete del listado importado lo cuenta como recibido en su l
   await A.nuevoLote(page, "Xcargo", "Camión");
   await abrir(page);
   await page.setInputFiles("#imFile", ARCH("listado-ejemplo.xlsx"));
+  await page.uncheck("#imRecibir");                          // modo «solo esperados»
   await page.click("#imOk");
   expect(await A.kpi(page, "recKpis", 0)).toBe("4");          // esperados
   expect(await A.kpi(page, "recKpis", 1)).toBe("0");          // recibidos
@@ -120,6 +122,7 @@ test("Listado de 100 (Xcargo + iMile): despachar sin recibir antes descuenta de 
   await abrir(page);
   await page.setInputFiles("#imFile", ARCH("prueba-100-paquetes.xlsx"));
   await expect(kpiImp(page, 0)).toHaveText("100");
+  await page.uncheck("#imRecibir");                          // modo «solo esperados»
   await page.click("#imOk");
   const [xc, im] = await page.evaluate(() => { const ps = paquetes(() => true); return [ps.filter(p => p.emp === "Xcargo").map(p => p.guia), ps.filter(p => p.emp === "iMile").map(p => p.guia)]; });
   expect([xc.length, im.length]).toEqual([60, 40]);
@@ -148,5 +151,38 @@ test("Listado de 100 (Xcargo + iMile): despachar sin recibir antes descuenta de 
   expect(await A.kpi(page, "recKpis", 1)).toBe("6");          // 5 del listado + el suelto (entró al lote abierto)
   expect(await A.kpi(page, "recKpis", 2)).toBe("95");         // faltan: solo descuentan los del listado
   expect(await A.kpi(page, "recKpis", 3)).toBe("1");          // fuera del listado
+  expect(errs).toEqual([]);
+});
+
+test("v2.40: por defecto, importar = ya llegaron: quedan «en bodega» y el control es la asignación", async ({ page }) => {
+  const errs = A.vigilarErrores(page);
+  await A.entrar(page);
+  await A.agregarRep(page, "Jairo");
+  await abrir(page);
+  await page.setInputFiles("#imFile", ARCH("prueba-100-paquetes.xlsx"));
+  await expect(page.locator("#imRecibir")).toBeChecked();
+  await page.click("#imOk");
+  await expect(page.locator("#toast")).toContainText("100 en bodega");
+  expect(await A.kpi(page, "recKpis", 0)).toBe("100");          // esperados
+  expect(await A.kpi(page, "recKpis", 1)).toBe("100");          // recibidos
+  expect(await A.kpi(page, "recKpis", 2)).toBe("0");            // faltan
+  expect(await page.evaluate(() => paquetes(p => p.estado === "BODEGA").length)).toBe(100);
+  const g = await page.evaluate(() => paquetes(() => true)[0].guia);
+  // Despachar baja «en bodega»; escanear en Recibir dice que ya estaba.
+  await page.click('nav.tabs button[data-v="vDespachar"]');
+  await page.locator("#desReps button", { hasText: "Jairo" }).click();
+  await page.click("#desScan");
+  expect((await A.leer(page, g)).txt).toBe("Para Jairo");
+  await page.click("#scClose");
+  expect(await page.evaluate(() => paquetes(p => p.estado === "BODEGA").length)).toBe(99);
+  await page.click('nav.tabs button[data-v="vConsultar"]');
+  await page.evaluate(g => verPaquete(g), g);
+  await expect(page.locator("#conRes")).toContainText("al importar el listado");
+  // Volver a importar el mismo archivo no duplica nada.
+  await page.click('nav.tabs button[data-v="vRecibir"]');
+  await abrir(page);
+  await page.setInputFiles("#imFile", ARCH("prueba-100-paquetes.xlsx"));
+  await page.click("#imOk");
+  expect(await page.evaluate(() => [...EV.values()].filter(e => e.tipo === "RECIBIDO").length)).toBe(100);
   expect(errs).toEqual([]);
 });
