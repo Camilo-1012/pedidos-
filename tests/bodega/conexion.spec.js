@@ -238,3 +238,58 @@ test("la zona del paquete y las zonas del repartidor le llegan a su Ruta (v2.36)
   await expect.poll(() => paradas(ru.page).then(l => l.map(p => p.guia))).toEqual(["2696271051298372"]);
   expect([...bo.errs, ...ru.errs]).toEqual([]);
 });
+
+test("v2.38: «Entregado» llega a la bodega aunque la app abra Waze sola; un entregado que no salió se reenvía", async ({ browser }) => {
+  test.setTimeout(120000);
+  const sb = crearSupabase(), nube = agregarBodega(sb);
+  const bo = await contexto(browser, nube);
+  await A.entrar(bo.page, "Camilo", A.PIN, true);
+  await A.menu(bo.page, "btnTeam");
+  await bo.page.fill("#tmEmail", "camilo@equipo.co"); await bo.page.fill("#tmPass", "Clave-Camilo-1"); await bo.page.click("#tmConnect");
+  await expect(bo.page.locator("#tmOn")).toBeVisible();
+  await bo.page.locator("#dlgTeam .dlgHead button").click();
+  await A.agregarRep(bo.page, "Andrea");
+  await A.menu(bo.page, "btnReps");
+  await bo.page.locator("#rpList .urow", { hasText: "Andrea" }).locator("button", { hasText: "Vincular app" }).click();
+  await A.responder(bo.page, { u: "u-andrea" });
+  await bo.page.locator("#dlgReps .dlgHead button").click();
+  await A.nuevoLote(bo.page, "Xcargo", "L1");
+  await bo.page.click("#recScan");
+  for (const g of ["WZ00000001", "WZ00000002", "WZ00000003"]) await A.leer(bo.page, g);
+  await bo.page.click("#scClose");
+  await bo.page.click('nav.tabs button[data-v="vDespachar"]');
+  await bo.page.locator("#desReps button", { hasText: "Andrea" }).click();
+  await bo.page.click("#desScan");
+  for (const g of ["WZ00000001", "WZ00000002", "WZ00000003"]) await A.leer(bo.page, g);
+  await bo.page.click("#scClose");
+  await bo.page.evaluate(() => syncNow(false));
+
+  const ru = await contexto(browser, nube);
+  await R.entrar(ru.page, "Andrea");
+  // Como en el celular real: Waze se abre solo al marcar entregado (se intercepta la apertura).
+  await ru.page.evaluate(() => { state.stops = []; state.seeded = true; state.autoWaze = true; save(); render(); window.__waze = []; window.openExternal = u => window.__waze.push(u); });
+  await ru.page.click("text=Más opciones"); await ru.page.click("#btnTeamCfg");
+  await ru.page.fill("#tmEmail", "andrea@equipo.co"); await ru.page.fill("#tmPass", "Clave-Andrea-1"); await ru.page.click("#tmGo");
+  await expect(ru.page.locator("#tmState")).toContainText("Conectado como Andrea");
+  await ru.page.keyboard.press("Escape");
+  await syncRuta(ru.page);
+  await expect.poll(() => paradas(ru.page).then(l => l.length)).toBe(3);
+  // Le pone dirección a las dos primeras (para que haya «siguiente» y Waze se abra) y marca entregada la 1.
+  await ru.page.evaluate(() => { for (const g of ["WZ00000001", "WZ00000002"]){ const s = state.stops.find(x => x.guia === g); s.addr = s.label = "Calle 145 # 103B-90"; s.x = 4.74; s.y = -74.09; } save(); render(); });
+  await ru.page.evaluate(() => toggleDone(state.stops.find(x => x.guia === "WZ00000001")));
+  expect(await ru.page.evaluate(() => window.__waze.length)).toBe(1);      // sí abrió Waze…
+  await ru.page.evaluate(() => subirCola());
+  expect(sb.db.bod.eventos.filter(e => e.tipo === "ENTREGADO").map(e => e.guia)).toEqual(["WZ00000001"]);   // …y avisó a la bodega
+  // Un entregado que no salió (como pasaba antes): se marca sin avisar y al sincronizar se reenvía solo.
+  await ru.page.evaluate(() => { const s = state.stops.find(x => x.guia === "WZ00000002"); s.status = "done"; s.doneAt = Date.now(); save(); render(); bod.ult = 0; });
+  await syncRuta(ru.page);
+  await ru.page.evaluate(async () => { bod.ult = 0; await bodegaSync(true); });
+  await expect.poll(() => sb.db.bod.eventos.filter(e => e.tipo === "ENTREGADO").map(e => e.guia).sort()).toEqual(["WZ00000001", "WZ00000002"]);
+  // No se repite en las siguientes sincronizaciones.
+  await ru.page.evaluate(async () => { bod.ult = 0; await bodegaSync(true); bod.ult = 0; await bodegaSync(true); });
+  expect(sb.db.bod.eventos.filter(e => e.tipo === "ENTREGADO")).toHaveLength(2);
+  // En la bodega: 2 entregados hoy.
+  await bo.page.evaluate(() => syncNow(true));
+  await expect.poll(() => bo.page.evaluate(() => paquetes(p => p.estado === "ENTREGADO").length)).toBe(2);
+  expect([...bo.errs, ...ru.errs]).toEqual([]);
+});
