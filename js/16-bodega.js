@@ -113,16 +113,29 @@ function subirCola(){
   subiendo = (async ()=>{
     if(!bod.cola.length || typeof syncOn !== "function" || !syncOn() || !navigator.onLine) return;
     const lote = bod.cola.slice(0, 100);
-    const enviar = l=>sbBod("bodega_eventos?on_conflict=id", {method:"POST", headers:{Prefer:"resolution=ignore-duplicates,return=minimal"}, body:JSON.stringify(l)});
-    const rechazo = e=>e.status===403 || e.status===400 || e.code==="42501" || e.code==="23514";
+    // v2.39: INSERT simple (sin «on_conflict»): el repartidor no puede leer bodega_eventos y en Supabase el upsert
+    // también exige permiso de lectura, así que la base rechazaba todos sus reportes. Un id repetido (ya subido
+    // antes, p. ej. sin respuesta por mala señal) responde 409 / 23505 y cuenta como subido.
+    const enviar = l=>sbBod("bodega_eventos", {method:"POST", headers:{Prefer:"return=minimal"}, body:JSON.stringify(l)});
+    const yaEstaba = e=>e.status===409 || e.code==="23505";
+    const rechazo = e=>e.status===403 || e.status===400 || e.status===401 || e.code==="42501" || e.code==="23514";
     try{ await enviar(lote); quitarDeCola(lote); }
     catch(e){
-      if(!rechazo(e)) throw e;
-      // Alguno no lo aceptó la bodega (p. ej. ya no está asignado a ti): se suben uno por uno y se apartan los rechazados.
-      const malos = [];
-      for(const ev of lote){ try{ await enviar([ev]); }catch(x){ if(rechazo(x)) malos.push(ev); else throw x; } }
+      if(!rechazo(e) && !yaEstaba(e)) throw e;
+      // Uno por uno: se apartan los rechazados (p. ej. ya no está asignado a ti) y los repetidos cuentan como subidos.
+      const malos = []; let motivo = "";
+      for(const ev of lote){
+        try{ await enviar([ev]); }
+        catch(x){ if(yaEstaba(x)) continue; if(rechazo(x)){ malos.push(ev); motivo = motivo || x.message || ""; } else throw x; }
+      }
       quitarDeCola(lote);
-      if(malos.length) toast(`La bodega no aceptó ${malos.length} reporte(s): ${[...new Set(malos.map(m=>m.guia))].join(", ")} ya no está(n) a tu nombre.`);
+      // Rechazado: si la bodega se lo vuelve a asignar, se reintenta (no queda marcado como enviado).
+      for(const ev of malos){ const st = paradaDeGuia(ev.guia); const r = st && st.bev && st.bev[ev.guia]; if(r) delete r.ENTasig; }
+      if(malos.length){
+        console.warn("bodega: reportes rechazados", motivo, malos);
+        toast(`La bodega no aceptó ${malos.length} reporte(s) (${[...new Set(malos.map(m=>m.guia))].join(", ")})` + (/row-level|policy|42501/i.test(motivo) ? ": ya no está(n) a tu nombre." : motivo ? `: ${motivo}` : "."));
+        save();
+      }
     }
   })().finally(()=>{ subiendo = null; guardarBod(); });
   return subiendo;

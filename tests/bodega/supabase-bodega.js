@@ -50,6 +50,10 @@ function agregarBodega(sb){
     if (path === "/rest/v1/bodega_eventos"){
       if (metodo === "POST"){
         const filas = JSON.parse(req.postData()), r = miRid(uid);
+        // Como en Supabase real: el upsert (on_conflict) también pide permiso de lectura; el repartidor no lo tiene.
+        if (p.get("on_conflict") && !miembro(uid)) return json(route, 403, { code: "42501", message: "new row violates row-level security policy for table \"bodega_eventos\"" });
+        // Sin on_conflict, un id repetido es error de llave duplicada.
+        if (!p.get("on_conflict") && filas.some(f => B.eventos.some(e => e.id === f.id))) return json(route, 409, { code: "23505", message: "duplicate key value violates unique constraint \"bodega_eventos_pkey\"" });
         const permitido = f => {
           if (miembro(uid)) return !(["REP", "ZONA"].includes(f.tipo) && !admin(uid));
           // Repartidor: solo sus reportes de guías que hoy están en ruta con él, y deshacer sus propios reportes.
