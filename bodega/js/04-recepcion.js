@@ -49,7 +49,7 @@ function pintarRecibir(){
   const s = statsLote(l.lid);
   kpis($("recKpis"), [[s.esperado || "—", "esperados"], [s.rec, "recibidos", "ok"], [s.esperado ? s.faltan : "—", "faltan", s.faltan ? "warn" : ""], [s.sobr, "fuera del listado", s.sobr ? "warn" : ""]]);
   const cerrado = !!l.cerrado;
-  $("recScan").disabled = $("recEscribir").disabled = $("recManifiesto").disabled = cerrado;
+  $("recScan").disabled = $("recEscribir").disabled = cerrado;
   $("recCerrar").textContent = cerrado ? "Reabrir lote" : "Cerrar lote";
   $("recNota").textContent = (l.emp ? l.emp + " · " : "") + "Creado " + fechaHora(l.at) + (cerrado ? " · Cerrado " + fechaHora(l.cerrado) : "") +
     (s.esp ? "" : " · Sin listado esperado: los faltantes se calculan con la cantidad que escribiste.");
@@ -104,18 +104,6 @@ $("recEscribir").onclick = () => escribirGuia(cfgRecibir());
 /* ---- Listado esperado (manifiesto) ----
    Formato del listado de Xcargo / iMile aún sin confirmar: se acepta texto pegado o un archivo .csv/.txt y se toma
    toda palabra que parezca guía. Un .xlsx se debe guardar antes como CSV. */
-$("recManifiesto").onclick = () => {
-  const l = loteActual(); if(!l) return;
-  mostrarListado("Listado esperado · " + l.nombre,
-    `<p class="hint">Pega las guías (una por línea, o separadas por comas o espacios) o elige un archivo CSV o de texto. Si el listado está en Excel, guárdalo antes como CSV.</p>
-     <textarea id="mfTxt" rows="8" aria-label="Guías esperadas"></textarea>
-     <label>Archivo<input type="file" id="mfFile" accept=".csv,.txt,text/csv,text/plain"></label>
-     <p class="hint" id="mfInfo" role="status"></p>`,
-    [["Cancelar", () => $("dlgLista").close()], ["Guardar listado", () => guardarManifiesto(l.lid), "primary"]]);
-  const contar = () => { const n = guiasDeTexto($("mfTxt").value).length; $("mfInfo").textContent = n ? n + " guía(s) encontradas." : ""; };
-  $("mfTxt").oninput = contar;
-  $("mfFile").onchange = async e => { const f = e.target.files[0]; if(!f) return; if(f.size > 5e6){ toast("Archivo muy grande (máx. 5 MB)."); return; } $("mfTxt").value = await f.text(); contar(); };
-};
 function guardarManifiesto(lid){
   const l = LOTES.get(lid), gs = guiasDeTexto($("mfTxt").value);
   if(!gs.length){ $("mfInfo").textContent = "No se encontró ninguna guía en el texto."; return; }

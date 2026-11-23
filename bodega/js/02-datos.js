@@ -4,7 +4,7 @@
    otro celular se acomodan en su lugar cuando llegan, y no hay sobrescrituras que pierdan información.
    Se guarda en IndexedDB (aguanta decenas de miles de eventos; localStorage no). */
 "use strict";
-const TIPOS = ["REP","ZONA","LOTE","LOTE_CERRADO","ESPERADO","RECIBIDO","NOVEDAD","UBICACION","ASIGNADO","DEVUELTO","ENTREGADO","NO_ENTREGADO","FALTANTE","ANULAR"];
+const TIPOS = ["REP","REP_ZONAS","ZONA","LOTE","LOTE_CERRADO","ESPERADO","RECIBIDO","NOVEDAD","UBICACION","ASIGNADO","DEVUELTO","ENTREGADO","NO_ENTREGADO","FALTANTE","ANULAR"];
 const ESTADOS = {ESPERADO:"Esperado (sin recibir)", BODEGA:"En bodega", RUTA:"En ruta", ENTREGADO:"Entregado", FALTANTE:"Faltante"};
 const RETENER_DIAS = 30;   // en el celular: paquetes cerrados (entregados/faltantes) hace más de 30 días se quitan
 
@@ -12,6 +12,8 @@ const EV = new Map();        // id → evento
 const POR_GUIA = new Map();  // guía → [eventos]
 const PAQ = new Map();       // guía → estado calculado
 const REPS = new Map();      // rid → {rid, nombre, activo}
+// rid → {zids:[…], at}: zonas que se le asignan al repartidor (en Despachar). Una zona puede tener varios.
+const REPZ = new Map();
 const ZONAS = new Map();     // zid → {zid, nombre, color, cl:[desde,hasta], kr:[desde,hasta], rid, activa} (ver js/10-zonas.js)
 const LOTES = new Map();     // lid → {lid, nombre, emp, esperado, cerrado, at}
 let idb = null, idbFalla = false;
@@ -89,6 +91,9 @@ function aplicarCatalogo(e){
   if(e.tipo === "REP"){
     const r = REPS.get(d.rid);
     if(!r || r.at <= e.at) REPS.set(d.rid, {rid: d.rid, nombre: d.nombre, activo: d.activo !== false, at: e.at});
+  } else if(e.tipo === "REP_ZONAS"){
+    const x = REPZ.get(d.rid);
+    if(!x || x.at <= e.at) REPZ.set(d.rid, {zids: Array.isArray(d.zids) ? d.zids : [], at: e.at});
   } else if(e.tipo === "ZONA"){
     const z = ZONAS.get(d.zid);
     if(!z || z.at <= e.at) ZONAS.set(d.zid, {zid: d.zid, nombre: d.nombre, color: d.color || "", cl: d.cl || [null, null], kr: d.kr || [null, null], rid: d.rid || "", activa: d.activa !== false, at: e.at});

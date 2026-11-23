@@ -76,7 +76,7 @@ li.lec.mal span{color:var(--bad)}
   #dlgLista .dlgHead,#dlgLista #ltActs{display:none!important}
   :root{--ink:#000;--surface:#fff;--bg:#fff;--line:#999;color-scheme:light}
 }
-#desPlanilla,#devCerrar,#recNuevo{width:100%}
+#desPlanilla,#devCerrar{width:100%}
 /* Zonas (v1.1) */
 .chip.zona{background:var(--zc);color:#fff;border-color:var(--zc)}
 .chip.zsin{border-style:dashed}
@@ -93,3 +93,17 @@ li.lec.mal span{color:var(--bad)}
 .zbtns{display:flex;flex-wrap:wrap;gap:6px}
 .zbtn{background:var(--zc);color:#fff;border-color:var(--zc)}
 .lec .zona{margin-top:2px}
+
+/* v2.33: separación entre los bloques de cada sección (antes quedaban pegados) */
+#recInfo,#desInfo,#devInfo{display:flex;flex-direction:column;gap:12px}
+#recInfo[hidden],#desInfo[hidden],#devInfo[hidden]{display:none}
+#desZonas,#recZonas,#desZonasRep{display:flex;flex-direction:column;gap:8px}
+#desZonas:empty,#recZonas:empty,#desZonasRep:empty{display:none}
+.kpis{gap:8px}
+.zgrid{gap:8px}
+/* Zonas del repartidor (se marcan al despachar) */
+.zsel{display:flex;flex-wrap:wrap;gap:8px}
+.zsel button{flex:1 1 auto;min-height:48px;border-left:6px solid var(--zc);justify-content:flex-start;gap:8px}
+.zsel button[aria-pressed="true"]{background:var(--zc);color:#fff;border-color:var(--zc)}
+.zsel button[aria-pressed="true"]::before{content:"✓"}
+.reps button small.zs{color:var(--accent);opacity:.9}

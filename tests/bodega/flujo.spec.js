@@ -69,6 +69,7 @@ test("recepción con listado: recibidos, repetidos, fuera del listado, deshacer 
   await A.entrar(page);
   await A.nuevoLote(page, "Xcargo", "Camión mañana");
   await page.click("#recManifiesto");
+  await page.click("#ltBody summary");                        // «O pega las guías»
   await page.fill("#mfTxt", "GUIA100001\nGUIA100002, GUIA100003 ruido 12\n\"GUIA100004\"");
   await expect(page.locator("#mfInfo")).toHaveText("4 guía(s) encontradas.");
   await page.click("#ltActs button.primary");

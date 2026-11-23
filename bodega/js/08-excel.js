@@ -30,7 +30,7 @@ function excelPlanilla(rid){
   const x = delRepartidor(rid), n = repNombre(rid);
   descargarXlsx([{nombre:"Planilla " + n, anchos:[6,22,18,9,9,12,30,13], filas:[["#","Guía","Zona","Calle","Carrera","Empresa","Novedad","Asignado"],
     ...ordenPlanilla(x.enRuta).map((p, i) => [i + 1, p.guia, nomZona(p), txtVia(p.cl), txtViaKr(p.kr), p.emp, p.nov.map(v => v.nota).join("; "), fechaHora(p.asignado)]),
-    [], [{v:"Total", b:true}, {v:x.enRuta.length, b:true}], ["Repartidor", n], ["Despachó", USER.name], ["Fecha", fechaHora(new Date().toISOString())]]}],
+    [], [{v:"Total", b:true}, {v:x.enRuta.length, b:true}], ["Repartidor", n], ["Zonas", zonasDeRep(rid).map(z => z.nombre).join(", ")], ["Despachó", USER.name], ["Fecha", fechaHora(new Date().toISOString())]]}],
     `planilla-${n.replace(/[^\wáéíóúñÁÉÍÓÚÑ-]+/g, "_")}-${hoy()}.xlsx`);
 }
 function excelLote(lid){
