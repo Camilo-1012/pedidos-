@@ -5,7 +5,7 @@ function botonesReps(box, sel, alElegir){
   const reps = repsActivos();
   if(!reps.length){ box.innerHTML = `<p class="hint">No hay repartidores. Agrégalos en el menú ☰ → Repartidores.</p>`; return; }
   const enRuta = new Map(); for(const p of PAQ.values()) if(p.estado === "RUTA") enRuta.set(p.rid, (enRuta.get(p.rid) || 0) + 1);
-  box.innerHTML = reps.map(r => `<button type="button" data-rid="${esc(r.rid)}" aria-pressed="${r.rid === sel}">${esc(r.nombre)}<small>${enRuta.get(r.rid) || 0} en ruta${VINC.has(r.rid) ? " · 📱" : ""}</small></button>`).join("");
+  box.innerHTML = reps.map(r => `<button type="button" data-rid="${esc(r.rid)}" aria-pressed="${r.rid === sel}">${esc(r.nombre)}<small>${enRuta.get(r.rid) || 0} en ruta${VINC.has(r.rid) ? " · 📱" : ""}</small>${zonasDeRep(r.rid).length ? `<small class="zs">${esc(zonasDeRep(r.rid).map(z => z.nombre).join(", "))}</small>` : ""}</button>`).join("");
   box.querySelectorAll("button").forEach(b => b.onclick = () => alElegir(b.dataset.rid));
 }
 const repActual = () => { const r = REPS.get(prefs.rep); return r && r.activo ? r : null; };
@@ -16,6 +16,7 @@ function pintarDespachar(){
   botonesReps($("desReps"), r && r.rid, elegirRep);
   $("desInfo").hidden = !r; if(!r) return;
   const x = delRepartidor(r.rid);
+  pintarZonasRep(r);
   pintarZonasDespacho(r.rid);
   kpis($("desKpis"), [[x.asignadosDia.length, "asignados hoy"], [x.enRuta.length, "en ruta (por liquidar)", "zone"], [x.devueltosDia.length, "devueltos hoy"], [x.entregadosDia.length, "entregados hoy", "ok"]]);
   pintarLista($("desLista"), x.enRuta.map(p => liPaq(p, "Asignado " + fechaHora(p.asignado) + (diaDe(p.asignado) !== hoy() ? " · de otro día" : ""))), 40, "Todavía no lleva paquetes.");
@@ -38,13 +39,14 @@ async function asignarGuia(g){
   }
   evs.push(registrar("ASIGNADO", g, {rid: r.rid}).id);
   const q = paq(g), z = zonaDe(q);
-  // Zona de otro repartidor: solo se avisa (puede ser un apoyo), no se bloquea.
-  const otraZona = z && z.rid && z.rid !== r.rid;
-  return {tipo:"ok", txt:"Para " + r.nombre + (VINC.has(r.rid) ? " · ya le sale en su app" : "") + (z ? " · " + z.nombre : "") + (otraZona ? " · ⚠ zona de " + repNombre(z.rid) : "") + (q.nov.length ? " · tiene novedad: " + q.nov[q.nov.length - 1].nota : ""), evs, cls: q.nov.length || otraZona ? "aviso" : ""};
+  // Paquete de una zona que no es de este repartidor: solo se avisa (puede ser un apoyo), no se bloquea.
+  const mias = zonasDeRep(r.rid), otraZona = z && mias.length && !mias.some(m => m.zid === z.zid);
+  const deQuien = otraZona ? repsDeZona(z.zid).map(x => x.nombre).join(", ") : "";
+  return {tipo:"ok", txt:"Para " + r.nombre + (VINC.has(r.rid) ? " · ya le sale en su app" : "") + (z ? " · " + z.nombre : "") + (otraZona ? " · ⚠ no es de sus zonas" + (deQuien ? " (es de " + deQuien + ")" : "") : "") + (q.nov.length ? " · tiene novedad: " + q.nov[q.nov.length - 1].nota : ""), evs, cls: q.nov.length || otraZona ? "aviso" : ""};
 }
 const cfgDespacho = () => ({
   titulo:"Despachar", alLeer: asignarGuia,
-  objetivo: () => { const r = repActual(); return r ? `Para: ${r.nombre} · lleva ${delRepartidor(r.rid).enRuta.length}` : ""; },
+  objetivo: () => { const r = repActual(); if(!r) return ""; const zs = zonasDeRep(r.rid).map(z => z.nombre); return `Para: ${r.nombre}${zs.length ? " · " + zs.join(", ") : ""} · lleva ${delRepartidor(r.rid).enRuta.length}`; },
   contador: () => "asignadas en esta pasada", alCerrar: pintarTodo
 });
 $("desScan").onclick = () => repActual() && abrirEscaner(cfgDespacho());
@@ -56,7 +58,8 @@ const nomZona = p => (zonaDe(p) || {nombre: ZONAS.size ? "Sin zona" : ""}).nombr
 function ordenPlanilla(lista){ return lista.slice().sort((a, b) => nomZona(a).localeCompare(nomZona(b), "es", {numeric:true}) || (a.cl ?? 999) - (b.cl ?? 999) || (a.kr ?? 999) - (b.kr ?? 999) || a.guia.localeCompare(b.guia)); }
 function textoPlanilla(r, x){
   const porEmp = {}; x.enRuta.forEach(p => { porEmp[p.emp || "Sin empresa"] = (porEmp[p.emp || "Sin empresa"] || 0) + 1; });
-  return `Planilla de salida · ${r.nombre} · ${fechaHora(new Date().toISOString())}\nTotal: ${x.enRuta.length} (${Object.entries(porEmp).map(([k, v]) => k + " " + v).join(", ")})\n` +
+  const zs = zonasDeRep(r.rid).map(z => z.nombre);
+  return `Planilla de salida · ${r.nombre}${zs.length ? " · Zonas: " + zs.join(", ") : ""} · ${fechaHora(new Date().toISOString())}\nTotal: ${x.enRuta.length} (${Object.entries(porEmp).map(([k, v]) => k + " " + v).join(", ")})\n` +
     ordenPlanilla(x.enRuta).map((p, i) => `${i + 1}. ${p.guia}${p.emp ? " · " + p.emp : ""}${nomZona(p) ? " · " + nomZona(p) : ""}`).join("\n");
 }
 $("desPlanilla").onclick = () => {
@@ -65,7 +68,7 @@ $("desPlanilla").onclick = () => {
   const porEmp = {}; x.enRuta.forEach(p => { porEmp[p.emp || "Sin empresa"] = (porEmp[p.emp || "Sin empresa"] || 0) + 1; });
   mostrarListado("Planilla · " + r.nombre,
     `<div class="planilla" id="planilla">
-      <p><b>Bodega · Planilla de salida</b><br>Repartidor: <b>${esc(r.nombre)}</b><br>Fecha: ${esc(fechaHora(new Date().toISOString()))} · Despachó: ${esc(USER.name)}</p>
+      <p><b>Bodega · Planilla de salida</b><br>Repartidor: <b>${esc(r.nombre)}</b>${zonasDeRep(r.rid).length ? `<br>Zonas: <b>${esc(zonasDeRep(r.rid).map(z => z.nombre).join(", "))}</b>` : ""}<br>Fecha: ${esc(fechaHora(new Date().toISOString()))} · Despachó: ${esc(USER.name)}</p>
       <p>Total: <b>${x.enRuta.length}</b> paquete(s) · ${Object.entries(porEmp).map(([k, v]) => esc(k) + ": " + v).join(" · ") || "—"}</p>
       <table class="tb"><thead><tr><th>#</th><th>Guía</th><th>Zona</th><th>Empresa</th><th>Novedad</th></tr></thead><tbody>
       ${ordenPlanilla(x.enRuta).map((p, i) => `<tr><td>${i + 1}</td><td>${esc(p.guia)}</td><td>${esc(nomZona(p))}</td><td>${esc(p.emp)}</td><td>${esc(p.nov.map(n => n.nota).join("; "))}</td></tr>`).join("")}

@@ -83,7 +83,7 @@ test("zonas: crear con aviso de cruce, ubicar al recibir, despachar con aviso de
   await page.click("#desScan");
   expect((await A.leer(page, "ZON0000001")).txt).toBe("Para Jairo · Z1 Tibabuyes");
   const r2 = await A.leer(page, "ZON0000002");
-  expect(r2.txt).toBe("Para Jairo · Z2 Lisboa · ⚠ zona de Pedro"); expect(r2.cls).toBe("aviso");
+  expect(r2.txt).toBe("Para Jairo · Z2 Lisboa · ⚠ no es de sus zonas (es de Pedro)"); expect(r2.cls).toBe("aviso");
   expect((await A.leer(page, "ZON0000004")).txt).toBe("Para Jairo");
   await page.click("#scClose");
   await page.click("#desPlanilla");
@@ -124,4 +124,48 @@ test("solo un administrador maneja zonas (en el celular y en la nube)", async ({
   await A.menu(page, "btnZonas");
   await expect(page.locator("#znAdd")).toBeHidden();
   await expect(page.locator("#znNota")).toContainText("Solo un administrador");
+});
+
+test("Despachar: marcar las zonas de cada repartidor (una zona puede tener varios) y aviso al escanear de otra zona", async ({ page }) => {
+  const errs = A.vigilarErrores(page);
+  await A.entrar(page);
+  await A.agregarRep(page, "Jairo"); await A.agregarRep(page, "John");
+  await page.evaluate(() => {
+    registrar("ZONA", null, {zid: "za", nombre: "Alcaparros", color: "#1f8a4c", cl: [130, 139], kr: [null, null], activa: true});
+    registrar("ZONA", null, {zid: "zb", nombre: "Bilbao", color: "#d0421b", cl: [140, 149], kr: [null, null], activa: true});
+    registrar("ZONA", null, {zid: "zc", nombre: "Lombardia", color: "#2f6fdf", cl: [150, 160], kr: [null, null], activa: true});
+  });
+  await A.nuevoLote(page, "Xcargo", "L1");
+  await page.click("#recScan");
+  for(const [g, cl] of [["ZR00000001", "135"], ["ZR00000002", "145"], ["ZR00000003", "155"]]){
+    const p = A.leer(page, g); await page.fill("#ubCl", cl); await page.fill("#ubKr", "100"); await page.click("#ubOk"); await p;
+  }
+  await page.click("#scClose");
+  await page.click('nav.tabs button[data-v="vDespachar"]');
+  await page.locator("#desReps button", { hasText: "Jairo" }).click();
+  await expect(page.locator("#desZonasRep h3")).toHaveText("Zonas de Jairo");
+  await page.locator('#desZonasRep button[data-zid="za"]').click();
+  await page.locator('#desZonasRep button[data-zid="zb"]').click();
+  await expect(page.locator('#desZonasRep button[aria-pressed="true"]')).toHaveCount(2);
+  await expect(page.locator("#desReps button", { hasText: "Jairo" })).toContainText("Alcaparros, Bilbao");
+  // John también lleva Bilbao (una zona, dos repartidores).
+  await page.locator("#desReps button", { hasText: "John" }).click();
+  await page.locator('#desZonasRep button[data-zid="zb"]').click();
+  await page.locator('#desZonasRep button[data-zid="zc"]').click();
+  await expect(page.locator('#desZonasRep button[data-zid="zb"]')).toContainText("Jairo");      // muestra quién más la lleva
+  await page.locator("#desReps button", { hasText: "Jairo" }).click();
+  await page.click("#desScan");
+  await expect(page.locator("#scTarget")).toContainText("Para: Jairo · Alcaparros, Bilbao");
+  expect((await A.leer(page, "ZR00000001")).txt).toBe("Para Jairo · Alcaparros");
+  const r = await A.leer(page, "ZR00000003");
+  expect(r.txt).toBe("Para Jairo · Lombardia · ⚠ no es de sus zonas (es de John)"); expect(r.cls).toBe("aviso");
+  await page.click("#scClose");
+  await page.click("#desPlanilla");
+  await expect(page.locator("#planilla")).toContainText("Zonas: Alcaparros, Bilbao");
+  await page.locator("#dlgLista .dlgHead button").click();
+  // Quitar una zona con otro toque; se guarda como evento (queda en el histórico y se sincroniza).
+  await page.locator('#desZonasRep button[data-zid="zb"]').click();
+  await expect(page.locator("#desReps button", { hasText: "Jairo" })).toContainText("Alcaparros");
+  expect(await page.evaluate(() => zonasDeRep(repsActivos().find(r => r.nombre === "Jairo").rid).map(z => z.nombre))).toEqual(["Alcaparros"]);
+  expect(errs).toEqual([]);
 });

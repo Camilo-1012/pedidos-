@@ -31,20 +31,21 @@ create table if not exists public.bodega_eventos (
   -- Una lectura no puede venir del futuro ni de hace más de 15 días (celular con la hora mal o datos viejos).
   constraint bodega_eventos_at_ok check (at <= srv_at + interval '10 minutes' and at >= srv_at - interval '15 days'),
   -- Los eventos de paquete llevan guía; los de catálogo (repartidores, lotes) no.
-  constraint bodega_eventos_guia_ok check ((tipo in ('REP','ZONA','LOTE','LOTE_CERRADO')) = (guia is null))
+  constraint bodega_eventos_guia_ok check ((tipo in ('REP','REP_ZONAS','ZONA','LOTE','LOTE_CERRADO')) = (guia is null))
 );
 -- Tipos válidos (v1.1 agrega ZONA y UBICACION). Se define aparte para poder ampliarlo sin recrear la tabla.
 alter table public.bodega_eventos drop constraint if exists bodega_eventos_tipo_check;
 alter table public.bodega_eventos drop constraint if exists bodega_eventos_tipo_ok;
 alter table public.bodega_eventos add constraint bodega_eventos_tipo_ok check (tipo in
-  ('REP','ZONA','LOTE','LOTE_CERRADO','ESPERADO','RECIBIDO','NOVEDAD','UBICACION','ASIGNADO','DEVUELTO','ENTREGADO','NO_ENTREGADO','FALTANTE','ANULAR'));
+  ('REP','REP_ZONAS','ZONA','LOTE','LOTE_CERRADO','ESPERADO','RECIBIDO','NOVEDAD','UBICACION','ASIGNADO','DEVUELTO','ENTREGADO','NO_ENTREGADO','FALTANTE','ANULAR'));
 alter table public.bodega_eventos drop constraint if exists bodega_eventos_guia_ok;
-alter table public.bodega_eventos add constraint bodega_eventos_guia_ok check ((tipo in ('REP','ZONA','LOTE','LOTE_CERRADO')) = (guia is null));
+alter table public.bodega_eventos add constraint bodega_eventos_guia_ok check ((tipo in ('REP','REP_ZONAS','ZONA','LOTE','LOTE_CERRADO')) = (guia is null));
 create index if not exists bodega_eventos_srv on public.bodega_eventos (srv_at);
 create index if not exists bodega_eventos_guia on public.bodega_eventos (guia);
 create index if not exists bodega_eventos_at on public.bodega_eventos (at);   -- histórico por fechas
 drop index if exists public.bodega_eventos_tipo;
-create index if not exists bodega_eventos_cat on public.bodega_eventos (tipo) where tipo in ('REP','ZONA','LOTE','LOTE_CERRADO');
+drop index if exists public.bodega_eventos_cat;
+create index if not exists bodega_eventos_cat2 on public.bodega_eventos (tipo) where tipo in ('REP','REP_ZONAS','ZONA','LOTE','LOTE_CERRADO');
 
 -- El servidor pone su hora y el usuario real (no se confía en lo que mande el celular).
 create or replace function public.bodega_eventos_sellar() returns trigger

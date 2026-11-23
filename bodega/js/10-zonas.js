@@ -34,6 +34,13 @@ function zonaPorUbic(cl, kr){
   if(cl == null && kr == null) return null;
   return zonasActivas().find(z => (z.cl[0] != null || z.cl[1] != null || z.kr[0] != null || z.kr[1] != null) && dentro(cl, z.cl) && dentro(kr, z.kr)) || null;
 }
+// Zonas del repartidor: las marcadas en Despachar; si nunca se le marcaron, las que lo tienen como habitual.
+function zonasDeRep(rid){
+  const x = REPZ.get(rid);
+  const ids = x ? x.zids : zonasActivas().filter(z => z.rid === rid).map(z => z.zid);
+  return zonasActivas().filter(z => ids.includes(z.zid));
+}
+const repsDeZona = zid => repsActivos().filter(r => zonasDeRep(r.rid).some(z => z.zid === zid));
 function zonaDe(p){
   if(!p) return null;
   if(p.zidManual){ const z = ZONAS.get(p.zidManual); return z && z.activa ? z : null; }
@@ -113,9 +120,11 @@ function pintarZonasDespacho(rid){
   const box = $("desZonas"); if(!box) return;
   const zs = zonasActivas(); if(!zs.length){ box.innerHTML = ""; return; }
   const {m, sin} = conteoZonas(p => p.estado === "BODEGA");
-  const suyas = zs.filter(z => z.rid === rid), otras = zs.filter(z => z.rid !== rid);
-  const celda = z => `<button type="button" class="zcell${z.rid === rid ? " suya" : ""}" style="--zc:${esc(z.color)}" data-zid="${esc(z.zid)}"><b>${m.get(z.zid) || 0}</b><span>${esc(z.nombre)}${z.rid && z.rid !== rid ? " · " + esc(repNombre(z.rid)) : ""}</span></button>`;
-  box.innerHTML = `<h3>En bodega por zona${suyas.length ? "" : " (este repartidor no tiene zona habitual)"}</h3><div class="zgrid">${suyas.map(celda).join("")}${otras.map(celda).join("")}<button type="button" class="zcell sin" data-zid=""><b>${sin}</b><span>Sin zona</span></button></div>`;
+  const mias = new Set(zonasDeRep(rid).map(z => z.zid));
+  const suyas = zs.filter(z => mias.has(z.zid)), otras = zs.filter(z => !mias.has(z.zid));
+  const otrosRep = z => repsDeZona(z.zid).filter(r => r.rid !== rid).map(r => r.nombre).join(", ");
+  const celda = z => `<button type="button" class="zcell${mias.has(z.zid) ? " suya" : ""}" style="--zc:${esc(z.color)}" data-zid="${esc(z.zid)}"><b>${m.get(z.zid) || 0}</b><span>${esc(z.nombre)}${otrosRep(z) ? " · " + esc(otrosRep(z)) : ""}</span></button>`;
+  box.innerHTML = `<h3>En bodega por zona</h3><div class="zgrid">${suyas.map(celda).join("")}${otras.map(celda).join("")}<button type="button" class="zcell sin" data-zid=""><b>${sin}</b><span>Sin zona</span></button></div>`;
   box.querySelectorAll("button").forEach(b => b.onclick = () => listaZona(b.dataset.zid, p => p.estado === "BODEGA"));
 }
 function listaZona(zid, filtro){
@@ -157,7 +166,7 @@ async function editarZona(z){
       {id:"cd", label:"Calle desde", type:"text", value:txtVia(z.cl[0]), max:8, ph:"vacío = sin límite"}, {id:"ch", label:"Calle hasta", type:"text", value:txtVia(z.cl[1]), max:8, ph:"vacío = sin límite"},
       {id:"kd", label:"Carrera desde", type:"text", value:txtViaKr(z.kr[0]), max:8, ph:"vacío = sin límite"}, {id:"kh", label:"Carrera hasta", type:"text", value:txtViaKr(z.kr[1]), max:8, ph:"vacío = sin límite"},
       {id:"c", label:"Color", type:"select", options:COLORES_ZONA, value:z.color},
-      {id:"r", label:"Repartidor habitual (opcional)", type:"select", options:[["", "—"], ...repsActivos().map(r => [r.rid, r.nombre])], value:z.rid || ""}],
+      {id:"r", label:"Repartidor habitual (opcional; las zonas de cada repartidor también se marcan en Despachar)", type:"select", options:[["", "—"], ...repsActivos().map(r => [r.rid, r.nombre])], value:z.rid || ""}],
     yes:"Guardar", check: v => {
       const nom = v.n.trim().replace(/\s+/g, " ");
       if(!nom) return "Escribe el nombre.";
@@ -177,3 +186,23 @@ async function editarZona(z){
 }
 $("btnZonas").onclick = () => { pintarZonasAdmin(); $("dlgZonas").showModal(); };
 $("znAdd").onclick = () => editarZona(null);
+
+/* ---- Despachar: «Zonas de <repartidor>» (se marcan o desmarcan con un toque; quedan hasta que se cambien) ---- */
+function pintarZonasRep(r){
+  const box = $("desZonasRep"); if(!box) return;
+  const zs = zonasActivas();
+  if(!r){ box.innerHTML = ""; return; }
+  if(!zs.length){ box.innerHTML = `<p class="hint">Para asignarle zonas, créalas primero en ☰ → Zonas.</p>`; return; }
+  const mias = new Set(zonasDeRep(r.rid).map(z => z.zid));
+  box.innerHTML = `<h3>Zonas de ${esc(r.nombre)}</h3><p class="hint" style="margin:0">${mias.size ? "Toca para quitar o agregar. Al escanear se avisa si un paquete es de otra zona." : "Toca las zonas que va a llevar hoy."}</p>
+    <div class="zsel" role="group" aria-label="Zonas de ${esc(r.nombre)}">${zs.map(z => {
+      const otros = repsDeZona(z.zid).filter(x => x.rid !== r.rid).map(x => x.nombre);
+      return `<button type="button" style="--zc:${esc(z.color || "#455a64")}" data-zid="${esc(z.zid)}" aria-pressed="${mias.has(z.zid)}">${esc(z.nombre)}${otros.length ? `<small> · ${esc(otros.join(", "))}</small>` : ""}</button>`;
+    }).join("")}</div>`;
+  box.querySelectorAll("button[data-zid]").forEach(b => b.onclick = () => {
+    const ids = new Set(zonasDeRep(r.rid).map(z => z.zid));
+    ids.has(b.dataset.zid) ? ids.delete(b.dataset.zid) : ids.add(b.dataset.zid);
+    registrar("REP_ZONAS", null, {rid: r.rid, zids: [...ids]});
+    pintarTodo();
+  });
+}
