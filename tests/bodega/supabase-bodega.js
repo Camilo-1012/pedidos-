@@ -4,7 +4,7 @@
 const SB = "https://aptyzcodlubefqrscmvc.supabase.co";
 function agregarBodega(sb){
   const db = sb.db;
-  db.bod = { miembros: [{ user_id: "u-camilo", nombre: "Camilo", rol: "admin" }], eventos: [], seq: 0, vinculos: [] };
+  db.bod = { miembros: [{ user_id: "u-camilo", nombre: "Camilo", rol: "admin" }], eventos: [], seq: 0, vinculos: [], datos: new Map() };
   const B = db.bod;
   const json = (route, status, body) => route.fulfill({ status, contentType: "application/json", body: body === undefined ? "" : JSON.stringify(body) });
   const uidDe = req => { const m = /Bearer tok-(.+)$/.exec(req.headers()["authorization"] || ""); return m ? m[1] : null; };
@@ -37,6 +37,16 @@ function agregarBodega(sb){
       if (metodo === "DELETE"){ const r = (p.get("rid") || "").replace("eq.", ""); B.vinculos = B.vinculos.filter(v => v.rid !== decodeURIComponent(r)); return json(route, 204); }
     }
     if (path === "/rest/v1/rpc/bodega_mi_rid") return json(route, 200, miRid(uid));
+    // v2.41: datos de entrega (datos-entrega.sql). Solo la bodega sube/lee; el repartidor, solo lo asignado a él.
+    if (path === "/rest/v1/bodega_datos_entrega"){
+      if (!miembro(uid)) return json(route, 403, { code: "42501", message: "new row violates row-level security policy" });
+      if (metodo === "POST"){ for (const f of JSON.parse(req.postData())) B.datos.set(f.guia, { ...(B.datos.get(f.guia) || {}), ...f }); return json(route, 201); }
+      return json(route, 200, [...B.datos.values()]);
+    }
+    if (path === "/rest/v1/rpc/bodega_mis_datos"){
+      const r = miRid(uid); if (!r) return json(route, 200, []);
+      return json(route, 200, [...B.datos.values()].filter(d => asignadaA(d.guia, r)));
+    }
     if (path === "/rest/v1/rpc/bodega_cuentas_ruta") return json(route, 200, admin(uid) ? db.miembros.map(m => ({ user_id: m.user_id, nombre: m.nombre })) : []);
     if (path === "/rest/v1/rpc/bodega_mis_asignados"){
       const r = miRid(uid); if (!r) return json(route, 200, []);
