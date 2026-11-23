@@ -293,3 +293,56 @@ test("v2.38: «Entregado» llega a la bodega aunque la app abra Waze sola; un en
   await expect.poll(() => bo.page.evaluate(() => paquetes(p => p.estado === "ENTREGADO").length)).toBe(2);
   expect([...bo.errs, ...ru.errs]).toEqual([]);
 });
+
+test("v2.41: el listado importado trae dirección, teléfono, nombre, barrio y apto; al repartidor le llega todo al asignarle el paquete", async ({ browser }) => {
+  test.setTimeout(120000);
+  const sb = crearSupabase(), nube = agregarBodega(sb);
+  const bo = await contexto(browser, nube);
+  await A.entrar(bo.page, "Camilo", A.PIN, true);
+  await A.menu(bo.page, "btnTeam");
+  await bo.page.fill("#tmEmail", "camilo@equipo.co"); await bo.page.fill("#tmPass", "Clave-Camilo-1"); await bo.page.click("#tmConnect");
+  await expect(bo.page.locator("#tmOn")).toBeVisible();
+  await bo.page.locator("#dlgTeam .dlgHead button").click();
+  await A.agregarRep(bo.page, "Andrea");
+  await A.menu(bo.page, "btnReps");
+  await bo.page.locator("#rpList .urow", { hasText: "Andrea" }).locator("button", { hasText: "Vincular app" }).click();
+  await A.responder(bo.page, { u: "u-andrea" });
+  await bo.page.locator("#dlgReps .dlgHead button").click();
+  await bo.page.click("#recManifiesto");
+  await bo.page.setInputFiles("#imFile", require("path").join(__dirname, "archivos", "listado-datos.xlsx"));
+  // Detecta cada columna (una columna por campo).
+  for (const [k, txt] of [["guia", "Tracking"], ["dir", "Dirección"], ["tel", "Teléfono"], ["nom", "Destinatario"], ["bar", "Barrio"], ["uni", "Referencia"]])
+    await expect(bo.page.locator(`#imPaso2 select[data-campo="${k}"] option:checked`)).toContainText(txt);
+  await bo.page.click("#imOk");
+  await bo.page.evaluate(() => syncNow(true));
+  await expect.poll(() => sb.db.bod.datos.size).toBe(2);                         // la fila sin datos no sube nada
+  expect(sb.db.bod.datos.get("6110000000012")).toEqual({ guia: "6110000000012", direccion: "Carrera 104 # 148-20", telefono: "3109998877", nombre: "Beto Prueba", barrio: "Lisboa", unidad: "Casa esquinera" });
+  // Ley 1581: en el histórico (eventos) no quedan nombre, teléfono ni dirección completa; en este celular tampoco quedan pendientes.
+  const hist = JSON.stringify(sb.db.bod.eventos) + await bo.page.evaluate(() => JSON.stringify([...EV.values()]));
+  for (const x of ["Ana Prueba", "300 111", "103B-90", "Apto 301"]) expect(hist).not.toContain(x);
+  expect(await bo.page.evaluate(() => localStorage.getItem("bodega.datos.pend.v1"))).toBeNull();
+  // Despacha 2 a Andrea (el de Ana y el que no traía datos).
+  await bo.page.click('nav.tabs button[data-v="vDespachar"]');
+  await bo.page.locator("#desReps button", { hasText: "Andrea" }).click();
+  await bo.page.click("#desScan");
+  for (const g of ["2696000000000011", "2696000000000033"]) await A.leer(bo.page, g);
+  await bo.page.click("#scClose");
+  await bo.page.evaluate(() => syncNow(false));
+
+  const ru = await contexto(browser, nube);
+  await R.entrar(ru.page, "Andrea");
+  await ru.page.evaluate(() => { state.stops = []; state.seeded = true; save(); render(); });
+  await ru.page.click("text=Más opciones"); await ru.page.click("#btnTeamCfg");
+  await ru.page.fill("#tmEmail", "andrea@equipo.co"); await ru.page.fill("#tmPass", "Clave-Andrea-1"); await ru.page.click("#tmGo");
+  await expect(ru.page.locator("#tmState")).toContainText("Conectado como Andrea");
+  await ru.page.keyboard.press("Escape");
+  await syncRuta(ru.page);
+  await expect.poll(() => ru.page.evaluate(() => state.stops.filter(s => !s.example).length)).toBe(2);
+  const st = await ru.page.evaluate(() => { const s = state.stops.find(x => x.guia === "2696000000000011"); return [s.addr, s.phone, s.name, s.barrio, s.unit, s.x !== null]; });
+  expect(st).toEqual(["Calle 145 # 103B-90", "3001112233", "Ana Prueba", "Suba Compartir", "Apto 301 torre 2", true]);
+  // Andrea no recibe los datos de Beto (no se lo asignaron).
+  expect(await ru.page.evaluate(() => JSON.stringify(state))).not.toContain("Beto Prueba");
+  // Solo queda 1 sin dirección (el que no traía datos).
+  await expect(ru.page.locator("#pasoCard")).toContainText("1 sin dirección");
+  expect([...bo.errs, ...ru.errs]).toEqual([]);
+});

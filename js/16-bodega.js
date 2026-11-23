@@ -10,6 +10,7 @@ const BOD_KEY = "rutaEntregas.u." + USER.id + ".bodega.v1";
 const BOD_CADA = 20000;   // cada cuánto se pregunta a la bodega qué hay asignado (va con la sincronización del equipo)
 // bod = {rid, nombre, ult, cola:[eventos], asignados:[guías], zonas:[nombres], sinFuncion}
 const bod = Object.assign({rid:null, ult:0, cola:[], asignados:[], sinFuncion:false}, store.get(BOD_KEY) || {});
+bod.sinDatos = false;   // se vuelve a intentar en cada arranque (por si ya se corrió datos-entrega.sql)
 const guardarBod = ()=>store.set(BOD_KEY, bod);
 const gNorm = g=>String(g||"").trim().toUpperCase();
 // Empresa por el formato del código (igual que en Bodega): Xcargo = 16 dígitos (TN), iMile = 13 dígitos.
@@ -37,6 +38,15 @@ async function traerAsignados(){
   if(!bod.rid){ bod.asignados = []; bod.zonas = []; return reconciliar([]); }   // sin vínculo: se quitan los pendientes sin dirección
   const rows = await sbBod("rpc/bodega_mis_asignados", {method:"POST", body:"{}"}) || [];
   bod.asignados = rows.map(r=>gNorm(r.guia));
+  // v2.41: dirección, teléfono, nombre… del listado importado (solo de lo asignado a mí). Si la base aún no tiene la
+  // función (falta datos-entrega.sql), se sigue como antes.
+  if(rows.length && !bod.sinDatos){
+    try{
+      const ds = await sbBod("rpc/bodega_mis_datos", {method:"POST", body:"{}"}) || [];
+      const m = new Map(ds.map(d=>[gNorm(d.guia), d]));
+      rows.forEach(r=>{ r.datos = m.get(gNorm(r.guia)) || null; });
+    }catch(e){ if(e.status === 404 || e.code === "PGRST202") bod.sinDatos = true; else console.warn("bodega datos", e); }
+  }
   // Zonas del repartidor: las que la bodega le marcó al despachar el último paquete.
   const ult = rows.slice().reverse().find(r=>Array.isArray(r.zonas) && r.zonas.length);
   bod.zonas = ult ? ult.zonas.map(String) : [...new Set(rows.map(r=>r.zona).filter(Boolean))];
@@ -50,6 +60,8 @@ function reconciliar(rows){
     const st = paradaDeGuia(g);
     const info = {emp: empDeGuia(g) || r.emp || "", at: r.asignado || "", cl: r.cl ?? null, kr: r.kr ?? null, zona: r.zona || ""};
     if(st){
+      // v2.41: llegaron los datos del listado y la parada aún no tiene dirección (o teléfono/nombre): se completan.
+      if(r.datos && st.status !== "done" && completarConDatos(st, r.datos)) cambios++;
       // Ya entregado en este celular pero la bodega lo sigue teniendo asignado (reporte que no salió, o reasignado
       // después de entregarlo): se le vuelve a avisar, una vez por cada asignación (v2.38).
       if(st.status==="done" && bod.rid){
@@ -61,7 +73,8 @@ function reconciliar(rows){
       if(!st.bodega || st.bodegaFuera || antes.zona !== info.zona || antes.emp !== info.emp){ st.bodega = {...antes, ...info}; delete st.bodegaFuera; cambios++; }
       continue;
     }
-    const ns = mkStop({addr:"", guia:g});
+    const dt = r.datos || {};
+    const ns = mkStop({addr: dt.direccion || "", guia:g, phone: telLimpio(dt.telefono), name: dt.nombre || "", barrio: dt.barrio || "", unit: dt.unidad || ""});
     ns.id = "b-" + g.replace(/[^A-Z0-9-]/g, ""); ns.bodega = info;
     state.stops = state.stops.filter(s=>!s.example);
     const firstDone = state.stops.findIndex(q=>q.status==="done");
@@ -78,10 +91,24 @@ function reconciliar(rows){
   }
   if(nuevas || quitadas || cambios){
     save(); render();
-    const msg = [nuevas ? `${nuevas} paquete(s) nuevo(s): completa la dirección` : "", quitadas ? `${quitadas} ya no son tuyos (los movió la bodega)` : ""].filter(Boolean).join(" · ");
+    const sinDir = state.stops.filter(x=>sinDireccion(x)).length;
+    const msg = [nuevas ? `${nuevas} paquete(s) nuevo(s)` + (sinDir ? ` · ${sinDir} sin dirección: complétala` : " con dirección") : "", quitadas ? `${quitadas} ya no son tuyos (los movió la bodega)` : ""].filter(Boolean).join(" · ");
     if(msg) toast("Bodega: " + msg + ".");
   }
   return nuevas;
+}
+
+const telLimpio = t=>{ const d = String(t||"").replace(/\D/g, ""); return d.length > 10 && d.startsWith("57") ? d.slice(-10) : d.slice(-15); };
+// Completa solo lo que está vacío (lo que el repartidor ya escribió no se toca).
+function completarConDatos(st, d){
+  let cambio = false;
+  if(d.direccion && !String(st.addr||"").trim()){
+    st.addr = d.direccion; const p = parseAddress(d.direccion);
+    st.x = p ? p.x : null; st.y = p ? p.y : null; st.label = p ? p.label : ""; cambio = true;
+  }
+  const poner = (k, v)=>{ if(v && !String(st[k]||"").trim()){ st[k] = v; cambio = true; } };
+  poner("phone", telLimpio(d.telefono)); poner("name", d.nombre); poner("barrio", d.barrio); poner("unit", d.unidad);
+  return cambio;
 }
 
 /* ---- Ruta → Bodega ---- */

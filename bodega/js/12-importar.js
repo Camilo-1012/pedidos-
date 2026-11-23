@@ -184,19 +184,24 @@ const sinTilde = s => String(s || "").toLowerCase().normalize("NFD").replace(/[�
 const CAMPOS = {
   guia: {txt:"Guía (obligatoria)", claves:["guia","numero de guia","no guia","n guia","nro guia","tracking","tracking number","numero de seguimiento","waybill","awb","codigo de envio","id envio","envio","orden","order","pedido","numero de orden","shipment"]},
   dir:  {txt:"Dirección (para la zona)", claves:["direccion","direccion destino","direccion de entrega","address","shipping address","dir","domicilio"]},
-  emp:  {txt:"Empresa", claves:["empresa","operador","transportadora","carrier","courier","aliado"]}
+  emp:  {txt:"Empresa", claves:["empresa","operador","transportadora","carrier","courier","aliado"]},
+  // v2.41: datos de entrega que le llegan al repartidor (no van al histórico; se borran a los 30 días).
+  tel:  {txt:"Teléfono (para el repartidor)", claves:["telefono","celular","tel","phone","movil","whatsapp","contacto","telefono destinatario","receiver phone"]},
+  nom:  {txt:"Nombre del cliente (para el repartidor)", claves:["nombre","destinatario","cliente","receiver","consignee","nombre destinatario","name","recipient"]},
+  bar:  {txt:"Barrio (para el repartidor)", claves:["barrio","neighborhood","sector"]},
+  uni:  {txt:"Apto / referencia (para el repartidor)", claves:["apto","apartamento","interior","torre","complemento","referencia","detalle","indicaciones","address 2","direccion 2"]}
 };
 function puntaje(enc, claves){ const e = sinTilde(enc); if(!e) return 0; let p = 0; for(const c of claves){ if(e === c) p = Math.max(p, 3); else if(e.startsWith(c) || e.endsWith(c)) p = Math.max(p, 2); else if(e.includes(c)) p = Math.max(p, 1); } return p; }
 // Busca la fila de encabezados en las 10 primeras y propone la columna de cada campo.
 function detectarColumnas(tabla){
   let mejor = {fila: -1, total: 0, map: {}};
   for(let r = 0; r < Math.min(10, tabla.length); r++){
-    const map = {}; let total = 0;
-    for(const [k, def] of Object.entries(CAMPOS)){
-      let best = -1, bp = 0;
-      tabla[r].forEach((enc, c) => { const p = puntaje(enc, def.claves); if(p > bp){ bp = p; best = c; } });
-      if(best >= 0){ map[k] = best; total += bp + (k === "guia" ? 3 : 0); }
-    }
+    const map = {}, usadas = new Set(); let total = 0;
+    // Cada columna sirve para un solo campo: primero los encajes más claros (puntaje alto), la guía antes que todo.
+    const cand = [];
+    for(const [k, def] of Object.entries(CAMPOS)) tabla[r].forEach((enc, c) => { const p = puntaje(enc, def.claves); if(p) cand.push([p + (k === "guia" ? 10 : 0), k, c, p]); });
+    cand.sort((a, b) => b[0] - a[0]);
+    for(const [, k, c, p] of cand){ if(map[k] !== undefined || usadas.has(c)) continue; map[k] = c; usadas.add(c); total += p + (k === "guia" ? 3 : 0); }
     if(total > mejor.total && map.guia !== undefined) mejor = {fila: r, total, map};
   }
   if(mejor.fila < 0){
@@ -233,7 +238,10 @@ function abrirImportar(){
       if(!tabla.length) throw new Error("el archivo está vacío");
       const det = detectarColumnas(tabla), mapas = store.get(MAPAS_KEY) || {};
       const guardado = det.fila >= 0 ? mapas[firmaEnc(tabla[det.fila])] : null;
-      imp = {nombre: f.name, tabla, filaEnc: det.fila, map: guardado ? {...guardado} : det.map};
+      // Lo elegido a mano se respeta (null = «no usar»); los campos nuevos que no estaban guardados se detectan.
+      const map = {...det.map};
+      if(guardado) for(const [k, v] of Object.entries(guardado)){ if(v === null || v === undefined) delete map[k]; else map[k] = v; }
+      imp = {nombre: f.name, tabla, filaEnc: det.fila, map};
       $("imErr").textContent = "";
       pintarPaso2();
     }catch(x){ imp = null; $("imErr").textContent = "No se pudo leer «" + f.name + "»: " + (x.message || x) + "."; }
@@ -266,7 +274,7 @@ function pintarPaso2(){
     <label class="peCheck"><input type="checkbox" id="imRecibir"${prefs.importarRecibe === false ? "" : " checked"}> Ya están en bodega <small>(quedan como recibidos; el control es la asignación a cada repartidor)</small></label>
     <div class="kpis"><div class="kpi ok"><b>${r.validas}</b><span>guías a importar</span></div><div class="kpi${r.rep ? " warn" : ""}"><b>${r.rep}</b><span>repetidas en el archivo</span></div><div class="kpi${r.sinGuia ? " warn" : ""}"><b>${r.sinGuia}</b><span>filas sin guía válida</span></div><div class="kpi"><b>${imp.map.dir !== undefined ? r.conDir : "—"}</b><span>con dirección (zona)</span></div></div>
     ${r.yaEst ? `<p class="hint">${r.yaEst} guía(s) ya estaban en el listado de otro lote: se dejan donde están.</p>` : ""}
-    <p class="hint">Se guarda la guía y, de la dirección, solo el número de calle y de carrera (para la zona). Nombre, teléfono y dirección completa no se guardan.</p>`;
+    <p class="hint">En el histórico solo queda la guía y la calle/carrera (para la zona). Dirección, teléfono, nombre, barrio y apto van aparte, solo para el repartidor al que se le asigne cada paquete, y se borran solos a los 30 días (Ley 1581).</p>`;
   box.querySelectorAll("select[data-campo]").forEach(s => s.onchange = () => { imp.map[s.dataset.campo] = s.value === "" ? undefined : +s.value; pintarPaso2(); });
   $("imOk").disabled = !r.validas;
 }
@@ -287,10 +295,14 @@ function importarAhora(){
     const lid = uuid(); registrar("LOTE", null, {lid, nombre: imp.nombre.replace(/\.[^.]+$/, "").slice(0, 40), emp: empFija, esperado: 0});
     prefs.lote = lid; savePrefs(); l = LOTES.get(lid);
   }
-  if(imp.filaEnc >= 0){ const m = store.get(MAPAS_KEY) || {}; m[firmaEnc(imp.tabla[imp.filaEnc])] = imp.map; store.set(MAPAS_KEY, m); }
+  if(imp.filaEnc >= 0){ const m = store.get(MAPAS_KEY) || {}; m[firmaEnc(imp.tabla[imp.filaEnc])] = Object.fromEntries(Object.keys(CAMPOS).map(k => [k, imp.map[k] ?? null])); store.set(MAPAS_KEY, m); }
   const vistos = new Set(); let nuevas = 0, zonas = 0, otras = 0, recibidas = 0;
+  const datos = [];   // v2.41: datos de entrega para la Ruta del repartidor (van a otra tabla, no al histórico)
+  const celda = (f, k) => imp.map[k] !== undefined ? String(f[imp.map[k]] ?? "").replace(/\s+/g, " ").trim() : "";
   for(const f of filasDatos()){
     const g = normGuia(f[imp.map.guia]); if(!g || vistos.has(g)) continue; vistos.add(g);
+    const dat = {guia: g, direccion: celda(f, "dir").slice(0, 200), telefono: celda(f, "tel").replace(/[^\d+ ]/g, "").slice(0, 40), nombre: celda(f, "nom").slice(0, 80), barrio: celda(f, "bar").slice(0, 80), unidad: celda(f, "uni").slice(0, 120)};
+    if(dat.direccion || dat.telefono || dat.nombre) datos.push(dat);
     const p = paq(g);
     if(p && p.espLote && p.espLote !== l.lid){
       otras++;
@@ -306,6 +318,7 @@ function importarAhora(){
     if(cc && !tieneUbic(paq(g))){ registrar("UBICACION", g, cc); zonas++; }
   }
   $("dlgLista").close(); mostrarVista("vRecibir"); pintarTodo();
+  if(datos.length) guardarDatosEntrega(datos);
   toast(`Importadas ${nuevas} guía(s) en «${l.nombre}»` + (recibidas ? ` · ${recibidas} en bodega` : "") + (zonas ? ` · ${zonas} con zona` : "") + (otras ? ` · ${otras} ya estaban en otro lote` : "") + ".");
 }
 $("recManifiesto").onclick = abrirImportar;

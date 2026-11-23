@@ -65,6 +65,7 @@ async function doSync(manual){
   try{
     const pend = pendientesSubir();
     for(let i = 0; i < pend.length; i += LOTE_SUBIR) await subir(pend.slice(i, i + LOTE_SUBIR));
+    if(typeof subirDatosEntrega === "function") await subirDatosEntrega().catch(e => console.warn("datos de entrega", e));
     // Primera vez en este celular: todo el catálogo (repartidores y lotes) y los últimos 30 días de paquetes.
     if(!sync.catalogo){
       const cat = await sb(`bodega_eventos?select=${COLS}&tipo=in.(REP,REP_ZONAS,ZONA,LOTE,LOTE_CERRADO)&order=seq.asc`) || [];
@@ -212,3 +213,36 @@ async function vincularApp(r){
     toast(v.u ? `${r.nombre} quedó vinculado: lo que le despaches le saldrá en su app.` : `${r.nombre} quedó sin app vinculada.`);
   }catch(e){ toast("No se pudo guardar (" + (e.message || e) + "). Solo un administrador puede vincular."); }
 }
+
+/* ---- v2.41: datos de entrega del listado (dirección, teléfono, nombre…) → tabla bodega_datos_entrega ----
+   No van al histórico (bodega_eventos) ni a IndexedDB: se suben a la nube y el repartidor los ve solo cuando el
+   paquete está asignado a él. Sin señal o sin nube conectada, esperan en este celular hasta subir (y se borran de aquí). */
+const DATOS_KEY = "bodega.datos.pend.v1";
+function guardarDatosEntrega(lista){
+  const pend = new Map((store.get(DATOS_KEY) || []).map(d => [d.guia, d]));
+  lista.forEach(d => pend.set(d.guia, d));
+  store.set(DATOS_KEY, [...pend.values()]);
+  subirDatosEntrega().catch(e => console.warn("datos de entrega", e));
+}
+let subiendoDatos = null;
+function subirDatosEntrega(){
+  if(subiendoDatos) return subiendoDatos;
+  subiendoDatos = (async () => {
+    let pend = store.get(DATOS_KEY) || [];
+    if(!pend.length || !syncOn() || !navigator.onLine) return;
+    while(pend.length){
+      const lote = pend.slice(0, 500);
+      try{ await sb("bodega_datos_entrega?on_conflict=guia", {method:"POST", headers:{Prefer:"resolution=merge-duplicates,return=minimal"}, body:JSON.stringify(lote)}); }
+      catch(e){
+        // Falta correr supabase/datos-entrega.sql: se guardan hasta que exista la tabla (no se pierden).
+        if(e.status === 404 || e.code === "PGRST205" || e.code === "42P01"){ if(!subirDatosEntrega.avisado){ subirDatosEntrega.avisado = true; toast("Para enviar dirección y teléfono a los repartidores falta correr supabase/datos-entrega.sql."); } return; }
+        throw e;
+      }
+      const hechos = new Set(lote.map(d => d.guia));
+      pend = (store.get(DATOS_KEY) || []).filter(d => !hechos.has(d.guia));
+      if(pend.length) store.set(DATOS_KEY, pend); else store.del(DATOS_KEY);
+    }
+  })().finally(() => { subiendoDatos = null; });
+  return subiendoDatos;
+}
+addEventListener("online", () => subirDatosEntrega().catch(() => {}));
