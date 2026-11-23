@@ -169,3 +169,67 @@ test("Despachar: marcar las zonas de cada repartidor (una zona puede tener vario
   expect(await page.evaluate(() => zonasDeRep(repsActivos().find(r => r.nombre === "Jairo").rid).map(z => z.nombre))).toEqual(["Alcaparros"]);
   expect(errs).toEqual([]);
 });
+
+test("corregir una asignación equivocada: pasar a otro sin escanear, o quitarla (vuelve a bodega o al anterior); queda en el histórico", async ({ page }) => {
+  const errs = A.vigilarErrores(page);
+  await A.entrar(page);
+  await A.agregarRep(page, "Jairo"); await A.agregarRep(page, "John");
+  await A.nuevoLote(page, "Xcargo", "L1");
+  await page.click("#recScan");
+  for(const g of ["CA00000001", "CA00000002"]) await A.leer(page, g);
+  await page.click("#scClose");
+  await page.click('nav.tabs button[data-v="vDespachar"]');
+  await page.locator("#desReps button", { hasText: "Jairo" }).click();
+  await page.click("#desScan");
+  for(const g of ["CA00000001", "CA00000002"]) await A.leer(page, g);
+  await page.click("#scClose");
+  // Tocar el paquete en «Lleva» → pasarlo a John (sin escanear).
+  await page.locator("#desLista li", { hasText: "CA00000001" }).click();
+  await expect(page.locator("#ltTitle")).toHaveText("Corregir CA00000001");
+  await page.locator("#ccReps button", { hasText: "John" }).click();
+  await expect(page.locator("#dlgLista")).toBeHidden();
+  expect(await page.evaluate(() => repNombre(paq("CA00000001").rid))).toBe("John");
+  await expect(page.locator("#desLista li", { hasText: "CA00000001" })).toHaveCount(0);
+  // Quitar la asignación de la otra: vuelve a bodega.
+  await page.locator("#desLista li", { hasText: "CA00000002" }).click();
+  await expect(page.locator("#ltBody")).toContainText("vuelve a en bodega");
+  await page.locator("#ltActs button", { hasText: "Quitar asignación" }).click();
+  expect(await page.evaluate(() => paq("CA00000002").estado)).toBe("BODEGA");
+  // En Consultar, la de John: quitarla la devuelve a Jairo (la tenía antes).
+  await page.click('nav.tabs button[data-v="vConsultar"]');
+  await page.evaluate(() => verPaquete("CA00000001"));
+  await page.click("#conCorregir");
+  await expect(page.locator("#ltBody")).toContainText("vuelve a Jairo");
+  await page.locator("#ltActs button", { hasText: "Quitar asignación" }).click();
+  expect(await page.evaluate(() => [paq("CA00000001").estado, repNombre(paq("CA00000001").rid)])).toEqual(["RUTA", "Jairo"]);
+  await expect(page.locator("#conRes")).toContainText("corregida: asignación equivocada");
+  await expect(page.locator("#conRes")).toContainText("a John (antes la tenía Jairo) · corrección");
+  // Un paquete en bodega no se «corrige» (no tiene botón).
+  await page.evaluate(() => verPaquete("CA00000002"));
+  await expect(page.locator("#conCorregir")).toHaveCount(0);
+  expect(errs).toEqual([]);
+});
+
+test("con zonas creadas, despachar exige marcarle zona al repartidor (sin zonas creadas no se exige)", async ({ page }) => {
+  const errs = A.vigilarErrores(page);
+  await A.entrar(page);
+  await A.agregarRep(page, "Jairo");
+  await A.nuevoLote(page, "Xcargo", "L1");
+  await page.click("#recScan"); await A.leer(page, "ZO00000001"); await page.click("#scClose");
+  await page.click('nav.tabs button[data-v="vDespachar"]');
+  await page.locator("#desReps button", { hasText: "Jairo" }).click();
+  await expect(page.locator("#desScan")).not.toHaveClass(/bloq/);        // sin zonas creadas: libre
+  await page.evaluate(() => { registrar("ZONA", null, {zid: "za", nombre: "Alcaparros", color: "#1f8a4c", cl: [130, 139], kr: [null, null], activa: true}); pintarTodo(); });
+  await expect(page.locator("#desScan")).toHaveClass(/bloq/);
+  await expect(page.locator("#desZonasRep .uerr")).toContainText("Obligatorio");
+  await page.click("#desScan", { force: true });       // aria-disabled: igual se puede tocar y avisa
+  await expect(page.locator("#dlgScan")).toBeHidden();
+  await expect(page.locator("#toast")).toContainText("Primero marca la zona de Jairo");
+  expect(await page.evaluate(() => asignarGuia("ZO00000001").then(r => r.txt))).toBe("Marca primero la zona de Jairo.");
+  await page.locator('#desZonasRep button[data-zid="za"]').click();
+  await expect(page.locator("#desScan")).not.toHaveClass(/bloq/);
+  await page.click("#desScan");
+  expect((await A.leer(page, "ZO00000001")).txt).toBe("Para Jairo");
+  await page.click("#scClose");
+  expect(errs).toEqual([]);
+});

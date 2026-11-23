@@ -109,3 +109,8 @@ li.lec.mal span{color:var(--bad)}
 .reps button small.zs{color:var(--accent);opacity:.9}
 #desEmp[hidden]{display:none}
 #desEmp{grid-template-columns:repeat(auto-fit,minmax(0,1fr))}
+
+/* v2.37: zona obligatoria antes de despachar */
+#desScan.bloq,#desEscribir.bloq{opacity:.45}
+#desZonasRep.falta{animation:faltaZona 1.2s ease 2}
+@keyframes faltaZona{0%,100%{box-shadow:none}50%{box-shadow:0 0 0 3px var(--bad,#d0421b);border-radius:12px}}

@@ -229,5 +229,12 @@ test("la zona del paquete y las zonas del repartidor le llegan a su Ruta (v2.36)
   const t2 = ru.page.locator("#list li.stop", { hasText: "6110586210761" });
   await expect(t2.locator(".chip.zona")).toHaveText("Zona Bilbao");
   await expect(t2.locator(".chip.bod")).toHaveText("Bodega · iMile");
+  // v2.37: la bodega corrige (quita) una asignación equivocada → a Andrea le sale de su Ruta.
+  await bo.page.locator("#desLista li", { hasText: "6110586210761" }).click();
+  await bo.page.locator("#ltActs button", { hasText: "Quitar asignación" }).click();
+  await bo.page.evaluate(() => syncNow(false));
+  await ru.page.evaluate(() => { bod.ult = 0; });
+  await syncRuta(ru.page);
+  await expect.poll(() => paradas(ru.page).then(l => l.map(p => p.guia))).toEqual(["2696271051298372"]);
   expect([...bo.errs, ...ru.errs]).toEqual([]);
 });
