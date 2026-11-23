@@ -180,3 +180,54 @@ test("cámara: al escanear la etiqueta de un paquete de la bodega, completa ESA 
   await expect(page.locator("#fdTitle")).not.toHaveText("Paquete repetido");
   expect(errs).toEqual([]);
 });
+
+test("la zona del paquete y las zonas del repartidor le llegan a su Ruta (v2.36); la empresa sale del código", async ({ browser }) => {
+  test.setTimeout(120000);
+  const sb = crearSupabase(), nube = agregarBodega(sb);
+  const bo = await contexto(browser, nube);
+  await A.entrar(bo.page, "Camilo", A.PIN, true);
+  await A.menu(bo.page, "btnTeam");
+  await bo.page.fill("#tmEmail", "camilo@equipo.co"); await bo.page.fill("#tmPass", "Clave-Camilo-1"); await bo.page.click("#tmConnect");
+  await expect(bo.page.locator("#tmOn")).toBeVisible();
+  await bo.page.locator("#dlgTeam .dlgHead button").click();
+  await A.agregarRep(bo.page, "Andrea");
+  await A.menu(bo.page, "btnReps");
+  await bo.page.locator("#rpList .urow", { hasText: "Andrea" }).locator("button", { hasText: "Vincular app" }).click();
+  await A.responder(bo.page, { u: "u-andrea" });
+  await bo.page.locator("#dlgReps .dlgHead button").click();
+  await bo.page.evaluate(() => {
+    registrar("ZONA", null, {zid: "za", nombre: "Alcaparros", color: "#1f8a4c", cl: [130, 139], kr: [null, null], activa: true});
+    registrar("ZONA", null, {zid: "zb", nombre: "Bilbao", color: "#d0421b", cl: [140, 149], kr: [null, null], activa: true});
+  });
+  await A.nuevoLote(bo.page, "Otra", "L1");
+  await bo.page.click("#recScan");
+  for (const [g, cl] of [["2696271051298372", "135"], ["6110586210761", "145"]]){
+    const p = A.leer(bo.page, g); await bo.page.fill("#ubCl", cl); await bo.page.fill("#ubKr", "100"); await bo.page.click("#ubOk"); await p;
+  }
+  await bo.page.click("#scClose");
+  await bo.page.click('nav.tabs button[data-v="vDespachar"]');
+  await bo.page.locator("#desReps button", { hasText: "Andrea" }).click();
+  await bo.page.locator('#desZonasRep button[data-zid="za"]').click();
+  await bo.page.locator('#desZonasRep button[data-zid="zb"]').click();
+  await bo.page.click("#desScan");
+  await A.leer(bo.page, "2696271051298372"); await A.leer(bo.page, "6110586210761");
+  await bo.page.click("#scClose");
+  await bo.page.evaluate(() => syncNow(false));
+
+  const ru = await contexto(browser, nube);
+  await R.entrar(ru.page, "Andrea");
+  await ru.page.evaluate(() => { state.stops = []; state.seeded = true; save(); render(); });
+  await ru.page.click("text=Más opciones"); await ru.page.click("#btnTeamCfg");
+  await ru.page.fill("#tmEmail", "andrea@equipo.co"); await ru.page.fill("#tmPass", "Clave-Andrea-1"); await ru.page.click("#tmGo");
+  await expect(ru.page.locator("#tmState")).toContainText("Conectado como Andrea");
+  await ru.page.keyboard.press("Escape");
+  await syncRuta(ru.page);
+  await expect(ru.page.locator("#pasoTxt .zonasHoy")).toHaveText("Tu zona: Alcaparros, Bilbao");
+  const t1 = ru.page.locator("#list li.stop", { hasText: "2696271051298372" });
+  await expect(t1.locator(".chip.zona")).toHaveText("Zona Alcaparros");
+  await expect(t1.locator(".chip.bod")).toHaveText("Bodega · Xcargo");
+  const t2 = ru.page.locator("#list li.stop", { hasText: "6110586210761" });
+  await expect(t2.locator(".chip.zona")).toHaveText("Zona Bilbao");
+  await expect(t2.locator(".chip.bod")).toHaveText("Bodega · iMile");
+  expect([...bo.errs, ...ru.errs]).toEqual([]);
+});

@@ -438,3 +438,6 @@ li.stop.compacta.abierta .masBtn{background:var(--ink);color:var(--bg);border-co
 .peListo{padding:12px;border:2px solid var(--accent);border-radius:12px}
 .peDatos{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:17px;user-select:all}
 .peDatos b{font-family:ui-monospace,Menlo,Consolas,monospace;word-break:break-all}
+/* v2.36: zona asignada por la bodega */
+.zonasHoy{display:block;font-weight:700;font-size:15px;color:var(--accent);margin-bottom:2px}
+.chip.zona{border-color:var(--accent);color:var(--accent)}

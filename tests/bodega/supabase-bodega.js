@@ -43,7 +43,7 @@ function agregarBodega(sb){
       const filas = [...estado().values()].filter(e => e.tipo === "ASIGNADO" && e.d.rid === r).sort((a, b) => a.at.localeCompare(b.at)).map(e => {
         const ult = tipos => B.eventos.filter(x => x.guia === e.guia && tipos.includes(x.tipo)).sort((a, b) => b.at.localeCompare(a.at));
         const rec = ult(["RECIBIDO", "ESPERADO"]).find(x => x.d.emp), ub = ult(["UBICACION"]).find(x => x.d.cl != null);
-        return { guia: e.guia, emp: rec ? rec.d.emp : null, asignado: e.at, cl: ub ? ub.d.cl : null, kr: ub ? ub.d.kr : null, rid: r };
+        return { guia: e.guia, emp: rec ? rec.d.emp : null, asignado: e.at, cl: ub ? ub.d.cl : null, kr: ub ? ub.d.kr : null, rid: r, zona: e.d.zona || null, zonas: e.d.zonas || null };
       });
       return json(route, 200, filas);
     }

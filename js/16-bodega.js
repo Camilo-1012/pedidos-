@@ -8,10 +8,12 @@
 "use strict";
 const BOD_KEY = "rutaEntregas.u." + USER.id + ".bodega.v1";
 const BOD_CADA = 20000;   // cada cuánto se pregunta a la bodega qué hay asignado (va con la sincronización del equipo)
-// bod = {rid, nombre, ult, cola:[eventos], asignados:[guías], sinFuncion}
+// bod = {rid, nombre, ult, cola:[eventos], asignados:[guías], zonas:[nombres], sinFuncion}
 const bod = Object.assign({rid:null, ult:0, cola:[], asignados:[], sinFuncion:false}, store.get(BOD_KEY) || {});
 const guardarBod = ()=>store.set(BOD_KEY, bod);
 const gNorm = g=>String(g||"").trim().toUpperCase();
+// Empresa por el formato del código (igual que en Bodega): Xcargo = 16 dígitos (TN), iMile = 13 dígitos.
+const empDeGuia = g=>/^\d{16}$/.test(gNorm(g)) ? "Xcargo" : /^\d{13}$/.test(gNorm(g)) ? "iMile" : "";
 const esDeBodega = s=>!!(s && s.bodega);
 // Parada de la bodega a la que le falta la dirección (no se puede ubicar en el mapa).
 const sinDireccion = s=>esDeBodega(s) && s.status!=="done" && !parseAddress(s.label || s.addr);
@@ -32,9 +34,12 @@ async function traerAsignados(){
   // Se pregunta siempre: el administrador puede vincular, cambiar o quitar el vínculo en cualquier momento.
   const rid = await sbBod("rpc/bodega_mi_rid", {method:"POST", body:"{}"});
   bod.rid = typeof rid === "string" && rid ? rid : null;
-  if(!bod.rid){ bod.asignados = []; return reconciliar([]); }   // sin vínculo: se quitan los pendientes sin dirección
+  if(!bod.rid){ bod.asignados = []; bod.zonas = []; return reconciliar([]); }   // sin vínculo: se quitan los pendientes sin dirección
   const rows = await sbBod("rpc/bodega_mis_asignados", {method:"POST", body:"{}"}) || [];
   bod.asignados = rows.map(r=>gNorm(r.guia));
+  // Zonas del repartidor: las que la bodega le marcó al despachar el último paquete.
+  const ult = rows.slice().reverse().find(r=>Array.isArray(r.zonas) && r.zonas.length);
+  bod.zonas = ult ? ult.zonas.map(String) : [...new Set(rows.map(r=>r.zona).filter(Boolean))];
   return reconciliar(rows);
 }
 // Pone en la ruta lo nuevo, quita lo que la bodega ya no le tiene asignado (si aún no tiene dirección) y marca lo demás.
@@ -43,9 +48,10 @@ function reconciliar(rows){
   let nuevas = 0, quitadas = 0, cambios = 0;
   for(const [g, r] of asign){
     const st = paradaDeGuia(g);
-    const info = {emp: r.emp || "", at: r.asignado || "", cl: r.cl ?? null, kr: r.kr ?? null};
+    const info = {emp: empDeGuia(g) || r.emp || "", at: r.asignado || "", cl: r.cl ?? null, kr: r.kr ?? null, zona: r.zona || ""};
     if(st){
-      if(!st.bodega || st.bodegaFuera){ st.bodega = {...(st.bodega||{}), ...info}; delete st.bodegaFuera; cambios++; }
+      const antes = st.bodega || {};
+      if(!st.bodega || st.bodegaFuera || antes.zona !== info.zona || antes.emp !== info.emp){ st.bodega = {...antes, ...info}; delete st.bodegaFuera; cambios++; }
       continue;
     }
     const ns = mkStop({addr:"", guia:g});
