@@ -23,6 +23,15 @@ function nombreQuincena(q){
   const [y, m, h] = q.split("-").map(Number), ult = new Date(y, m, 0).getDate();
   return `${h === 1 ? "1" : "16"}–${h === 1 ? "15" : ult} ${MESES[m - 1]} ${y}`;
 }
+// Días de pago (decisión de Camilo): la quincena del 1 al 15 se paga el 17; la del 16 al fin de mes, el 2 del mes siguiente.
+function fechaPago(q){ const [y, m, h] = q.split("-").map(Number); return h === 1 ? new Date(y, m - 1, 17) : new Date(y, m, 2); }
+const textoFecha = d => `${d.getDate()} ${MESES[d.getMonth()]}`;
+// La quincena que toca pagar ahora: del 3 al 17 → la del 1–15; del 18 al 2 → la del 16–fin.
+function quincenaAPagar(hoyD){
+  const d = hoyD || new Date(), dia = d.getDate();
+  if(dia <= 2){ const p = new Date(d.getFullYear(), d.getMonth(), 0); return `${p.getFullYear()}-${pad2(p.getMonth()+1)}-2`; }
+  return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${dia <= 17 ? 1 : 2}`;
+}
 function quincenasRecientes(n){
   const out = []; let d = new Date();
   for(let i = 0; i < n; i++){
@@ -57,14 +66,17 @@ function pendienteTotal(rid){
   return {n, valor: n * tarifaActual()};
 }
 
-let qSel = quincenaDe(new Date().toISOString());
+let qSel = quincenaAPagar();
 function abrirPagos(){
   const qs = quincenasRecientes(6); if(!qs.includes(qSel)) qSel = qs[0];
   const reps = [...REPS.values()].filter(r => r.activo || entregadosDe(r.rid, qSel).length || pagosDe(r.rid, qSel).length).sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
   const filas = reps.map(r => ({r, s: resumenQuincena(r.rid, qSel), t: pendienteTotal(r.rid)}));
   const tot = filas.reduce((a, f) => ({n: a.n + f.s.n, valor: a.valor + f.s.valor, pend: a.pend + f.s.pendV, pag: a.pag + f.s.pagV}), {n: 0, valor: 0, pend: 0, pag: 0});
   mostrarListado("Pagos a repartidores", `
-    <label>Quincena<select id="pgQ">${qs.map(q => `<option value="${q}"${q === qSel ? " selected" : ""}>${nombreQuincena(q)}${q === qs[0] ? " (actual)" : ""}</option>`).join("")}</select></label>
+    <label>Quincena<select id="pgQ">${qs.map(q => `<option value="${q}"${q === qSel ? " selected" : ""}>${nombreQuincena(q)} · se paga el ${textoFecha(fechaPago(q))}${q === quincenaAPagar() ? " (la que toca)" : ""}</option>`).join("")}</select></label>
+    ${(() => { const fp = fechaPago(qSel), hoy0 = new Date(); hoy0.setHours(0, 0, 0, 0);
+      const venc = hoy0 > fp && tot.pend > 0, esHoy = hoy0.getTime() === fp.getTime();
+      return `<p class="${venc ? "alerta" : "hint"}" style="margin:0">Día de pago: <b>${textoFecha(fp)}</b>${esHoy ? " (hoy)" : venc ? ` · ⚠ quedan ${pesos(tot.pend)} sin pagar` : ""}</p>`; })()}
     <div class="row" style="align-items:center"><span class="hint">Tarifa: <b id="pgTarifa">${pesos(tarifaActual())}</b> por entregado</span>${USER.admin ? `<button type="button" class="small" id="pgCambiar">Cambiar tarifa</button>` : ""}</div>
     <div class="kpis pgKpis" id="pgTot">
       <div class="kpi"><b>${tot.n}</b><span>entregados</span></div>

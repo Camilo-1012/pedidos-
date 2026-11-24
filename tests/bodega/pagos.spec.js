@@ -22,7 +22,9 @@ test("pagos por quincena: entregados × $1.600, devueltos no se pagan, marcar pa
   });
   await A.menu(page, "btnPagos");
   await expect(page.locator("#ltTitle")).toHaveText("Pagos a repartidores");
-  await expect(page.locator("#pgQ option:checked")).toContainText("(actual)");
+  await expect(page.locator("#pgQ option", { hasText: "(la que toca)" })).toHaveCount(1);
+  // Los datos de la prueba son de hoy: se elige la quincena actual (la que toca pagar puede ser la anterior, p. ej. el 16 o el 2).
+  await page.locator("#pgQ").selectOption(await page.evaluate(() => quincenaDe(new Date().toISOString())));
   const jairo = page.locator(".pgCard", { hasText: "Jairo" });
   await expect(jairo.locator(".pgValor")).toHaveText("$4.800");
   await expect(jairo).toContainText("3 entregado(s) × $1.600 · 1 devuelto(s), no se pagan");
@@ -34,7 +36,7 @@ test("pagos por quincena: entregados × $1.600, devueltos no se pagan, marcar pa
   await expect(page.locator(".pgCard", { hasText: "Jairo" })).toContainText("Pagado: 3 = $4.800 · ✓ al día");
   // Llega otro entregado de Jairo en la misma quincena: aparece la diferencia.
   await page.evaluate(() => { const j = repsActivos().find(r => r.nombre === "Jairo").rid; registrar("ASIGNADO", "PG00000006", {rid: j, reasigna: true}); registrar("ENTREGADO", "PG00000006", {rid: j}); });
-  await page.locator("#pgQ").selectOption({ index: 0 });       // vuelve a pintar la quincena
+  await page.evaluate(() => abrirPagos());                     // vuelve a pintar la quincena
   await expect(page.locator(".pgCard", { hasText: "Jairo" })).toContainText("Pendiente: 1 = $1.600");
   // Deshacer el último pago (queda registrado como pago negativo).
   page.once("dialog", d => d.accept());
@@ -59,4 +61,8 @@ test("quincenas: 1–15 y 16–fin de mes", async ({ page }) => {
   await A.entrar(page);
   expect(await page.evaluate(() => [quincenaDe("2026-11-15T15:00:00"), quincenaDe("2026-11-16T09:00:00"), nombreQuincena("2026-11-2"), nombreQuincena("2026-02-2"), nombreQuincena("2026-12-1")]))
     .toEqual(["2026-11-1", "2026-11-2", "16–30 nov 2026", "16–28 feb 2026", "1–15 dic 2026"]);
+  // Pagos el 17 (quincena 1–15) y el 2 (quincena 16–fin del mes anterior).
+  expect(await page.evaluate(() => [textoFecha(fechaPago("2026-11-1")), textoFecha(fechaPago("2026-11-2")), textoFecha(fechaPago("2026-12-2")),
+    quincenaAPagar(new Date(2026, 11, 2)), quincenaAPagar(new Date(2026, 11, 3)), quincenaAPagar(new Date(2026, 10, 17)), quincenaAPagar(new Date(2026, 10, 18))]))
+    .toEqual(["17 nov", "2 dic", "2 ene", "2026-11-2", "2026-12-1", "2026-11-1", "2026-11-2"]);
 });
