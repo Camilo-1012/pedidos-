@@ -32,13 +32,25 @@ function mostrarListado(titulo, html, acciones){
 /* ---- Lotes ---- */
 const lotesAbiertos = () => [...LOTES.values()].filter(l => !l.cerrado && !l.anulado).sort((a, b) => b.at.localeCompare(a.at));
 const loteActual = () => { const l = LOTES.get(prefs.lote); return l && !l.anulado ? l : null; };
+/* v2.47: los lotes cerrados de los últimos 30 días también se pueden elegir (grupo «Cerrados»), para reabrirlos,
+   revisarlos o anular un cargue equivocado que ya se cerró. Los anulados no aparecen. */
+const DIAS_CERRADOS = 30;
+const lotesCerrados = () => {
+  const desde = new Date(Date.now() - DIAS_CERRADOS * 864e5).toISOString();
+  return [...LOTES.values()].filter(l => l.cerrado && !l.anulado && (l.cerrado >= desde || l.at >= desde))
+    .sort((a, b) => String(b.cerrado).localeCompare(String(a.cerrado))).slice(0, 40);
+};
 function pintarSelectLotes(){
   const sel = $("recLote"), abiertos = lotesAbiertos(), act = loteActual();
-  const lista = act && act.cerrado ? [act, ...abiertos] : abiertos;
-  sel.innerHTML = (lista.length ? "" : `<option value="">No hay lotes abiertos</option>`) +
-    lista.map(l => `<option value="${esc(l.lid)}">${esc(l.nombre)}${l.cerrado ? " (cerrado)" : ""}</option>`).join("");
-  if(!act && lista.length){ prefs.lote = lista[0].lid; savePrefs(); }
-  sel.value = prefs.lote || "";
+  const cerrados = lotesCerrados();
+  if(act && act.cerrado && !cerrados.includes(act)) cerrados.unshift(act);
+  if(!act && abiertos.length){ prefs.lote = abiertos[0].lid; savePrefs(); }
+  const op = l => `<option value="${esc(l.lid)}">${esc(l.nombre)}${l.prov ? " · " + esc(l.prov) : ""}${l.cerrado ? " (cerrado " + esc(fechaHora(l.cerrado)) + ")" : ""}</option>`;
+  const hayAct = !!LOTES.get(prefs.lote) && !LOTES.get(prefs.lote).anulado;
+  sel.innerHTML = (hayAct ? "" : `<option value="">${abiertos.length ? "Elige un lote…" : "No hay lotes abiertos"}</option>`) +
+    (abiertos.length ? (cerrados.length ? `<optgroup label="Abiertos">${abiertos.map(op).join("")}</optgroup>` : abiertos.map(op).join("")) : "") +
+    (cerrados.length ? `<optgroup label="Cerrados (últimos ${DIAS_CERRADOS} días)">${cerrados.map(op).join("")}</optgroup>` : "");
+  sel.value = hayAct ? prefs.lote : "";
 }
 /* v2.44: acumulado general de todas las cargas abiertas (cada proveedor tiene su lote), por empresa. */
 function pintarAcumulado(){

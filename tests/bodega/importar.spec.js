@@ -294,3 +294,29 @@ test("v2.45: anular un cargue equivocado (sin borrar nada); bloquea si ya salió
   expect(await page.evaluate(() => paquetes(p => p.estado === "BODEGA").length)).toBe(108);
   expect(errs).toEqual([]);
 });
+
+test("v2.47: un cargue ya cerrado se puede elegir en «Cerrados» y anular (o reabrir)", async ({ page }) => {
+  const errs = A.vigilarErrores(page);
+  await A.entrar(page);
+  await abrir(page);
+  await page.setInputFiles("#imFile", ARCH("prueba-100-paquetes.xlsx"));
+  await page.selectOption("#imProv", "Daniel");
+  await page.click("#imOk");
+  await page.click('nav.tabs button[data-v="vRecibir"]');
+  const lid = await page.evaluate(() => loteActual().lid);
+  // Se cierra y se sale del lote (como queda en el celular: «No hay lotes abiertos»).
+  await page.evaluate(() => { registrar("LOTE_CERRADO", null, {lid: loteActual().lid}); prefs.lote = null; savePrefs(); pintarTodo(); });
+  await expect(page.locator("#recLote")).toHaveValue("");
+  await expect(page.locator("#recLote option").first()).toHaveText("No hay lotes abiertos");
+  await expect(page.locator('#recLote optgroup[label^="Cerrados"] option')).toHaveCount(1);
+  await expect(page.locator('#recLote optgroup[label^="Cerrados"] option')).toContainText("Daniel");
+  await page.selectOption("#recLote", lid);
+  await expect(page.locator("#recCerrar")).toHaveText("Reabrir lote");
+  await expect(page.locator("#recScan")).toBeDisabled();
+  await page.click("#recAnular");
+  await A.responder(page, { c: "anular" });
+  expect(await page.evaluate(() => paquetes(p => p.estado === "BODEGA").length)).toBe(0);
+  await expect(page.locator("#recLote option")).toHaveCount(1);
+  await expect(page.locator("#recLote optgroup")).toHaveCount(0);
+  expect(errs).toEqual([]);
+});
