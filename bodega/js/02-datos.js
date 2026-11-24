@@ -109,7 +109,7 @@ function aplicarCatalogo(e){
     // Pueden llegar en desorden desde otros celulares: se decide por la hora de cada evento.
     const l = LOTES.get(d.lid) || {lid: d.lid, nombre: "Lote", emp: "", esperado: 0, at: e.at, datosAt: "", cerradoAt: "", abiertoAt: "", cerrado: ""};
     if(e.tipo === "LOTE"){
-      if(e.at >= l.datosAt){ Object.assign(l, {nombre: d.nombre, emp: d.emp, esperado: d.esperado || 0}); l.datosAt = e.at; }
+      if(e.at >= l.datosAt){ Object.assign(l, {nombre: d.nombre, emp: d.emp, esperado: d.esperado || 0, prov: d.prov || ""}); l.datosAt = e.at; }
       if(e.at < l.at) l.at = e.at;
       if(d.reabrir && e.at > l.abiertoAt) l.abiertoAt = e.at;
     } else if(e.at > l.cerradoAt) l.cerradoAt = e.at;
@@ -193,6 +193,20 @@ function buscarGuias(txt){
   const t = String(txt || "").replace(/\s+/g, "").toUpperCase(); if(t.length < 4) return [];
   return paquetes(p => p.guia.endsWith(t) || (t.length >= 6 && p.guia.includes(t))).slice(0, 30);
 }
+/* v2.44: PROVEEDOR = la persona que entrega la mercancía (Daniel, Javier…), distinto de la empresa (Xcargo/iMile, que
+   ambos manejan). Va en el lote (cada cargue es de un proveedor) y cada paquete lo toma de su lote. */
+const PROVEEDORES_BASE = ["Daniel", "Javier"];
+function proveedores(){
+  const s = new Set(PROVEEDORES_BASE);
+  for(const l of LOTES.values()) if(l.prov) s.add(l.prov);
+  return [...s].sort((a, b) => a.localeCompare(b, "es"));
+}
+const provDe = p => { const l = LOTES.get(p.espLote) || LOTES.get(p.recLote); return (l && l.prov) || ""; };
+function conteoProv(lista){
+  const m = new Map(); lista.forEach(p => { const k = provDe(p); m.set(k, (m.get(k) || 0) + 1); });
+  return [...m].sort((a, b) => (!a[0]) - (!b[0]) || a[0].localeCompare(b[0], "es"));
+}
+const txtProv = lista => conteoProv(lista).map(([pv, n]) => n + " " + (pv || "sin proveedor")).join(" · ");
 function statsLote(lid){
   let esp = 0, rec = 0, sobr = 0, recEsp = 0;
   for(const p of PAQ.values()){

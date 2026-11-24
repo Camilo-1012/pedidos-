@@ -293,13 +293,16 @@ function pintarPaso2(){
   const r = resumenImport(), l = loteActual();
   const box = $("imPaso2"); box.hidden = false;
   box.innerHTML = `<p class="ok"><b>${esc(imp.nombre)}</b>: ${filasDatos().length} fila(s).</p>
+    <label>Proveedor de este cargue (quién trae la mercancía)<select id="imProv">${(() => { const def = (l && !l.cerrado && l.prov) || prefs.ultProv || ""; return proveedores().map(pv => `<option${pv === def ? " selected" : ""}>${esc(pv)}</option>`).join("") + `<option value="">Otro…</option>`; })()}</select></label>
+    <label id="imProvNL" hidden>Nombre del otro proveedor<input id="imProvN" maxlength="30" autocomplete="off"></label>
     ${Object.entries(CAMPOS).map(([k, d]) => `<label>${esc(d.txt)}<select data-campo="${k}">${opciones(k)}</select></label>`).join("")}
-    <label>Empresa de todo el listado (si no viene en una columna)<select id="imEmp">${EMPRESAS.map(e => `<option${(l && l.emp) === e ? " selected" : ""}>${e}</option>`).join("")}</select></label>
-    <label>Guardar en<select id="imDest">${l && !l.cerrado ? `<option value="actual">El lote abierto: ${esc(l.nombre)}</option>` : ""}<option value="nuevo">Lotes nuevos (uno por proveedor): ${esc(imp.nombre.replace(/\.[^.]+$/, "").slice(0, 30))}</option></select></label>
+    <label>Empresa de todo el listado (si no viene en una columna; si no, sale del código: 16 dígitos Xcargo, 13 iMile)<select id="imEmp">${EMPRESAS.map(e => `<option${(l && l.emp) === e ? " selected" : ""}>${e}</option>`).join("")}</select></label>
+    <label>Guardar en<select id="imDest">${l && !l.cerrado ? `<option value="actual">El lote abierto: ${esc(l.nombre)}</option>` : ""}<option value="nuevo">Un lote nuevo: ${esc(imp.nombre.replace(/\.[^.]+$/, "").slice(0, 30))} · (proveedor)</option></select></label>
     <label class="peCheck"><input type="checkbox" id="imRecibir"${prefs.importarRecibe === false ? "" : " checked"}> Ya están en bodega <small>(quedan como recibidos; el control es la asignación a cada repartidor)</small></label>
     <div class="kpis"><div class="kpi ok"><b>${r.validas}</b><span>guías a importar</span></div><div class="kpi${r.rep ? " warn" : ""}"><b>${r.rep}</b><span>repetidas en el archivo</span></div><div class="kpi${r.sinGuia ? " warn" : ""}"><b>${r.sinGuia}</b><span>filas sin guía válida</span></div><div class="kpi"><b>${imp.map.dir !== undefined ? r.conDir : "—"}</b><span>con dirección (zona)</span></div></div>
     ${r.yaEst ? `<p class="hint">${r.yaEst} guía(s) ya estaban en el listado de otro lote: se dejan donde están.</p>` : ""}
     <p class="hint">En el histórico solo queda la guía y la calle/carrera (para la zona). Dirección, teléfono, nombre, barrio y apto van aparte, solo para el repartidor al que se le asigne cada paquete, y se borran solos a los 30 días (Ley 1581).</p>`;
+  $("imProv").onchange = () => { $("imProvNL").hidden = $("imProv").value !== ""; };
   box.querySelectorAll("select[data-campo]").forEach(s => s.onchange = () => { imp.map[s.dataset.campo] = s.value === "" ? undefined : +s.value; imp.manual.add(s.dataset.campo); pintarPaso2(); });
   $("imOk").disabled = !r.validas;
 }
@@ -315,16 +318,17 @@ function importarAhora(){
   // v2.40: por defecto, importar = los paquetes ya llegaron (quedan «en bodega»). Sin marcar: solo esperados.
   const recibir = !$("imRecibir") || $("imRecibir").checked;
   prefs.importarRecibe = recibir; savePrefs();
-  // v2.44: un lote (cargue) por proveedor. La empresa de cada fila sale del código (16 dígitos = Xcargo, 13 = iMile),
-  // si no de la columna «Empresa», si no de la elegida para todo el listado. El acumulado general suma todos.
-  const actual = loteActual(), usarActual = $("imDest").value !== "nuevo" && actual && !actual.cerrado;
+  // v2.44: cada cargue es de un PROVEEDOR (Daniel, Javier…). Un solo lote por archivo; si el lote abierto es de otro
+  // proveedor, se crea uno nuevo. La empresa (Xcargo/iMile) va por paquete: del código, de la columna o la elegida.
+  const prov = (($("imProvN") && $("imProvN").value.trim()) || ($("imProv") && $("imProv").value) || "").slice(0, 30);
+  if(!prov){ $("imErr").textContent = "Elige el proveedor (o escribe el nombre del otro)."; return; }
+  prefs.ultProv = prov; savePrefs();
+  const actual = loteActual(), usarActual = $("imDest").value !== "nuevo" && actual && !actual.cerrado && (actual.prov || "") === prov;
   const base = imp.nombre.replace(/\.[^.]+$/, "").slice(0, 30), lotesEmp = new Map();
-  const loteDe = emp => {
-    if(lotesEmp.has(emp)) return lotesEmp.get(emp);
-    let l = usarActual && actual.emp === emp ? actual : null;
-    if(!l){ const lid = uuid(); registrar("LOTE", null, {lid, nombre: `${base} · ${emp}`.slice(0, 40), emp, esperado: 0}); l = LOTES.get(lid); }
-    lotesEmp.set(emp, l); return l;
-  };
+  let loteImp = usarActual ? actual : null;
+  if(!loteImp){ const lid = uuid(); registrar("LOTE", null, {lid, nombre: `${base} · ${prov}`.slice(0, 40), emp: empFija, esperado: 0, prov}); loteImp = LOTES.get(lid); }
+  lotesEmp.set(prov, loteImp);
+  const loteDe = () => loteImp;
   const empFila = (f, g) => empresaPorGuia(g) || (imp.map.emp !== undefined && EMPRESAS.find(e => sinTilde(f[imp.map.emp]).includes(sinTilde(e)))) || empFija;
   if(imp.filaEnc >= 0 && imp.manual.size){ const m = store.get(MAPAS_KEY) || {}; m[firmaEnc(imp.tabla[imp.filaEnc])] = Object.fromEntries([...imp.manual].map(k => [k, imp.map[k] ?? null])); store.set(MAPAS_KEY, m); }
   const vistos = new Set(); let nuevas = 0, zonas = 0, otras = 0, recibidas = 0;
@@ -353,7 +357,7 @@ function importarAhora(){
   if(lotes.length){ prefs.lote = (usarActual && lotes.includes(actual) ? actual : lotes.slice().sort((a, b) => statsLote(b.lid).esp - statsLote(a.lid).esp)[0]).lid; savePrefs(); }
   $("dlgLista").close(); mostrarVista("vRecibir"); pintarTodo();
   if(datos.length) guardarDatosEntrega(datos);
-  const porLote = [...lotesEmp].map(([emp, l]) => `${emp}: ${statsLote(l.lid).esp} en «${l.nombre}»`).join(" · ");
+  const porLote = [...lotesEmp].map(([pv, l]) => `${pv}: «${l.nombre}»`).join(" · ");
   toast(`Importadas ${nuevas} guía(s)` + (porLote ? ` (${porLote})` : "") + (recibidas ? ` · ${recibidas} en bodega` : "") + (zonas ? ` · ${zonas} con zona` : "") + (otras ? ` · ${otras} ya estaban en otro lote` : "") + ".");
 }
 $("recManifiesto").onclick = abrirImportar;

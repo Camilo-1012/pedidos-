@@ -25,7 +25,9 @@ function pintarDespachar(){
   // Lo que lleva, por empresa (Xcargo / iMile), para cuadrar con cada operador.
   const ce = conteoEmp(x.enRuta);
   $("desEmp").hidden = !ce.length;
-  if(ce.length) kpis($("desEmp"), ce.map(([e, n]) => [n, "lleva de " + (e || "sin empresa")]));
+  // v2.44: también por proveedor (Daniel, Javier…), para saber de quién es la mercancía que lleva.
+  const cp = conteoProv(x.enRuta).filter(([pv]) => pv);
+  if(ce.length) kpis($("desEmp"), [...ce.map(([e, n]) => [n, "lleva de " + (e || "sin empresa")]), ...cp.map(([pv, n]) => [n, "de " + pv, "prov"])]);
   pintarLista($("desLista"), x.enRuta.map(p => liPaq(p, "Asignado " + fechaHora(p.asignado) + (diaDe(p.asignado) !== hoy() ? " · de otro día" : "") + " · toca para corregir")), 40, "Todavía no lleva paquetes.");
 }
 
@@ -131,7 +133,7 @@ function ordenPlanilla(lista){ return lista.slice().sort((a, b) => nomZona(a).lo
 function textoPlanilla(r, x){
   const porEmp = Object.fromEntries(conteoEmp(x.enRuta).map(([e, n]) => [e || "Sin empresa", n]));
   const zs = zonasDeRep(r.rid).map(z => z.nombre);
-  return `Planilla de salida · ${r.nombre}${zs.length ? " · Zonas: " + zs.join(", ") : ""} · ${fechaHora(new Date().toISOString())}\nTotal: ${x.enRuta.length} (${Object.entries(porEmp).map(([k, v]) => k + " " + v).join(", ")})\n` +
+  return `Planilla de salida · ${r.nombre}${zs.length ? " · Zonas: " + zs.join(", ") : ""} · ${fechaHora(new Date().toISOString())}\nTotal: ${x.enRuta.length} (${Object.entries(porEmp).map(([k, v]) => k + " " + v).join(", ")})${conteoProv(x.enRuta).some(([pv]) => pv) ? " · Proveedor: " + txtProv(x.enRuta) : ""}\n` +
     ordenPlanilla(x.enRuta).map((p, i) => `${i + 1}. ${p.guia}${p.emp ? " · " + p.emp : ""}${nomZona(p) ? " · " + nomZona(p) : ""}`).join("\n");
 }
 $("desPlanilla").onclick = () => {
@@ -141,7 +143,7 @@ $("desPlanilla").onclick = () => {
   mostrarListado("Planilla · " + r.nombre,
     `<div class="planilla" id="planilla">
       <p><b>Bodega · Planilla de salida</b><br>Repartidor: <b>${esc(r.nombre)}</b>${zonasDeRep(r.rid).length ? `<br>Zonas: <b>${esc(zonasDeRep(r.rid).map(z => z.nombre).join(", "))}</b>` : ""}<br>Fecha: ${esc(fechaHora(new Date().toISOString()))} · Despachó: ${esc(USER.name)}</p>
-      <p>Total: <b>${x.enRuta.length}</b> paquete(s) · ${Object.entries(porEmp).map(([k, v]) => esc(k) + ": " + v).join(" · ") || "—"}</p>
+      <p>Total: <b>${x.enRuta.length}</b> paquete(s) · ${Object.entries(porEmp).map(([k, v]) => esc(k) + ": " + v).join(" · ") || "—"}${conteoProv(x.enRuta).some(([pv]) => pv) ? `<br>Proveedor: ${esc(txtProv(x.enRuta))}` : ""}</p>
       <table class="tb"><thead><tr><th>#</th><th>Guía</th><th>Zona</th><th>Empresa</th><th>Novedad</th></tr></thead><tbody>
       ${ordenPlanilla(x.enRuta).map((p, i) => `<tr><td>${i + 1}</td><td>${esc(p.guia)}</td><td>${esc(nomZona(p))}</td><td>${esc(p.emp)}</td><td>${esc(p.nov.map(n => n.nota).join("; "))}</td></tr>`).join("")}
       </tbody></table>
