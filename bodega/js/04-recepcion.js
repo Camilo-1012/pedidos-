@@ -39,8 +39,24 @@ function pintarSelectLotes(){
   if(!act && lista.length){ prefs.lote = lista[0].lid; savePrefs(); }
   sel.value = prefs.lote || "";
 }
+/* v2.44: acumulado general de todas las cargas abiertas (cada proveedor tiene su lote), por empresa. */
+function pintarAcumulado(){
+  const box = $("recAcum"); if(!box) return;
+  const abiertos = new Set(lotesAbiertos().map(l => l.lid));
+  const ps = paquetes(p => abiertos.has(p.espLote) || abiertos.has(p.recLote));
+  if(!ps.length || abiertos.size < 1){ box.innerHTML = ""; return; }
+  const fila = (nombre, l) => {
+    const c = est => l.filter(p => p.estado === est).length;
+    return `<b>${esc(nombre)}</b><span>${l.length}</span><span>${c("BODEGA")}</span><span>${c("RUTA")}</span><span>${c("ENTREGADO")}</span><span>${c("ESPERADO")}</span>`;
+  };
+  const porEmp = conteoEmp(ps).map(([e]) => [e || "Sin empresa", ps.filter(p => (p.emp || "") === e)]);
+  box.innerHTML = `<h3 style="margin:0 0 6px">Acumulado general · ${abiertos.size} carga(s) abierta(s)</h3>
+    <div class="acum"><span></span><span class="h">Total</span><span class="h">En bodega</span><span class="h">En ruta</span><span class="h">Entregados</span><span class="h">Por recibir</span>
+    ${porEmp.length > 1 ? porEmp.map(([e, l]) => fila(e, l)).join("") : ""}${fila("Total", ps)}</div>`;
+}
 function pintarRecibir(){
   pintarSelectLotes();
+  pintarAcumulado();
   const l = loteActual();
   $("recInfo").hidden = !l;
   if(!l) return;

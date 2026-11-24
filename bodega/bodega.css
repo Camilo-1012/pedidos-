@@ -114,3 +114,17 @@ li.lec.mal span{color:var(--bad)}
 #desScan.bloq,#desEscribir.bloq{opacity:.45}
 #desZonasRep.falta{animation:faltaZona 1.2s ease 2}
 @keyframes faltaZona{0%,100%{box-shadow:none}50%{box-shadow:0 0 0 3px var(--bad,#d0421b);border-radius:12px}}
+
+/* v2.44: pagos por quincena */
+.pgLista{display:flex;flex-direction:column;gap:8px}
+.pgCard{display:flex;flex-direction:column;gap:6px;padding:12px;border:1px solid var(--line);border-radius:12px}
+.pgHead{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.pgValor{font-weight:700;font-size:18px}
+.pgPend{color:var(--accent)}
+.pgGuias{margin:0;padding-left:22px;display:flex;flex-direction:column;gap:4px}
+/* v2.44: acumulado general de pedidos (todas las cargas abiertas) */
+.acum{display:grid;grid-template-columns:auto repeat(5,minmax(0,1fr));gap:4px 8px;font-size:14px;align-items:center}
+.acum b{font-size:15px}
+.acum .h{opacity:.7;font-size:12px}
+.pgKpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+.pgKpis .kpi b{font-size:22px}
