@@ -91,9 +91,10 @@ test("zonas: crear con aviso de cruce, ubicar al recibir, despachar con aviso de
   expect((await A.leer(page, "ZON0000004")).txt).toBe("Para Jairo");
   await page.click("#scClose");
   await page.click("#desPlanilla");
-  const zonasPlanilla = await page.locator("#planilla tbody tr td:nth-child(3)").allTextContents();
+  const zonasPlanilla = await page.locator("#planilla tbody tr:not(.plZona) td:nth-child(5)").allTextContents();
   expect(zonasPlanilla).toEqual(["Sin zona", "Z1 Tibabuyes", "Z2 Lisboa"]);
-  const [dl] = await Promise.all([page.waitForEvent("download"), page.click("#ltActs button.primary")]);
+  await expect(page.locator("#planilla .plZona")).toHaveText(["Sin zona · 1 paquete(s)", "Z1 Tibabuyes · 1 paquete(s)", "Z2 Lisboa · 1 paquete(s)"]);
+  const [dl] = await Promise.all([page.waitForEvent("download"), page.locator("#ltActs button", { hasText: "Excel" }).click()]);
   const pl = Object.values(A.leerXlsx(await dl.path()))[0];
   expect(pl[0].slice(0, 5)).toEqual(["#", "Guía", "Zona", "Calle", "Carrera"]);
   expect(pl[2].slice(1, 5)).toEqual(["ZON0000001", "Z1 Tibabuyes", "140", "110"]);
@@ -165,7 +166,7 @@ test("Despachar: marcar las zonas de cada repartidor (una zona puede tener vario
   expect(r.txt).toBe("Para Jairo · Lombardia · ⚠ no es de sus zonas (es de John)"); expect(r.cls).toBe("aviso");
   await page.click("#scClose");
   await page.click("#desPlanilla");
-  await expect(page.locator("#planilla")).toContainText("Zonas: Alcaparros, Bilbao");
+  await expect(page.locator("#planilla .plInfo")).toContainText("Zonas asignadasAlcaparros, Bilbao");
   await page.locator("#dlgLista .dlgHead button").click();
   // Quitar una zona con otro toque; se guarda como evento (queda en el histórico y se sincroniza).
   await page.locator('#desZonasRep button[data-zid="zb"]').click();
@@ -267,5 +268,38 @@ test("v2.45: Recibir separa por zona y por empresa (Xcargo/iMile): desglose en c
   // Se recuerda la vista y lo abierto.
   await page.reload(); await page.waitForFunction(() => window.BODEGA_DATOS === true);
   await expect(page.locator('#recGrupos details[data-zid="zb"]')).toHaveAttribute("open", "");
+  expect(errs).toEqual([]);
+});
+
+test("v2.46: planilla de salida: presentación de empresa, imprime arriba de la hoja y se comparte como imagen (WhatsApp)", async ({ page }) => {
+  const errs = A.vigilarErrores(page);
+  await A.entrar(page);
+  await A.agregarRep(page, "Jairo Cárdenas");
+  await A.nuevoLote(page, "Xcargo", "L1");
+  await page.click("#recScan");
+  for(const g of ["2600000000000001", "6100000000002"]) await A.leer(page, g);
+  await page.click("#scClose");
+  await page.click('nav.tabs button[data-v="vDespachar"]');
+  await page.locator("#desReps button", { hasText: "Jairo" }).click();
+  await page.click("#desScan");
+  for(const g of ["2600000000000001", "6100000000002"]) await A.leer(page, g);
+  await page.click("#scClose");
+  await page.click("#desPlanilla");
+  await expect(page.locator("#planilla .plNum b")).toHaveText(/^PS-\d{6}-\d{4}-JC$/);
+  await expect(page.locator("#planilla .plRes")).toContainText("2paquetes en total1Xcargo1iMile");
+  await expect(page.locator("#planilla .plFirmas")).toContainText("Recibí conforme (repartidor)");
+  // Compartir: con «compartir» del celular se manda la imagen PNG.
+  await page.evaluate(() => { window.__comp = null; navigator.canShare = () => true; navigator.share = async o => { window.__comp = {n: o.files.length, tipo: o.files[0].type, tam: o.files[0].size, nombre: o.files[0].name, texto: o.text}; }; });
+  await page.locator("#ltActs button", { hasText: "Compartir (WhatsApp)" }).click();
+  await expect.poll(() => page.evaluate(() => window.__comp && window.__comp.tipo)).toBe("image/png");
+  const c = await page.evaluate(() => window.__comp);
+  expect(c.tam).toBeGreaterThan(10000);
+  expect(c.nombre).toMatch(/^planilla-jairo-cárdenas-PS-.*\.png$/);
+  expect(c.texto).toContain("Paquetes: 2 (Xcargo 1, iMile 1)");
+  // Impresión: solo la planilla, desde arriba de la hoja.
+  await page.emulateMedia({ media: "print" });
+  expect(await page.evaluate(() => [getComputedStyle(document.querySelector("#ltActs")).display, Math.round(document.querySelector("#planilla").getBoundingClientRect().top)])).toEqual(["none", expect.any(Number)]);
+  expect(await page.evaluate(() => document.querySelector("#planilla").getBoundingClientRect().top)).toBeLessThan(60);
+  await page.emulateMedia({ media: "screen" });
   expect(errs).toEqual([]);
 });
