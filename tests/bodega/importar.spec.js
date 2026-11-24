@@ -248,3 +248,49 @@ test("v2.44: cargue por PROVEEDOR (Daniel, Javier): cada archivo en su lote, acu
   await expect(page.locator("#planilla")).toContainText("Proveedor: 2 Daniel · 1 Javier");
   expect(errs).toEqual([]);
 });
+
+test("v2.45: anular un cargue equivocado (sin borrar nada); bloquea si ya salió algo de la bodega", async ({ page }) => {
+  const errs = A.vigilarErrores(page);
+  await A.entrar(page);
+  await A.agregarRep(page, "Jairo");
+  // Cargue bueno de Javier y cargue equivocado de Daniel (comparten una guía).
+  await abrir(page);
+  await page.setInputFiles("#imFile", ARCH("formato-xcargo-real.xlsx"));
+  await page.selectOption("#imProv", "Javier");
+  await page.click("#imOk");
+  await page.click('nav.tabs button[data-v="vRecibir"]');
+  await abrir(page);
+  await page.setInputFiles("#imFile", ARCH("prueba-100-paquetes.xlsx"));
+  await page.selectOption("#imProv", "Daniel");
+  await page.click("#imOk");
+  expect(await page.evaluate(() => paquetes(p => p.estado === "BODEGA").length)).toBe(108);
+  const malo = await page.evaluate(() => loteActual().nombre);
+  expect(malo).toContain("Daniel");
+  // Si un paquete ya salió, no deja anular.
+  const g = await page.evaluate(() => paquetes(p => provDe(p) === "Daniel")[0].guia);
+  await page.evaluate(([g]) => registrar("ASIGNADO", g, {rid: repsActivos()[0].rid}), [g]);
+  await page.click("#recAnular");
+  await expect(page.locator("#ltTitle")).toContainText("No se puede anular");
+  await page.locator("#dlgLista .dlgHead button").click();
+  // Se corrige la asignación y ahora sí.
+  await page.evaluate(([g]) => { const a = [...POR_GUIA.get(g)].find(e => e.tipo === "ASIGNADO"); registrar("ANULAR", g, {ref: a.id, motivo: "Asignación equivocada"}); pintarTodo(); }, [g]);
+  await page.click("#recAnular");
+  await A.responder(page, { c: "otra" }).catch(() => {});
+  await expect(page.locator("#pdErr")).toHaveText("Escribe ANULAR.");
+  await A.responder(page, { c: "anular" });
+  // Quedan solo los 8 de Javier; el lote anulado ya no se ofrece; el histórico conserva todo.
+  expect(await page.evaluate(() => paquetes(p => p.estado === "BODEGA").length)).toBe(8);
+  expect(await page.evaluate(() => paquetes(() => true).every(p => provDe(p) === "Javier"))).toBe(true);
+  await expect(page.locator("#recLote option")).toHaveCount(1);
+  await expect(page.locator("#recLote option")).toContainText("Javier");
+  expect(await page.evaluate(() => [...EV.values()].filter(e => e.tipo === "ANULAR" && e.d.motivo === "Cargue anulado").length)).toBeGreaterThanOrEqual(200);
+  expect(await page.evaluate(m => [...LOTES.values()].find(l => l.nombre === m).anulado !== "", malo)).toBe(true);
+  // Se puede volver a importar el archivo correcto (las guías vuelven).
+  await abrir(page);
+  await page.setInputFiles("#imFile", ARCH("prueba-100-paquetes.xlsx"));
+  await page.selectOption("#imProv", "Daniel");
+  await page.selectOption("#imDest", "nuevo");
+  await page.click("#imOk");
+  expect(await page.evaluate(() => paquetes(p => p.estado === "BODEGA").length)).toBe(108);
+  expect(errs).toEqual([]);
+});

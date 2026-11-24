@@ -86,7 +86,8 @@ function calcPaq(guia){
         break;
     }
   }
-  if(!p.evs.length) PAQ.delete(guia); else PAQ.set(guia, p);
+  // Sin recepción ni listado (p. ej. solo quedó su ubicación de un cargue anulado): no es un paquete.
+  if(!p.evs.length || !p.estado) PAQ.delete(guia); else PAQ.set(guia, p);
   p.emp = empresaPorGuia(guia) || p.emp;          // el formato del código manda sobre el lote o el listado
   return p;
 }
@@ -109,7 +110,7 @@ function aplicarCatalogo(e){
     // Pueden llegar en desorden desde otros celulares: se decide por la hora de cada evento.
     const l = LOTES.get(d.lid) || {lid: d.lid, nombre: "Lote", emp: "", esperado: 0, at: e.at, datosAt: "", cerradoAt: "", abiertoAt: "", cerrado: ""};
     if(e.tipo === "LOTE"){
-      if(e.at >= l.datosAt){ Object.assign(l, {nombre: d.nombre, emp: d.emp, esperado: d.esperado || 0, prov: d.prov || ""}); l.datosAt = e.at; }
+      if(e.at >= l.datosAt){ Object.assign(l, {nombre: d.nombre, emp: d.emp, esperado: d.esperado || 0, prov: d.prov || "", anulado: d.anulado ? e.at : ""}); l.datosAt = e.at; }
       if(e.at < l.at) l.at = e.at;
       if(d.reabrir && e.at > l.abiertoAt) l.abiertoAt = e.at;
     } else if(e.at > l.cerradoAt) l.cerradoAt = e.at;

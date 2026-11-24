@@ -30,8 +30,8 @@ function mostrarListado(titulo, html, acciones){
 }
 
 /* ---- Lotes ---- */
-const lotesAbiertos = () => [...LOTES.values()].filter(l => !l.cerrado).sort((a, b) => b.at.localeCompare(a.at));
-const loteActual = () => LOTES.get(prefs.lote) || null;
+const lotesAbiertos = () => [...LOTES.values()].filter(l => !l.cerrado && !l.anulado).sort((a, b) => b.at.localeCompare(a.at));
+const loteActual = () => { const l = LOTES.get(prefs.lote); return l && !l.anulado ? l : null; };
 function pintarSelectLotes(){
   const sel = $("recLote"), abiertos = lotesAbiertos(), act = loteActual();
   const lista = act && act.cerrado ? [act, ...abiertos] : abiertos;
@@ -187,9 +187,49 @@ $("recFaltan").onclick = () => {
      <h3>Recibidos fuera del listado (${sobr.length})</h3><ul class="lista">${sobr.map(p => liPaq(p)).join("") || "<li class='vacio'>Ninguno.</li>"}</ul>`,
     [["Excel", () => excelLote(l.lid)]]);
 };
+/* ---- Anular un cargue (v2.45): «cargamos el archivo que no era» ----
+   Solo si ninguno de sus paquetes salió de la bodega (asignado, entregado, devuelto, faltante). Nada se borra: se
+   registran ANULAR de las lecturas de ese lote (listado, recepción y su ubicación) y el lote queda «anulado» en el
+   histórico. Los paquetes que también estaban en otro lote siguen allá. Luego se puede importar el archivo correcto. */
+function revisarAnulable(l){
+  const guias = new Set(), bloq = [];
+  for(const [g, evs] of POR_GUIA){
+    if(!evs.some(e => (e.tipo === "ESPERADO" || e.tipo === "RECIBIDO") && e.d.lid === l.lid)) continue;
+    guias.add(g);
+    const p = paq(g);
+    if(p && (p.estado === "RUTA" || p.estado === "ENTREGADO" || p.estado === "FALTANTE" || p.devs)) bloq.push(p);
+  }
+  return {guias, bloq};
+}
+async function anularCargue(){
+  const l = loteActual(); if(!l) return;
+  const {guias, bloq} = revisarAnulable(l);
+  if(bloq.length){
+    mostrarListado("No se puede anular «" + l.nombre + "»", `<p class="alerta">${bloq.length} paquete(s) de este cargue ya salieron de la bodega (asignados, entregados o devueltos). Corrige primero esas asignaciones (Despachar → Lleva → tocar el paquete → «Quitar asignación») y vuelve a intentar.</p><ul class="lista">${bloq.slice(0, 50).map(p => liPaq(p, "")).join("")}</ul>`);
+    return;
+  }
+  const v = await pedir({title: "Anular el cargue «" + l.nombre + "»",
+    msg: `Se quitan sus ${guias.size} paquete(s) de la bodega (los que también están en otro cargue siguen allá). Queda en el histórico que se anuló, quién y cuándo. Después puedes importar el archivo correcto.\nEscribe ANULAR para confirmar.`,
+    fields: [{id: "c", label: "Confirmación", type: "text", max: 10}], yes: "Anular cargue",
+    check: x => x.c.trim().toUpperCase() === "ANULAR" ? "" : "Escribe ANULAR."});
+  if(!v) return;
+  for(const g of guias){
+    const evs = POR_GUIA.get(g) || [], anul = new Set(evs.filter(e => e.tipo === "ANULAR").map(e => e.d.ref));
+    const deOtro = evs.some(e => (e.tipo === "ESPERADO" || e.tipo === "RECIBIDO") && e.d.lid !== l.lid && !anul.has(e.id));
+    for(const e of evs.slice()){
+      if(anul.has(e.id) || e.tipo === "ANULAR") continue;
+      const delLote = (e.tipo === "ESPERADO" || e.tipo === "RECIBIDO") && e.d.lid === l.lid;
+      if(delLote || (!deOtro && (e.tipo === "UBICACION" || e.tipo === "NOVEDAD"))) registrar("ANULAR", g, {ref: e.id, motivo: "Cargue anulado"});
+    }
+  }
+  registrar("LOTE", null, {lid: l.lid, nombre: l.nombre, emp: l.emp, esperado: l.esperado, prov: l.prov || "", anulado: true});
+  prefs.lote = null; savePrefs(); pintarTodo();
+  toast(`Cargue «${l.nombre}» anulado: ${guias.size} paquete(s) fuera de la bodega.`);
+}
+$("recAnular").onclick = anularCargue;
 $("recCerrar").onclick = async () => {
   const l = loteActual(); if(!l) return;
-  if(l.cerrado){ registrar("LOTE", null, {lid: l.lid, nombre: l.nombre, emp: l.emp, esperado: l.esperado, reabrir: true}); pintarTodo(); return; }
+  if(l.cerrado){ registrar("LOTE", null, {lid: l.lid, nombre: l.nombre, emp: l.emp, esperado: l.esperado, prov: l.prov || "", reabrir: true}); pintarTodo(); return; }
   const s = statsLote(l.lid);
   const msg = s.esperado ? `Recibidos ${s.rec} de ${s.esperado}.` + (s.faltan ? ` Faltan ${s.faltan}: quedan como «esperados sin recibir» para reclamarlos.` : " No falta ninguno.") : `Recibidos ${s.rec}.`;
   if(!await confirmar("Cerrar " + l.nombre, msg + " Un lote cerrado no recibe más lecturas (se puede reabrir).", "Cerrar lote")) return;
