@@ -8,7 +8,7 @@ function chipEstado(p){
 function liPaq(p, extra){
   const z = ZONAS.size ? zonaDe(p) : null;
   const pv = provDe(p);
-  const marcas = [ZONAS.size ? chipZona(z) : "", pv ? `<span class="chip prov">${esc(pv)}</span>` : "", p.emp ? `<span class="chip">${esc(p.emp)}</span>` : "", p.nov.length ? `<span class="chip warn">Novedad</span>` : "",
+  const marcas = [ZONAS.size ? chipZona(z) : "", pv ? `<span class="chip prov">${esc(pv)}</span>` : "", p.emp ? `<span class="chip em-${esc(p.emp.toLowerCase())}">${esc(p.emp)}</span>` : "", p.nov.length ? `<span class="chip warn">Novedad</span>` : "",
     p.conflicto ? `<span class="chip bad">Conflicto</span>` : "",
     p.estado === "RUTA" && p.noEstaba ? `<span class="chip warn">No estaba ${esc(horaDe(p.noEstaba))} · debe volver</span>` : "",
     p.estado === "ENTREGADO" && p.porRep ? `<span class="chip ok">Reportado por el repartidor</span>` : "", p.devs ? `<span class="chip">Devuelto ${p.devs}×</span>` : ""].join("");
@@ -72,8 +72,50 @@ function pintarRecibir(){
   $("recCerrar").textContent = cerrado ? "Reabrir lote" : "Cerrar lote";
   $("recNota").textContent = (l.emp ? l.emp + " · " : "") + "Creado " + fechaHora(l.at) + (cerrado ? " · Cerrado " + fechaHora(l.cerrado) : "") +
     (s.esp ? "" : " · Sin listado esperado: los faltantes se calculan con la cantidad que escribiste.");
-  const recientes = paquetes(p => p.recLote === l.lid).sort((a, b) => b.recibido.localeCompare(a.recibido));
-  pintarLista($("recLista"), recientes.map(p => liPaq(p, "Recibido " + fechaHora(p.recibido) + (p.espLote === l.lid || !s.esp ? "" : " · fuera del listado"))), 30, "Aún no hay paquetes recibidos en este lote.");
+  const todos = paquetes(p => p.recLote === l.lid);
+  // v2.45: filtro por empresa (Todas · Xcargo · iMile) y dos vistas: «Últimas» (en orden de lectura) y «Por zona».
+  const empresas = conteoEmp(todos);
+  if(prefs.recEmp && !empresas.some(([e]) => e === prefs.recEmp)) prefs.recEmp = "";
+  const fEmp = prefs.recEmp || "";
+  $("recEmpF").hidden = empresas.length < 2;
+  $("recEmpF").innerHTML = [["", "Todas", todos.length], ...empresas.map(([e, n]) => [e, e || "Sin empresa", n])]
+    .map(([e, t, n]) => `<button type="button" class="chip fchip em-${esc((e || "todas").toLowerCase())}" data-emp="${esc(e)}" aria-pressed="${e === fEmp}">${esc(t)} ${n}</button>`).join("");
+  $("recEmpF").querySelectorAll("button").forEach(b => b.onclick = () => { prefs.recEmp = b.dataset.emp; savePrefs(); pintarRecibir(); });
+  const lista = todos.filter(p => !fEmp || (p.emp || "") === fEmp);
+  const ver = prefs.recVer === "zona" && zonasActivas().length ? "zona" : "ultimas";
+  document.querySelectorAll(".recVer button").forEach(b => { b.setAttribute("aria-pressed", b.dataset.ver === ver); b.onclick = () => { prefs.recVer = b.dataset.ver; savePrefs(); pintarRecibir(); }; });
+  document.querySelector(".recVer").hidden = !zonasActivas().length;
+  $("recListaT").textContent = ver === "zona" ? "Paquetes por zona" : "Últimas lecturas";
+  $("recLista").hidden = ver === "zona"; $("recGrupos").hidden = ver !== "zona";
+  const linea = p => liPaq(p, (ver === "zona" ? ubicTxt(p) + " · " : "") + "Recibido " + fechaHora(p.recibido) + (p.espLote === l.lid || !s.esp ? "" : " · fuera del listado"));
+  if(ver === "ultimas"){
+    pintarLista($("recLista"), lista.sort((a, b) => b.recibido.localeCompare(a.recibido)).map(linea), 30, "Aún no hay paquetes recibidos en este lote.");
+    return;
+  }
+  // Por zona: un bloque plegable por zona (color de la zona), con el número por empresa; adentro, separados por empresa.
+  const grupos = new Map();
+  lista.forEach(p => { const z = zonaDe(p), k = z ? z.zid : ""; if(!grupos.has(k)) grupos.set(k, []); grupos.get(k).push(p); });
+  const orden = [...zonasActivas().map(z => z.zid), ""].filter(k => grupos.has(k));
+  const abiertos = new Set(prefs.recAbiertos || []);
+  $("recGrupos").innerHTML = orden.map(k => {
+    const z = k ? ZONAS.get(k) : null, ps = grupos.get(k);
+    const ce = Object.fromEntries(conteoEmp(ps).map(([e, n]) => [e || "—", n]));
+    return `<details class="zgrp" style="--zc:${esc(z ? z.color : "#777")}" data-zid="${esc(k)}"${abiertos.has(k) ? " open" : ""}>
+      <summary><b>${esc(z ? z.nombre : "Sin zona")}</b><span class="zgN">${ps.length}</span><small class="zemp">${desgloseEmp(ce)}</small></summary>
+      <div class="zgBody"></div></details>`;
+  }).join("") || `<p class="hint">Aún no hay paquetes recibidos en este lote.</p>`;
+  // Se pinta adentro solo al abrir (un lote de 600 no pinta 600 filas de una).
+  const llenar = d => {
+    const ps = grupos.get(d.dataset.zid) || [];
+    d.querySelector(".zgBody").innerHTML = conteoEmp(ps).map(([emp, n]) => `<h4 class="grpEmp em-${esc((emp || "x").toLowerCase())}">${esc(emp || "Sin empresa")} · ${n}</h4><ul class="lista">${ps.filter(p => (p.emp || "") === emp).sort((a, b) => (a.cl ?? 999) - (b.cl ?? 999) || (a.kr ?? 999) - (b.kr ?? 999)).map(linea).join("")}</ul>`).join("");
+  };
+  $("recGrupos").querySelectorAll("details").forEach(d => {
+    if(d.open) llenar(d);
+    d.ontoggle = () => {
+      const a = new Set(prefs.recAbiertos || []); d.open ? a.add(d.dataset.zid) : a.delete(d.dataset.zid);
+      prefs.recAbiertos = [...a]; savePrefs(); if(d.open) llenar(d);
+    };
+  });
 }
 $("recUbic").onchange = e => { prefs.pedirUbic = e.target.checked; savePrefs(); };
 $("recLote").onchange = e => { prefs.lote = e.target.value || null; savePrefs(); pintarRecibir(); };

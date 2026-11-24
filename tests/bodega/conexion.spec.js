@@ -202,7 +202,7 @@ test("la zona del paquete y las zonas del repartidor le llegan a su Ruta (v2.36)
   await A.nuevoLote(bo.page, "Otra", "L1");
   await bo.page.click("#recScan");
   for (const [g, cl] of [["2696271051298372", "135"], ["6110586210761", "145"]]){
-    const p = A.leer(bo.page, g); await bo.page.fill("#ubCl", cl); await bo.page.fill("#ubKr", "100"); await bo.page.click("#ubOk"); await p;
+    const p = A.leer(bo.page, g); await expect(bo.page.locator("#scUbic")).toBeVisible(); await bo.page.fill("#ubCl", cl); await bo.page.fill("#ubKr", "100"); await bo.page.click("#ubOk"); await p;
   }
   await bo.page.click("#scClose");
   await bo.page.click('nav.tabs button[data-v="vDespachar"]');

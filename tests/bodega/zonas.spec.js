@@ -71,7 +71,7 @@ test("zonas: crear con aviso de cruce, ubicar al recibir, despachar con aviso de
   expect((await leerConUbic(page, "ZON0000004", "300", "300")).txt).toBe("Recibida → sin zona");
   await page.click("#scClose");
   const celdas = await page.locator("#recZonas .zcell").allTextContents();
-  expect(celdas).toEqual(["1Z1 Tibabuyes", "2Z2 Lisboa", "0Z3 Rincón", "1Sin zona"]);
+  expect(celdas).toEqual(["1Z1 TibabuyesXC 1", "2Z2 LisboaXC 2", "0Z3 Rincón", "1Sin zonaXC 1"]);   // v2.45: con el desglose por empresa
 
   // Sin «pedir ubicación», recibe sin preguntar.
   await page.uncheck("#recUbic");
@@ -82,7 +82,7 @@ test("zonas: crear con aviso de cruce, ubicar al recibir, despachar con aviso de
   // Despacho: las zonas de Jairo primero; un paquete de la zona de Pedro se entrega con aviso, sin bloquear.
   await page.click('nav.tabs button[data-v="vDespachar"]');
   await page.locator("#desReps button", { hasText: "Jairo" }).click();
-  await expect(page.locator("#desZonas .zcell").first()).toHaveText("1Z1 Tibabuyes");
+  await expect(page.locator("#desZonas .zcell").first()).toHaveText("1Z1 TibabuyesXC 1");
   await expect(page.locator("#desZonas .zcell.suya")).toHaveCount(1);
   await page.click("#desScan");
   expect((await A.leer(page, "ZON0000001")).txt).toBe("Para Jairo · Z1 Tibabuyes");
@@ -142,7 +142,7 @@ test("Despachar: marcar las zonas de cada repartidor (una zona puede tener vario
   await A.nuevoLote(page, "Xcargo", "L1");
   await page.click("#recScan");
   for(const [g, cl] of [["ZR00000001", "135"], ["ZR00000002", "145"], ["ZR00000003", "155"]]){
-    const p = A.leer(page, g); await page.fill("#ubCl", cl); await page.fill("#ubKr", "100"); await page.click("#ubOk"); await p;
+    const p = A.leer(page, g); await expect(page.locator("#scUbic")).toBeVisible(); await page.fill("#ubCl", cl); await page.fill("#ubKr", "100"); await page.click("#ubOk"); await p;
   }
   await page.click("#scClose");
   await page.click('nav.tabs button[data-v="vDespachar"]');
@@ -235,5 +235,37 @@ test("con zonas creadas, despachar exige marcarle zona al repartidor (sin zonas 
   await page.click("#desScan");
   expect((await A.leer(page, "ZO00000001")).txt).toBe("Para Jairo");
   await page.click("#scClose");
+  expect(errs).toEqual([]);
+});
+
+test("v2.45: Recibir separa por zona y por empresa (Xcargo/iMile): desglose en cada zona, filtro y vista «Por zona»", async ({ page }) => {
+  const errs = A.vigilarErrores(page);
+  await A.entrar(page);
+  await page.evaluate(() => {
+    registrar("ZONA", null, {zid: "za", nombre: "Alcaparros", color: "#1f8a4c", cl: [130, 139], kr: [null, null], activa: true});
+    registrar("ZONA", null, {zid: "zb", nombre: "Bilbao", color: "#d0421b", cl: [140, 149], kr: [null, null], activa: true});
+  });
+  await A.nuevoLote(page, "Xcargo", "L1");
+  await page.click("#recScan");
+  for(const [g, cl] of [["2600000000000001", "135"], ["2600000000000002", "145"], ["6100000000003", "145"], ["6100000000004", "146"], ["2600000000000005", null]])
+    await leerConUbic(page, g, cl, "100");
+  await page.click("#scClose");
+  // Cuadro de zonas: debajo del número, cuántos de cada empresa.
+  await expect(page.locator('#recZonas .zcell[data-zid="zb"] .zemp')).toHaveText("XC 1iM 2");
+  await expect(page.locator('#recZonas .zcell[data-zid=""] .zemp')).toHaveText("XC 1");
+  // Filtro por empresa.
+  await expect(page.locator("#recEmpF button")).toHaveText(["Todas 5", "Xcargo 3", "iMile 2"]);
+  await page.locator("#recEmpF button", { hasText: "iMile" }).click();
+  await expect(page.locator("#recLista li")).toHaveCount(2);
+  await page.locator("#recEmpF button", { hasText: "Todas" }).click();
+  // Vista por zona: un bloque por zona con su desglose; adentro, separado por empresa.
+  await page.locator(".recVer button", { hasText: "Por zona" }).click();
+  await expect(page.locator("#recLista")).toBeHidden();
+  await expect(page.locator("#recGrupos summary")).toHaveText(["Alcaparros1XC 1", "Bilbao3XC 1iM 2", "Sin zona1XC 1"]);
+  await page.locator('#recGrupos details[data-zid="zb"] summary').click();
+  await expect(page.locator('#recGrupos details[data-zid="zb"] .grpEmp')).toHaveText(["Xcargo · 1", "iMile · 2"]);
+  // Se recuerda la vista y lo abierto.
+  await page.reload(); await page.waitForFunction(() => window.BODEGA_DATOS === true);
+  await expect(page.locator('#recGrupos details[data-zid="zb"]')).toHaveAttribute("open", "");
   expect(errs).toEqual([]);
 });
