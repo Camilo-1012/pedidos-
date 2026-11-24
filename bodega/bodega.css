@@ -160,3 +160,45 @@ li.lec.mal span{color:var(--bad)}
 .recVer[hidden]{display:none}
 .recVer button{border:0;border-radius:0;background:transparent}
 .recVer button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+
+/* v2.46: planilla de salida con presentación de empresa */
+.pl{--pl-ink:#1f2a2a;--pl-acc:#f5c22d;background:#fff;color:#111;border-radius:10px;overflow:hidden;font-size:14px;line-height:1.35}
+.plHead{background:var(--pl-ink);color:#fff;display:flex;justify-content:space-between;gap:12px;padding:16px 18px;border-bottom:4px solid var(--pl-acc)}
+.plMarca{color:var(--pl-acc);font-weight:700;font-size:12px;letter-spacing:.08em}
+.pl h1{margin:2px 0 0;font:800 24px/1.1 var(--display);color:#fff;text-transform:none}
+.plNum{text-align:right;display:flex;flex-direction:column;font-size:12px;color:#cfd8d8}
+.plNum b{color:#fff;font-size:15px}
+.plInfo{display:grid;grid-template-columns:1fr 1fr;gap:10px 16px;padding:14px 18px}
+.plInfo span,.plFirmas span{display:block;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#6b7676}
+.plInfo b{font-size:15px}
+.plRes{display:flex;flex-wrap:wrap;gap:8px;padding:0 18px 14px}
+.plBox{flex:1 1 90px;background:#f4f6f6;border-left:5px solid #7b5cd6;border-radius:6px;padding:8px 10px}
+.plBox b{display:block;font:800 22px/1 var(--display)}
+.plBox span{font-size:12px;color:#444}
+.plBox.tot{border-color:var(--pl-ink)}
+.plBox.em-xcargo{border-color:#e8a317}.plBox.em-xcargo b{color:#b77d00}
+.plBox.em-imile{border-color:#1fa5c4}.plBox.em-imile b{color:#0e7f99}
+.plTb{width:calc(100% - 36px);margin:0 18px;border-collapse:collapse;font-size:13px}
+.plTb th{background:var(--pl-ink);color:#fff;text-align:left;padding:7px 6px;font-size:11px;letter-spacing:.05em;text-transform:uppercase}
+.plTb td{padding:6px;border-bottom:1px solid #e3e7e7;vertical-align:top}
+.plTb tbody tr:nth-child(even):not(.plZona) td{background:#f8f9f9}
+.plTb .c{text-align:center;width:28px}
+.plTb .g{font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
+.plZona td{background:#e9eeee!important;font-weight:700;color:var(--pl-ink)}
+.plChk{display:inline-block;width:14px;height:14px;border:1.5px solid #555;border-radius:3px}
+.plNov{color:#b45309;font-size:12px}
+.plVacio{text-align:center;color:#666;padding:18px!important}
+.plFirmas{display:grid;grid-template-columns:1fr 1fr;gap:24px;padding:36px 18px 8px}
+.plLinea{border-bottom:1.5px solid #333;height:36px;margin:4px 0}
+.plFirmas small{display:block;color:#444}
+.plPie{padding:12px 18px 16px;font-size:11px;color:#6b7676;border-top:1px solid #e3e7e7;margin-top:12px}
+@media print{
+  @page{size:letter;margin:12mm}
+  html,body{background:#fff!important}
+  #dlgLista.conPlanilla{position:static!important;inset:auto!important;transform:none!important;margin:0!important;padding:0!important;border:0!important;width:100%!important;max-width:none!important;max-height:none!important;overflow:visible!important;background:#fff!important}
+  #dlgLista.conPlanilla::backdrop{display:none}
+  #dlgLista.conPlanilla #ltBody{padding:0!important;overflow:visible!important;max-height:none!important}
+  .pl{border-radius:0;font-size:12px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .plTb thead{display:table-header-group}
+  .plTb tr,.plFirmas,.plPie{break-inside:avoid}
+}

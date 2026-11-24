@@ -127,8 +127,8 @@ test("despacho, reasignación, devolución con motivo, liquidación y Excel", as
   expect((await A.leer(page, "G0000004")).tipo).toBe("ok");
   await page.click("#scClose");
   await page.click("#desPlanilla");
-  await expect(page.locator("#planilla")).toContainText("Total: 2 paquete(s)");
-  const [dl] = await Promise.all([page.waitForEvent("download"), page.click("#ltActs button.primary")]);
+  await expect(page.locator("#planilla .plBox.tot")).toHaveText("2paquetes en total");
+  const [dl] = await Promise.all([page.waitForEvent("download"), page.locator("#ltActs button", { hasText: "Excel" }).click()]);
   const xl = A.leerXlsx(await dl.path());
   const hoja = Object.values(xl)[0];
   expect(hoja.slice(1, 3).map(f => f[1]).sort()).toEqual(["G0000003", "G0000004"]);

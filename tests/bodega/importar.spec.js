@@ -136,7 +136,7 @@ test("Listado de 100 (Xcargo + iMile): despachar sin recibir antes descuenta de 
   await expect(page.locator("#desReps button", { hasText: "Jairo" })).toContainText("5 en ruta (3 Xcargo · 2 iMile)");
   await expect(page.locator("#desEmp .kpi")).toHaveText(["3lleva de Xcargo", "2lleva de iMile", "5de Daniel"]);
   await page.click("#desPlanilla");
-  await expect(page.locator("#planilla")).toContainText("Xcargo: 3 · iMile: 2");
+  await expect(page.locator("#planilla .plRes")).toContainText("3Xcargo2iMile");
   await page.locator("#dlgLista .dlgHead button").click();
   // Un código suelto (fuera del listado) también se clasifica por su formato.
   await page.locator("#desReps button", { hasText: "Pedro" }).click();
@@ -245,7 +245,7 @@ test("v2.44: cargue por PROVEEDOR (Daniel, Javier): cada archivo en su lote, acu
   await expect(page.locator("#desEmp")).toContainText("1de Javier");
   await expect(page.locator("#desLista li", { hasText: "2690000000000002" }).locator(".chip.prov")).toHaveText("Javier");
   await page.click("#desPlanilla");
-  await expect(page.locator("#planilla")).toContainText("Proveedor: 2 Daniel · 1 Javier");
+  await expect(page.locator("#planilla .plRes")).toContainText("2de Daniel1de Javier");
   expect(errs).toEqual([]);
 });
 

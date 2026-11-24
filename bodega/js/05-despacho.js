@@ -136,20 +136,114 @@ function textoPlanilla(r, x){
   return `Planilla de salida · ${r.nombre}${zs.length ? " · Zonas: " + zs.join(", ") : ""} · ${fechaHora(new Date().toISOString())}\nTotal: ${x.enRuta.length} (${Object.entries(porEmp).map(([k, v]) => k + " " + v).join(", ")})${conteoProv(x.enRuta).some(([pv]) => pv) ? " · Proveedor: " + txtProv(x.enRuta) : ""}\n` +
     ordenPlanilla(x.enRuta).map((p, i) => `${i + 1}. ${p.guia}${p.emp ? " · " + p.emp : ""}${nomZona(p) ? " · " + nomZona(p) : ""}`).join("\n");
 }
+/* v2.46: planilla con presentación de empresa (impresión / PDF) y para compartir por WhatsApp como imagen. */
+function datosPlanilla(r){
+  const x = delRepartidor(r.rid), ps = ordenPlanilla(x.enRuta), ahora = new Date();
+  const ini = r.nombre.split(/\s+/).map(w => w[0] || "").join("").slice(0, 3).toUpperCase();
+  return {r, ps, ahora, num: `PS-${String(ahora.getFullYear()).slice(2)}${pad2(ahora.getMonth()+1)}${pad2(ahora.getDate())}-${pad2(ahora.getHours())}${pad2(ahora.getMinutes())}-${ini}`,
+    fecha: fechaHora(ahora.toISOString()), zonas: zonasDeRep(r.rid).map(z => z.nombre), emp: conteoEmp(ps), prov: conteoProv(ps).filter(([pv]) => pv),
+    porZona: (() => { const m = new Map(); ps.forEach(p => { const z = nomZona(p) || "—"; m.set(z, (m.get(z) || 0) + 1); }); return m; })()};
+}
+const ubicCorta = p => p.cl != null || p.kr != null ? `Cl ${txtVia(p.cl) || "?"} · Kr ${txtViaKr(p.kr) || "?"}` : "";
+function htmlPlanilla(d){
+  const caja = (n, t, cls) => `<div class="plBox ${cls || ""}"><b>${n}</b><span>${esc(t)}</span></div>`;
+  let zAnt = null, filas = "";
+  d.ps.forEach((p, i) => {
+    const z = nomZona(p) || "—";
+    if(ZONAS.size && z !== zAnt){ filas += `<tr class="plZona"><td colspan="7">${esc(z)} · ${d.porZona.get(z)} paquete(s)</td></tr>`; zAnt = z; }
+    filas += `<tr><td class="c">${i + 1}</td><td class="g">${esc(p.guia)}</td><td>${esc(p.emp || "")}</td><td>${esc(provDe(p) || "")}</td><td>${esc(ZONAS.size ? z : "")}</td><td>${esc(ubicCorta(p))}${p.nov.length ? `<div class="plNov">Novedad: ${esc(p.nov.map(n => n.nota).join("; "))}</div>` : ""}</td><td class="c"><span class="plChk"></span></td></tr>`;
+  });
+  return `<div class="pl" id="planilla">
+    <header class="plHead"><div><div class="plMarca">RUTA DE ENTREGAS · BODEGA</div><h1>Planilla de salida</h1></div>
+      <div class="plNum"><span>N.º</span><b>${esc(d.num)}</b><span>${esc(d.fecha)}</span></div></header>
+    <section class="plInfo">
+      <div><span>Repartidor</span><b>${esc(d.r.nombre)}</b></div>
+      <div><span>Zonas asignadas</span><b>${esc(d.zonas.join(", ") || "—")}</b></div>
+      <div><span>Despachó</span><b>${esc(USER.name)}</b></div>
+      <div><span>Fecha y hora</span><b>${esc(d.fecha)}</b></div>
+    </section>
+    <section class="plRes">${caja(d.ps.length, "paquetes en total", "tot")}${d.emp.map(([e, n]) => caja(n, e || "Sin empresa", "em-" + (e || "x").toLowerCase())).join("")}${d.prov.map(([pv, n]) => caja(n, "de " + pv)).join("")}</section>
+    <table class="plTb"><thead><tr><th class="c">#</th><th>Guía</th><th>Empresa</th><th>Proveedor</th><th>Zona</th><th>Ubicación</th><th class="c">✓</th></tr></thead>
+      <tbody>${filas || `<tr><td colspan="7" class="plVacio">Sin paquetes asignados en este momento.</td></tr>`}</tbody></table>
+    <section class="plFirmas">
+      <div><span>Entregó (bodega)</span><div class="plLinea"></div><small>Nombre: ${esc(USER.name)}</small><small>Firma</small></div>
+      <div><span>Recibí conforme (repartidor)</span><div class="plLinea"></div><small>Nombre: ${esc(d.r.nombre)} · C.C. ______________</small><small>Firma</small></div>
+    </section>
+    <footer class="plPie">Recibo los paquetes relacionados en buen estado y me comprometo a entregarlos o devolverlos a la bodega. Documento de control interno · Ruta de Entregas · ${esc(d.fecha)}</footer>
+  </div>`;
+}
+// Imagen PNG de la planilla (para WhatsApp): se dibuja en un canvas, sin librerías.
+function imagenPlanilla(d){
+  const W = 1080, P = 48, RH = 46, esc2 = 1;
+  const filasZ = ZONAS.size ? d.porZona.size : 0;
+  const H = 362 + 120 + (d.ps.length + filasZ + 1) * RH + 260;
+  const c = document.createElement("canvas"); c.width = W; c.height = H;
+  const g = c.getContext("2d"), F = (w, s) => `${w} ${s}px system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif`;
+  const txt = (t, x, y, f, col, al) => { g.font = f; g.fillStyle = col || "#111"; g.textAlign = al || "left"; g.fillText(String(t), x, y); };
+  const corta = (t, max, f) => { g.font = f; t = String(t); while(t.length > 1 && g.measureText(t).width > max) t = t.slice(0, -2) + "…"; return t; };
+  g.fillStyle = "#fff"; g.fillRect(0, 0, W, H);
+  // Encabezado
+  g.fillStyle = "#1f2a2a"; g.fillRect(0, 0, W, 150);
+  g.fillStyle = "#f5c22d"; g.fillRect(0, 150, W, 8);
+  txt("RUTA DE ENTREGAS · BODEGA", P, 58, F("700", 22), "#f5c22d");
+  txt("Planilla de salida", P, 112, F("800", 46), "#fff");
+  txt("N.º " + d.num, W - P, 70, F("700", 24), "#fff", "right");
+  txt(d.fecha, W - P, 108, F("500", 22), "#cfd8d8", "right");
+  // Datos
+  const info = [["Repartidor", d.r.nombre], ["Zonas asignadas", d.zonas.join(", ") || "—"], ["Despachó", USER.name], ["Fecha y hora", d.fecha]];
+  info.forEach(([k, v], i) => { const x = P + (i % 2) * ((W - 2 * P) / 2), y = 205 + Math.floor(i / 2) * 64; txt(k.toUpperCase(), x, y, F("600", 17), "#6b7676"); txt(corta(v, (W - 2 * P) / 2 - 20, F("700", 26)), x, y + 32, F("700", 26)); });
+  // Resumen
+  let y = 350; const cajas = [[d.ps.length, "paquetes"], ...d.emp.map(([e, n]) => [n, e || "Sin empresa"]), ...d.prov.map(([pv, n]) => [n, "de " + pv])];
+  const cw = Math.min(220, (W - 2 * P - (cajas.length - 1) * 12) / cajas.length);
+  cajas.forEach(([n, t], i) => {
+    const x = P + i * (cw + 12), col = t === "Xcargo" ? "#e8a317" : t === "iMile" ? "#1fa5c4" : i === 0 ? "#1f2a2a" : "#7b5cd6";
+    g.fillStyle = "#f4f6f6"; g.fillRect(x, y, cw, 90); g.fillStyle = col; g.fillRect(x, y, 8, 90);
+    txt(n, x + 24, y + 50, F("800", 38), col); txt(corta(t, cw - 30, F("600", 18)), x + 24, y + 78, F("600", 18), "#444");
+  });
+  // Tabla
+  y = 512; const cols = [[P, 50, "#"], [P + 52, 278, "GUÍA"], [P + 332, 122, "EMPRESA"], [P + 456, 132, "PROVEEDOR"], [P + 590, 150, "ZONA"], [P + 742, 242, "UBICACIÓN"]];
+  g.fillStyle = "#1f2a2a"; g.fillRect(P - 10, y - 32, W - 2 * P + 20, RH);
+  cols.forEach(([x, , t]) => txt(t, x, y, F("700", 18), "#fff"));
+  y += RH; let zAnt = null, n = 0;
+  if(!d.ps.length){ txt("Sin paquetes asignados en este momento.", P, y, F("500", 22), "#666"); y += RH; }
+  d.ps.forEach((p, i) => {
+    const z = nomZona(p) || "—";
+    if(ZONAS.size && z !== zAnt){ g.fillStyle = "#e9eeee"; g.fillRect(P - 10, y - 32, W - 2 * P + 20, RH); txt(`${z} · ${d.porZona.get(z)} paquete(s)`, P, y, F("700", 20), "#1f2a2a"); y += RH; zAnt = z; n = 0; }
+    if(n++ % 2){ g.fillStyle = "#f8f9f9"; g.fillRect(P - 10, y - 32, W - 2 * P + 20, RH); }
+    const f = F("500", 21), vals = [i + 1, p.guia, p.emp || "", provDe(p) || "", ZONAS.size ? z : "", ubicCorta(p)];
+    cols.forEach(([x, w], k) => txt(corta(vals[k], w - 8, k === 1 ? F("700", 22) : f), x, y, k === 1 ? F("700", 22) : f, k === 2 ? (p.emp === "Xcargo" ? "#b77d00" : p.emp === "iMile" ? "#0e7f99" : "#222") : "#222"));
+    g.strokeStyle = "#e3e7e7"; g.beginPath(); g.moveTo(P - 10, y + 14); g.lineTo(W - P + 10, y + 14); g.stroke();
+    y += RH;
+  });
+  // Firmas
+  y += 70; g.strokeStyle = "#333"; g.lineWidth = 2;
+  [[P, "Entregó (bodega)", USER.name], [W / 2 + 20, "Recibí conforme (repartidor)", d.r.nombre]].forEach(([x, t, nom]) => {
+    g.beginPath(); g.moveTo(x, y); g.lineTo(x + W / 2 - P - 30, y); g.stroke();
+    txt(t, x, y + 32, F("700", 20)); txt(nom, x, y + 60, F("500", 19), "#555");
+  });
+  txt("Documento de control interno · Ruta de Entregas", W / 2, H - 28, F("500", 17), "#8a9494", "center");
+  return new Promise(ok => c.toBlob(ok, "image/png"));
+}
+async function compartirPlanilla(d){
+  const nombre = `planilla-${d.r.nombre.replace(/\s+/g, "-").toLowerCase()}-${d.num}.png`;
+  const texto = `Planilla de salida ${d.num}\nRepartidor: ${d.r.nombre}\nPaquetes: ${d.ps.length}` + (d.emp.length ? ` (${d.emp.map(([e, n]) => (e || "Sin empresa") + " " + n).join(", ")})` : "") + (d.zonas.length ? `\nZonas: ${d.zonas.join(", ")}` : "");
+  try{
+    const blob = await imagenPlanilla(d), file = new File([blob], nombre, {type: "image/png"});
+    if(navigator.canShare && navigator.canShare({files: [file]})){ await navigator.share({files: [file], title: "Planilla de salida", text: texto}); return; }
+    // Sin «compartir» (computador): se descarga la imagen y se abre WhatsApp con el resumen para adjuntarla.
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = nombre; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    window.open("https://wa.me/?text=" + encodeURIComponent(texto), "_blank", "noopener");
+    toast("Imagen descargada: adjúntala en el chat de WhatsApp que se abrió.");
+  }catch(e){ if(e && e.name === "AbortError") return; toast("No se pudo compartir: " + (e.message || e)); }
+}
 $("desPlanilla").onclick = () => {
   const r = repActual(); if(!r) return;
-  const x = delRepartidor(r.rid);
-  const porEmp = Object.fromEntries(conteoEmp(x.enRuta).map(([e, n]) => [e || "Sin empresa", n]));
-  mostrarListado("Planilla · " + r.nombre,
-    `<div class="planilla" id="planilla">
-      <p><b>Bodega · Planilla de salida</b><br>Repartidor: <b>${esc(r.nombre)}</b>${zonasDeRep(r.rid).length ? `<br>Zonas: <b>${esc(zonasDeRep(r.rid).map(z => z.nombre).join(", "))}</b>` : ""}<br>Fecha: ${esc(fechaHora(new Date().toISOString()))} · Despachó: ${esc(USER.name)}</p>
-      <p>Total: <b>${x.enRuta.length}</b> paquete(s) · ${Object.entries(porEmp).map(([k, v]) => esc(k) + ": " + v).join(" · ") || "—"}${conteoProv(x.enRuta).some(([pv]) => pv) ? `<br>Proveedor: ${esc(txtProv(x.enRuta))}` : ""}</p>
-      <table class="tb"><thead><tr><th>#</th><th>Guía</th><th>Zona</th><th>Empresa</th><th>Novedad</th></tr></thead><tbody>
-      ${ordenPlanilla(x.enRuta).map((p, i) => `<tr><td>${i + 1}</td><td>${esc(p.guia)}</td><td>${esc(nomZona(p))}</td><td>${esc(p.emp)}</td><td>${esc(p.nov.map(n => n.nota).join("; "))}</td></tr>`).join("")}
-      </tbody></table>
-      <p class="firma">Recibí conforme: ______________________ &nbsp; C.C. ______________</p>
-    </div>`,
-    [["Copiar texto", async () => { try{ await navigator.clipboard.writeText(textoPlanilla(r, x)); toast("Planilla copiada: pégala en WhatsApp o en un correo."); }catch(e){ toast("No se pudo copiar."); } }],
-     ["Imprimir", () => window.print()],
-     ["Excel", () => excelPlanilla(r.rid), "primary"]]);
+  const d = datosPlanilla(r);
+  mostrarListado("Planilla · " + r.nombre, htmlPlanilla(d),
+    [["Compartir (WhatsApp)", () => compartirPlanilla(d), "primary"],
+     ["Imprimir / PDF", () => window.print()],
+     ["Copiar texto", async () => { try{ await navigator.clipboard.writeText(textoPlanilla(r, delRepartidor(r.rid))); toast("Planilla copiada."); }catch(e){ toast("No se pudo copiar."); } }],
+     ["Excel", () => excelPlanilla(r.rid)]]);
+  $("dlgLista").classList.add("conPlanilla");
+  $("dlgLista").addEventListener("close", () => $("dlgLista").classList.remove("conPlanilla"), {once: true});
 };
