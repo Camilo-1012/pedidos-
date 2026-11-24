@@ -128,3 +128,4 @@ li.lec.mal span{color:var(--bad)}
 .acum .h{opacity:.7;font-size:12px}
 .pgKpis{grid-template-columns:repeat(2,minmax(0,1fr))}
 .pgKpis .kpi b{font-size:22px}
+.chip.prov{border-color:#7b5cd6;color:#a48cf0}

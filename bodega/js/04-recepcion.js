@@ -7,7 +7,8 @@ function chipEstado(p){
 }
 function liPaq(p, extra){
   const z = ZONAS.size ? zonaDe(p) : null;
-  const marcas = [ZONAS.size ? chipZona(z) : "", p.emp ? `<span class="chip">${esc(p.emp)}</span>` : "", p.nov.length ? `<span class="chip warn">Novedad</span>` : "",
+  const pv = provDe(p);
+  const marcas = [ZONAS.size ? chipZona(z) : "", pv ? `<span class="chip prov">${esc(pv)}</span>` : "", p.emp ? `<span class="chip">${esc(p.emp)}</span>` : "", p.nov.length ? `<span class="chip warn">Novedad</span>` : "",
     p.conflicto ? `<span class="chip bad">Conflicto</span>` : "",
     p.estado === "RUTA" && p.noEstaba ? `<span class="chip warn">No estaba ${esc(horaDe(p.noEstaba))} · debe volver</span>` : "",
     p.estado === "ENTREGADO" && p.porRep ? `<span class="chip ok">Reportado por el repartidor</span>` : "", p.devs ? `<span class="chip">Devuelto ${p.devs}×</span>` : ""].join("");
@@ -49,10 +50,12 @@ function pintarAcumulado(){
     const c = est => l.filter(p => p.estado === est).length;
     return `<b>${esc(nombre)}</b><span>${l.length}</span><span>${c("BODEGA")}</span><span>${c("RUTA")}</span><span>${c("ENTREGADO")}</span><span>${c("ESPERADO")}</span>`;
   };
-  const porEmp = conteoEmp(ps).map(([e]) => [e || "Sin empresa", ps.filter(p => (p.emp || "") === e)]);
+  // Por proveedor (Daniel, Javier…); debajo de cada uno, cuántos de cada empresa.
+  const porProv = conteoProv(ps).map(([pv]) => [pv || "Sin proveedor", ps.filter(p => provDe(p) === pv)]);
   box.innerHTML = `<h3 style="margin:0 0 6px">Acumulado general · ${abiertos.size} carga(s) abierta(s)</h3>
     <div class="acum"><span></span><span class="h">Total</span><span class="h">En bodega</span><span class="h">En ruta</span><span class="h">Entregados</span><span class="h">Por recibir</span>
-    ${porEmp.length > 1 ? porEmp.map(([e, l]) => fila(e, l)).join("") : ""}${fila("Total", ps)}</div>`;
+    ${porProv.map(([pv, l]) => fila(pv, l)).join("")}${porProv.length > 1 ? fila("Total", ps) : ""}</div>
+    <p class="hint" style="margin:4px 0 0">${esc(txtEmp(ps))}</p>`;
 }
 function pintarRecibir(){
   pintarSelectLotes();
@@ -76,12 +79,13 @@ $("recUbic").onchange = e => { prefs.pedirUbic = e.target.checked; savePrefs(); 
 $("recLote").onchange = e => { prefs.lote = e.target.value || null; savePrefs(); pintarRecibir(); };
 $("recNuevo").onclick = async () => {
   const v = await pedir({title:"Nuevo lote de recepción", msg:"Un lote es cada llegada de paquetes (un camión, un corte del día). Sirve para cuadrar lo esperado contra lo recibido.",
-    fields:[{id:"emp", label:"Empresa", type:"select", options:EMPRESAS}, {id:"nom", label:"Nombre (opcional)", type:"text", max:40}, {id:"n", label:"Cantidad esperada (opcional)", type:"text", max:5}],
-    yes:"Crear", check: v => v.n.trim() && !/^\d{1,5}$/.test(v.n.trim()) ? "La cantidad debe ser un número." : ""});
+    fields:[{id:"prov", label:"Proveedor (quién trae la mercancía)", type:"select", options:[...proveedores(), ["", "Otro…"]]}, {id:"provN", label:"Si es otro proveedor, su nombre", type:"text", max:30},
+      {id:"emp", label:"Empresa", type:"select", options:EMPRESAS}, {id:"nom", label:"Nombre (opcional)", type:"text", max:40}, {id:"n", label:"Cantidad esperada (opcional)", type:"text", max:5}],
+    yes:"Crear", check: v => !v.prov && !v.provN.trim() ? "Elige el proveedor o escribe su nombre." : v.n.trim() && !/^\d{1,5}$/.test(v.n.trim()) ? "La cantidad debe ser un número." : ""});
   if(!v) return;
-  const d = new Date(), lid = uuid();
-  const nombre = v.nom.trim() || `${v.emp} ${pad2(d.getDate())}/${pad2(d.getMonth()+1)} ${horaDe(d.toISOString())}`;
-  registrar("LOTE", null, {lid, nombre, emp: v.emp, esperado: +v.n || 0});
+  const d = new Date(), lid = uuid(), prov = (v.provN.trim() || v.prov).slice(0, 30);
+  const nombre = v.nom.trim() || `${prov} · ${v.emp} ${pad2(d.getDate())}/${pad2(d.getMonth()+1)} ${horaDe(d.toISOString())}`;
+  registrar("LOTE", null, {lid, nombre, emp: v.emp, esperado: +v.n || 0, prov});
   prefs.lote = lid; savePrefs(); pintarRecibir();
   toast("Lote «" + nombre + "» creado. Ya puedes escanear.");
 };

@@ -6,8 +6,12 @@ async function crearZona(page, v){
   await A.menu(page, "btnZonas");
   await page.click("#znAdd");
   const d = page.locator("#dlgPedir");
-  await d.locator("#pd_n").fill(v.n);
-  for(const k of ["cd", "ch", "kd", "kh"]) await d.locator("#pd_" + k).fill(v[k] || "");
+  await expect(d.locator("#pd_n")).toBeFocused();            // el diálogo terminó de abrir (en GitHub, más lento)
+  // Se llena y se verifica cada campo (en GitHub falló una vez quedando «Z2 Lisboa160»: lo escrito cayó en otro campo).
+  const llenar = async (k, val) => { const el = d.locator("#pd_" + k); await expect(async () => { await el.fill(val); await expect(el).toHaveValue(val, { timeout: 300 }); }).toPass({ timeout: 5000 }); };
+  await llenar("n", v.n);
+  for(const k of ["cd", "ch", "kd", "kh"]) await llenar(k, v[k] || "");
+  for(const k of ["n", "cd", "ch", "kd", "kh"]) await expect(d.locator("#pd_" + k)).toHaveValue(k === "n" ? v.n : v[k] || "");
   if(v.r) await d.locator("#pd_r").selectOption({ label: v.r });
   await d.locator("#pdYes").click();
   if(v.cruce){ await expect(d.locator("#pdMsg")).toContainText(v.cruce); await d.locator("#pdYes").click(); }

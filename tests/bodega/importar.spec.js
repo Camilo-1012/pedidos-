@@ -24,8 +24,7 @@ test("Excel .xlsx: encuentra la fila de encabezados, detecta columnas, avisa rep
   await page.uncheck("#imRecibir");                          // modo «solo esperados»
   await page.click("#imOk");
   await expect(page.locator("#dlgLista")).toBeHidden();
-  expect(await A.kpi(page, "recKpis", 0)).toBe("3");          // esperados en el lote de Xcargo (v2.44: el de iMile va en su propio lote)
-  await expect(page.locator("#recAcum .acum")).toContainText("Total4");
+  expect(await A.kpi(page, "recKpis", 0)).toBe("4");          // esperados en el lote nuevo (un lote por archivo y proveedor)
   const r = await page.evaluate(() => ["XC1000000001", "XC1000000002", "XC1000000003", "12345678901234"].map(g => { const p = paq(g); return [p.estado, p.emp, p.cl, p.kr, (zonaDe(p) || {}).nombre || ""]; }));
   expect(r).toEqual([["ESPERADO", "Xcargo", 145, 103, "Z1 Tibabuyes"], ["ESPERADO", "Xcargo", 152, 104, "Z1 Tibabuyes"], ["ESPERADO", "Xcargo", null, null, ""], ["ESPERADO", "iMile", 146, 135, "Z1 Tibabuyes"]]);
   // Ley 1581: nada del cliente queda guardado (ni nombre, ni teléfono, ni la dirección completa).
@@ -93,7 +92,7 @@ test("Despachar un paquete del listado importado lo cuenta como recibido en su l
   await page.setInputFiles("#imFile", ARCH("listado-ejemplo.xlsx"));
   await page.uncheck("#imRecibir");                          // modo «solo esperados»
   await page.click("#imOk");
-  expect(await A.kpi(page, "recKpis", 0)).toBe("3");          // esperados en el lote de Xcargo (el de iMile, en el suyo)
+  expect(await A.kpi(page, "recKpis", 0)).toBe("4");          // esperados
   expect(await A.kpi(page, "recKpis", 1)).toBe("0");          // recibidos
   await page.click('nav.tabs button[data-v="vDespachar"]');
   await page.locator("#desReps button", { hasText: "Jairo" }).click();
@@ -107,7 +106,7 @@ test("Despachar un paquete del listado importado lo cuenta como recibido en su l
   await page.click("#scClose");
   await page.click('nav.tabs button[data-v="vRecibir"]');
   expect(await A.kpi(page, "recKpis", 1)).toBe("3");          // recibidos: los 2 del listado + el de fuera (entró al lote abierto)
-  expect(await A.kpi(page, "recKpis", 2)).toBe("1");          // faltan (el de iMile está en su propio lote)
+  expect(await A.kpi(page, "recKpis", 2)).toBe("2");          // faltan
   expect(await A.kpi(page, "recKpis", 3)).toBe("1");          // fuera del listado
   const h = await page.evaluate(() => paq("XC1000000001"));
   expect([h.estado, h.recLote === h.espLote]).toEqual(["RUTA", true]);
@@ -135,7 +134,7 @@ test("Listado de 100 (Xcargo + iMile): despachar sin recibir antes descuenta de 
   await expect(page.locator("#scTarget")).toContainText("lleva 5 (3 Xcargo · 2 iMile)");
   await page.click("#scClose");
   await expect(page.locator("#desReps button", { hasText: "Jairo" })).toContainText("5 en ruta (3 Xcargo · 2 iMile)");
-  await expect(page.locator("#desEmp .kpi")).toHaveText(["3lleva de Xcargo", "2lleva de iMile"]);
+  await expect(page.locator("#desEmp .kpi")).toHaveText(["3lleva de Xcargo", "2lleva de iMile", "5de Daniel"]);
   await page.click("#desPlanilla");
   await expect(page.locator("#planilla")).toContainText("Xcargo: 3 · iMile: 2");
   await page.locator("#dlgLista .dlgHead button").click();
@@ -148,12 +147,10 @@ test("Listado de 100 (Xcargo + iMile): despachar sin recibir antes descuenta de 
   expect(await page.evaluate(() => paq("6110599999999").emp)).toBe("iMile");
   // Recibir: los despachados cuentan como recibidos del lote, sin escanear dos veces.
   await page.click('nav.tabs button[data-v="vRecibir"]');
-  // v2.44: un lote por proveedor; queda seleccionado el de Xcargo (60). El suelto entró a ese lote.
-  expect(await A.kpi(page, "recKpis", 0)).toBe("60");
-  expect(await A.kpi(page, "recKpis", 1)).toBe("4");          // 3 de Xcargo del listado + el suelto
-  expect(await A.kpi(page, "recKpis", 2)).toBe("57");         // faltan: solo descuentan los del listado
+  expect(await A.kpi(page, "recKpis", 0)).toBe("100");
+  expect(await A.kpi(page, "recKpis", 1)).toBe("6");          // 5 del listado + el suelto (entró al lote abierto)
+  expect(await A.kpi(page, "recKpis", 2)).toBe("95");         // faltan: solo descuentan los del listado
   expect(await A.kpi(page, "recKpis", 3)).toBe("1");          // fuera del listado
-  expect(await page.evaluate(() => [...LOTES.values()].map(l => [l.emp, statsLote(l.lid).esp]).sort())).toEqual([["Otra", 0], ["Xcargo", 60], ["iMile", 40]]);
   expect(errs).toEqual([]);
 });
 
@@ -166,12 +163,9 @@ test("v2.40: por defecto, importar = ya llegaron: quedan «en bodega» y el cont
   await expect(page.locator("#imRecibir")).toBeChecked();
   await page.click("#imOk");
   await expect(page.locator("#toast")).toContainText("100 en bodega");
-  // v2.44: dos cargues (Xcargo 60 e iMile 40) y el acumulado general suma los 100.
-  expect(await A.kpi(page, "recKpis", 0)).toBe("60");           // esperados del lote de Xcargo
-  expect(await A.kpi(page, "recKpis", 1)).toBe("60");           // recibidos
+  expect(await A.kpi(page, "recKpis", 0)).toBe("100");          // esperados
+  expect(await A.kpi(page, "recKpis", 1)).toBe("100");          // recibidos
   expect(await A.kpi(page, "recKpis", 2)).toBe("0");            // faltan
-  await expect(page.locator("#recAcum")).toContainText("2 carga(s) abierta(s)");
-  expect(await page.locator("#recAcum .acum span, #recAcum .acum b").allTextContents()).toEqual(["", "Total", "En bodega", "En ruta", "Entregados", "Por recibir", "Xcargo", "60", "60", "0", "0", "0", "iMile", "40", "40", "0", "0", "0", "Total", "100", "100", "0", "0", "0"]);
   expect(await page.evaluate(() => paquetes(p => p.estado === "BODEGA").length)).toBe(100);
   const g = await page.evaluate(() => paquetes(() => true)[0].guia);
   // Despachar baja «en bodega»; escanear en Recibir dice que ya estaba.
@@ -218,4 +212,39 @@ test("v2.43: una elección vieja guardada (v1, sin la dirección) no impide reco
   await page.setInputFiles("#imFile", ARCH("formato-xcargo-real.xlsx"));
   await expect(page.locator('#imPaso2 select[data-campo="dir"] option:checked')).toContainText("Calle[*]");
   await expect(kpiImp(page, 3)).toHaveText("7");
+});
+
+test("v2.44: cargue por PROVEEDOR (Daniel, Javier): cada archivo en su lote, acumulado general unificado y se sabe de quién es cada paquete", async ({ page }) => {
+  const errs = A.vigilarErrores(page);
+  await A.entrar(page);
+  await A.agregarRep(page, "Jairo");
+  // Daniel trae el listado de 100 (Xcargo e iMile).
+  await abrir(page);
+  await page.setInputFiles("#imFile", ARCH("prueba-100-paquetes.xlsx"));
+  await page.selectOption("#imProv", "Daniel");
+  await page.click("#imOk");
+  // Javier trae otro archivo (un proveedor nuevo también se puede escribir).
+  await page.click('nav.tabs button[data-v="vRecibir"]');
+  await abrir(page);
+  await page.setInputFiles("#imFile", ARCH("formato-xcargo-real.xlsx"));
+  await page.selectOption("#imProv", "Javier");
+  await page.click("#imOk");
+  expect(await page.evaluate(() => [...LOTES.values()].map(l => [l.prov, statsLote(l.lid).esp]).sort())).toEqual([["Daniel", 100], ["Javier", 8]]);
+  // Acumulado general: una fila por proveedor y el total; debajo, por empresa.
+  expect(await page.locator("#recAcum .acum span, #recAcum .acum b").allTextContents()).toEqual(["", "Total", "En bodega", "En ruta", "Entregados", "Por recibir",
+    "Daniel", "100", "100", "0", "0", "0", "Javier", "8", "8", "0", "0", "0", "Total", "108", "108", "0", "0", "0"]);
+  await expect(page.locator("#recAcum")).toContainText("67 Xcargo · 41 iMile");
+  // Despachar: de quién es lo que lleva cada repartidor.
+  await page.click('nav.tabs button[data-v="vDespachar"]');
+  await page.locator("#desReps button", { hasText: "Jairo" }).click();
+  await page.click("#desScan");
+  const [d1, d2] = await page.evaluate(() => paquetes(p => provDe(p) === "Daniel").slice(0, 2).map(p => p.guia));
+  await A.leer(page, d1); await A.leer(page, d2); await A.leer(page, "2690000000000002");
+  await page.click("#scClose");
+  await expect(page.locator("#desEmp")).toContainText("2de Daniel");
+  await expect(page.locator("#desEmp")).toContainText("1de Javier");
+  await expect(page.locator("#desLista li", { hasText: "2690000000000002" }).locator(".chip.prov")).toHaveText("Javier");
+  await page.click("#desPlanilla");
+  await expect(page.locator("#planilla")).toContainText("Proveedor: 2 Daniel · 1 Javier");
+  expect(errs).toEqual([]);
 });
