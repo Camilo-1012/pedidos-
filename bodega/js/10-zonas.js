@@ -103,35 +103,48 @@ function guardarUbicacion(g, v){
 
 /* ---- Resumen por zona ---- */
 function conteoZonas(filtro){
-  const m = new Map(); let sin = 0;
-  for(const p of PAQ.values()){ if(!filtro(p)) continue; const z = zonaDe(p); if(z) m.set(z.zid, (m.get(z.zid) || 0) + 1); else sin++; }
-  return {m, sin};
+  // m: zid → total; e: zid ("" = sin zona) → {Xcargo: n, iMile: n…} (v2.45: desglose por empresa en cada zona).
+  const m = new Map(), e = new Map(); let sin = 0;
+  for(const p of PAQ.values()){
+    if(!filtro(p)) continue;
+    const z = zonaDe(p), k = z ? z.zid : "";
+    if(z) m.set(k, (m.get(k) || 0) + 1); else sin++;
+    const x = e.get(k) || {}; x[p.emp || "—"] = (x[p.emp || "—"] || 0) + 1; e.set(k, x);
+  }
+  return {m, sin, e};
+}
+// «XC 20 · iM 8» debajo del número de cada zona.
+const ABR_EMP = {Xcargo: "XC", iMile: "iM", Otra: "Otra", "—": "?"};
+function desgloseEmp(x){
+  if(!x) return "";
+  return Object.entries(x).sort((a, b) => EMPRESAS.indexOf(a[0]) - EMPRESAS.indexOf(b[0]))
+    .map(([emp, n]) => `<i class="em em-${esc((emp === "—" ? "x" : emp).toLowerCase())}">${esc(ABR_EMP[emp] || emp)} ${n}</i>`).join("");
 }
 function pintarZonasRecibir(){
   const box = $("recZonas"), l = loteActual();
   if(!box) return;
   if(!zonasActivas().length || !l){ box.innerHTML = ""; return; }
-  const {m, sin} = conteoZonas(p => p.recLote === l.lid && p.estado === "BODEGA");
-  box.innerHTML = `<h3>En bodega de este lote, por zona</h3><div class="zgrid">${zonasActivas().map(z => `<button type="button" class="zcell" style="--zc:${esc(z.color)}" data-zid="${esc(z.zid)}"><b>${m.get(z.zid) || 0}</b><span>${esc(z.nombre)}</span></button>`).join("")}<button type="button" class="zcell sin" data-zid=""><b>${sin}</b><span>Sin zona</span></button></div>`;
+  const {m, sin, e} = conteoZonas(p => p.recLote === l.lid && p.estado === "BODEGA");
+  box.innerHTML = `<h3>En bodega de este lote, por zona</h3><div class="zgrid">${zonasActivas().map(z => `<button type="button" class="zcell" style="--zc:${esc(z.color)}" data-zid="${esc(z.zid)}"><b>${m.get(z.zid) || 0}</b><span>${esc(z.nombre)}</span><small class="zemp">${desgloseEmp(e.get(z.zid))}</small></button>`).join("")}<button type="button" class="zcell sin" data-zid=""><b>${sin}</b><span>Sin zona</span><small class="zemp">${desgloseEmp(e.get(""))}</small></button></div>`;
   box.querySelectorAll("button").forEach(b => b.onclick = () => listaZona(b.dataset.zid, p => p.recLote === l.lid && p.estado === "BODEGA"));
 }
 // Despachar: zonas del repartidor elegido primero, con lo que hay en bodega de cada una.
 function pintarZonasDespacho(rid){
   const box = $("desZonas"); if(!box) return;
   const zs = zonasActivas(); if(!zs.length){ box.innerHTML = ""; return; }
-  const {m, sin} = conteoZonas(p => p.estado === "BODEGA");
+  const {m, sin, e} = conteoZonas(p => p.estado === "BODEGA");
   const mias = new Set(zonasDeRep(rid).map(z => z.zid));
   const suyas = zs.filter(z => mias.has(z.zid)), otras = zs.filter(z => !mias.has(z.zid));
   const otrosRep = z => repsDeZona(z.zid).filter(r => r.rid !== rid).map(r => r.nombre).join(", ");
-  const celda = z => `<button type="button" class="zcell${mias.has(z.zid) ? " suya" : ""}" style="--zc:${esc(z.color)}" data-zid="${esc(z.zid)}"><b>${m.get(z.zid) || 0}</b><span>${esc(z.nombre)}${otrosRep(z) ? " · " + esc(otrosRep(z)) : ""}</span></button>`;
-  box.innerHTML = `<h3>En bodega por zona</h3><div class="zgrid">${suyas.map(celda).join("")}${otras.map(celda).join("")}<button type="button" class="zcell sin" data-zid=""><b>${sin}</b><span>Sin zona</span></button></div>`;
+  const celda = z => `<button type="button" class="zcell${mias.has(z.zid) ? " suya" : ""}" style="--zc:${esc(z.color)}" data-zid="${esc(z.zid)}"><b>${m.get(z.zid) || 0}</b><span>${esc(z.nombre)}${otrosRep(z) ? " · " + esc(otrosRep(z)) : ""}</span><small class="zemp">${desgloseEmp(e.get(z.zid))}</small></button>`;
+  box.innerHTML = `<h3>En bodega por zona</h3><div class="zgrid">${suyas.map(celda).join("")}${otras.map(celda).join("")}<button type="button" class="zcell sin" data-zid=""><b>${sin}</b><span>Sin zona</span><small class="zemp">${desgloseEmp(e.get(""))}</small></button></div>`;
   box.querySelectorAll("button").forEach(b => b.onclick = () => listaZona(b.dataset.zid, p => p.estado === "BODEGA"));
 }
 function listaZona(zid, filtro){
   const z = zid ? ZONAS.get(zid) : null;
   const items = paquetes(p => filtro(p) && ((zonaDe(p) || {}).zid || "") === zid).sort((a, b) => (a.cl ?? 0) - (b.cl ?? 0) || (a.kr ?? 0) - (b.kr ?? 0) || a.guia.localeCompare(b.guia));
   mostrarListado((z ? z.nombre : "Sin zona") + ` (${items.length})`, (z ? `<p class="hint">${esc(rangoTxt(z))}${z.rid ? " · " + esc(repNombre(z.rid)) : ""}</p>` : `<p class="hint">Toca un paquete para ver su recorrido y ponerle ubicación.</p>`) +
-    `<ul class="lista">${items.map(p => liPaq(p, ubicTxt(p))).join("") || "<li class='vacio'>Ninguno.</li>"}</ul>`);
+    (items.length ? conteoEmp(items).map(([emp, n]) => `<h3 class="grpEmp em-${esc((emp || "x").toLowerCase())}">${esc(emp || "Sin empresa")} · ${n}</h3><ul class="lista">${items.filter(p => (p.emp || "") === emp).map(p => liPaq(p, ubicTxt(p))).join("")}</ul>`).join("") : "<ul class='lista'><li class='vacio'>Ninguno.</li></ul>"));
 }
 const ubicTxt = p => p.zidManual ? "Zona elegida a mano" : p.cl != null || p.kr != null ? `Calle ${txtVia(p.cl) || "?"} · Carrera ${txtViaKr(p.kr) || "?"}` : "Sin ubicación";
 

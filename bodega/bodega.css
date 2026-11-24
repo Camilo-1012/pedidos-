@@ -129,3 +129,34 @@ li.lec.mal span{color:var(--bad)}
 .pgKpis{grid-template-columns:repeat(2,minmax(0,1fr))}
 .pgKpis .kpi b{font-size:22px}
 .chip.prov{border-color:#7b5cd6;color:#a48cf0}
+
+/* v2.45: separar por zona y por empresa */
+.zemp{display:flex;gap:4px;flex-wrap:wrap;justify-content:center;margin-top:2px}
+.zemp i{font-style:normal;font-size:11px;font-weight:700;padding:1px 5px;border-radius:6px;border:1px solid var(--line)}
+.em-xcargo{--em:#e8a317}
+.em-imile{--em:#1fa5c4}
+.zemp i.em-xcargo,.zemp i.em-imile,.chip.em-xcargo,.chip.em-imile{border-color:var(--em);color:var(--em)}
+.recVerHead{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.recVerHead h3{margin:0}
+.recVer{display:flex;gap:0}
+.recVer button{min-height:38px;padding:6px 12px;font-size:14px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chips[hidden]{display:none}
+.fchip{min-height:36px;padding:6px 12px;font-size:13px;cursor:pointer;background:transparent}
+.fchip[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.fchip.em-xcargo[aria-pressed="true"],.fchip.em-imile[aria-pressed="true"]{background:var(--em);border-color:var(--em);color:#111}
+#recGrupos{display:flex;flex-direction:column;gap:8px}
+#recGrupos[hidden]{display:none}
+.zgrp{border:1px solid var(--line);border-left:6px solid var(--zc);border-radius:12px;padding:0 10px}
+.zgrp summary{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-height:52px;cursor:pointer;list-style:none}
+.zgrp summary::-webkit-details-marker{display:none}
+.zgrp summary::after{content:"▾";margin-left:auto;opacity:.6}
+.zgrp[open] summary::after{content:"▴"}
+.zgrp .zgN{font:700 20px/1 var(--display)}
+.zgrp .zemp{justify-content:flex-start;margin:0}
+.zgBody{padding-bottom:10px;display:flex;flex-direction:column;gap:6px}
+.grpEmp{margin:6px 0 0;font-size:14px;border-left:4px solid var(--em,var(--line));padding-left:8px}
+.recVer{border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.recVer[hidden]{display:none}
+.recVer button{border:0;border-radius:0;background:transparent}
+.recVer button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}

@@ -77,9 +77,13 @@
       </div>
       <label class="chk" id="recUbicLbl" hidden><input type="checkbox" id="recUbic"> Pedir calle y carrera al recibir (para la zona)</label>
       <p class="hint" id="recNota"></p>
+      <button type="button" class="small danger" id="recAnular">Anular este cargue (se cargó el archivo equivocado)</button>
       <div id="recZonas"></div>
-      <h3>Últimas lecturas</h3>
+      <div class="recVerHead"><h3 id="recListaT">Últimas lecturas</h3>
+        <div class="recVer" role="group" aria-label="Ver paquetes"><button type="button" data-ver="ultimas" aria-pressed="true">Últimas</button><button type="button" data-ver="zona" aria-pressed="false">Por zona</button></div></div>
+      <div class="chips recEmpF" id="recEmpF" role="group" aria-label="Empresa"></div>
       <ul class="lista" id="recLista"></ul>
+      <div id="recGrupos" hidden></div>
     </div>
   </section>
 
