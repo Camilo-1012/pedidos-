@@ -123,7 +123,10 @@ function pedir(o){
     $("pdNo").onclick = () => fin(null);
     d.oncancel = e => { e.preventDefault(); fin(null); };
     d.showModal();
-    const first = box.querySelector("input,select,textarea"); if(first) setTimeout(() => first.focus(), 50);
+    // El foco al primer campo llega un poco después de abrir; si la persona ya está escribiendo en otro campo de la
+    // ventana, no se le quita (antes podía pasar a mitad de escribir, p. ej. «Z2 Lisboa» + «160» en el nombre).
+    const first = box.querySelector("input,select,textarea");
+    if(first) setTimeout(() => { const a = document.activeElement; if(!(a && a !== first && box.contains(a) && /^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName))) first.focus(); }, 50);
   });
 }
 const confirmar = (title, msg, yes, danger) => pedir({title, msg, yes: yes || "Sí", danger}).then(v => !!v);

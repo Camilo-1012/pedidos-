@@ -94,7 +94,7 @@ function abrirForm(p){
   $p("peAdmin").checked = !!(p && p.admin);
   $p("peErr").textContent = "";
   pintarRep();
-  setTimeout(() => $p("peNombre").focus(), 30);
+  setTimeout(() => { const a = document.activeElement; if(!(a && a.closest && a.closest("#peForm") && a.id !== "peNombre")) $p("peNombre").focus(); }, 30);
 }
 function cerrarForm(){ editando = null; $p("peForm").hidden = true; $p("peAgregar").hidden = false; }
 

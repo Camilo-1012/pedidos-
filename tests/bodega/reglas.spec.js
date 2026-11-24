@@ -8,7 +8,7 @@ test("lote cerrado no recibe; una guía en ruta que llega a bodega queda como de
   await A.agregarRep(page, "Jairo");
   await A.nuevoLote(page, "Xcargo", "L1", "3");
   await page.click("#recEscribir"); await A.responder(page, { g: "REGLA00001" });
-  expect(await A.kpi(page, "recKpis", 2)).toBe("2");          // sin listado: faltan = cantidad escrita − recibidos
+  await expect(page.locator("#recKpis .kpi b").nth(2)).toHaveText("2");   // sin listado: faltan = cantidad escrita − recibidos
   await page.click('nav.tabs button[data-v="vDespachar"]');
   await page.locator("#desReps button", { hasText: "Jairo" }).click();
   await page.click("#desEscribir"); await A.responder(page, { g: "REGLA00001" });

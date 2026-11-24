@@ -88,7 +88,7 @@ function pedirUbicacion(g){
     $("ubCl").onkeydown = e => { if(e.key === "Enter"){ e.preventDefault(); $("ubKr").focus(); } };
     $("ubKr").onkeydown = e => { if(e.key === "Enter"){ e.preventDefault(); $("ubOk").click(); } };
     SC.preguntando = () => fin(null);   // al cerrar el escáner se salta
-    $("scUbic").hidden = false; setTimeout(() => $("ubCl").focus(), 30);
+    $("scUbic").hidden = false; setTimeout(() => { if(document.activeElement !== $("ubKr")) $("ubCl").focus(); }, 30);
   });
   return pedir({title:"Ubicación de " + g, msg:"Número de la calle y de la carrera (sin placa). O elige la zona directamente.",
     fields:[{id:"cl", label:"Calle (ej. 145, 145B o 10 Sur)", type:"text", max:12}, {id:"kr", label:"Carrera (ej. 104, 104B o 5 Este)", type:"text", max:12},

@@ -281,7 +281,7 @@ function ask(o){
     if(!err){ q("dlgAsk").close(); if(o.after) o.after(); }
   };
   q("dlgAsk").showModal();
-  const first = box.querySelector("input"); if(first) setTimeout(() => first.focus(), 50);
+  const first = box.querySelector("input"); if(first) setTimeout(() => { const a = document.activeElement; if(!(a && a !== first && box.contains(a) && a.tagName === "INPUT")) first.focus(); }, 50);
 }
 q("frmAsk").addEventListener("submit", e => { e.preventDefault(); if(askCb) askCb(); });
 q("akNo").onclick = () => q("dlgAsk").close();
@@ -426,7 +426,7 @@ function abrirCuenta(){
   const f = panelCuenta();
   q("lock").hidden = false; q("lkSetup").hidden = true; q("lkLogin").hidden = true; f.hidden = false; setInert(true);
   q("cuMsg").textContent = "";
-  setTimeout(() => q("cuUsuario").focus(), 50);
+  setTimeout(() => { const a = document.activeElement; if(!(a && a.closest && a.closest("#lkCuenta") && a.id !== "cuUsuario")) q("cuUsuario").focus(); }, 50);
 }
 for(const [ancla, id] of [["lkSetup", "suCuenta"], ["lkLogin", "lkCuentaBtn"]]){
   const b = document.createElement("button"); b.type = "button"; b.className = "linkish"; b.id = id; b.textContent = "Ya tengo usuario del equipo";
