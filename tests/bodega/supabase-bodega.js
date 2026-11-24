@@ -65,7 +65,7 @@ function agregarBodega(sb){
         // Sin on_conflict, un id repetido es error de llave duplicada.
         if (!p.get("on_conflict") && filas.some(f => B.eventos.some(e => e.id === f.id))) return json(route, 409, { code: "23505", message: "duplicate key value violates unique constraint \"bodega_eventos_pkey\"" });
         const permitido = f => {
-          if (miembro(uid)) return !(["REP", "ZONA"].includes(f.tipo) && !admin(uid));
+          if (miembro(uid)) return !(["REP", "ZONA", "TARIFA"].includes(f.tipo) && !admin(uid));
           // Repartidor: solo sus reportes de guías que hoy están en ruta con él, y deshacer sus propios reportes.
           if (["ENTREGADO", "NO_ENTREGADO"].includes(f.tipo)) return !!r && f.d.rid === r && asignadaA(f.guia, r);
           if (f.tipo === "ANULAR") return !!r && B.eventos.some(x => x.id === f.d.ref && x.user_id === uid && ["ENTREGADO", "NO_ENTREGADO"].includes(x.tipo));

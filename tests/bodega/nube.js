@@ -29,7 +29,7 @@ async function conectarNube(context, nube){
     if(url.pathname === "/rest/v1/bodega_eventos"){
       if(req.method() === "POST"){
         const filas = JSON.parse(req.postData());
-        if(filas.some(f => f.tipo === "REP" || f.tipo === "ZONA") && yo.rol !== "admin") return json(route, 403, { code: "42501", message: "new row violates row-level security policy" });
+        if(filas.some(f => ["REP", "ZONA", "TARIFA"].includes(f.tipo)) && yo.rol !== "admin") return json(route, 403, { code: "42501", message: "new row violates row-level security policy" });
         for(const f of filas){ if(nube.eventos.some(e => e.id === f.id)) continue; nube.eventos.push({ ...f, seq: ++nube.seq, user_id: uid, srv_at: new Date().toISOString() }); }
         return json(route, 201);
       }

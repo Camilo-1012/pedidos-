@@ -238,7 +238,9 @@ function detectarColumnas(tabla){
   return mejor;
 }
 const firmaEnc = fila => (fila || []).map(sinTilde).join("|");
-const MAPAS_KEY = "bodega.importar.mapas.v1";
+// v2.43: solo se recuerda lo que la persona cambió a mano (v1 guardaba todo, incluso lo que la detección no encontró,
+// y eso bloqueaba columnas que versiones nuevas sí reconocen, como «Calle[*]»). Las elecciones de v1 se descartan.
+const MAPAS_KEY = "bodega.importar.mapas.v2";
 
 /* ============ Pantalla: elegir archivo → revisar columnas → importar ============ */
 let imp = null;   // {nombre, tabla, filaEnc, map, emp, destino}
@@ -264,7 +266,7 @@ function abrirImportar(){
       // Lo elegido a mano se respeta (null = «no usar»); los campos nuevos que no estaban guardados se detectan.
       const map = {...det.map};
       if(guardado) for(const [k, v] of Object.entries(guardado)){ if(v === null || v === undefined) delete map[k]; else map[k] = v; }
-      imp = {nombre: f.name, tabla, filaEnc: det.fila, map};
+      imp = {nombre: f.name, tabla, filaEnc: det.fila, map, manual: new Set(guardado ? Object.keys(guardado) : [])};
       $("imErr").textContent = "";
       pintarPaso2();
     }catch(x){ imp = null; $("imErr").textContent = "No se pudo leer «" + f.name + "»: " + (x.message || x) + "."; }
@@ -293,12 +295,12 @@ function pintarPaso2(){
   box.innerHTML = `<p class="ok"><b>${esc(imp.nombre)}</b>: ${filasDatos().length} fila(s).</p>
     ${Object.entries(CAMPOS).map(([k, d]) => `<label>${esc(d.txt)}<select data-campo="${k}">${opciones(k)}</select></label>`).join("")}
     <label>Empresa de todo el listado (si no viene en una columna)<select id="imEmp">${EMPRESAS.map(e => `<option${(l && l.emp) === e ? " selected" : ""}>${e}</option>`).join("")}</select></label>
-    <label>Guardar en<select id="imDest">${l && !l.cerrado ? `<option value="actual">El lote abierto: ${esc(l.nombre)}</option>` : ""}<option value="nuevo">Un lote nuevo: ${esc(imp.nombre.replace(/\.[^.]+$/, "").slice(0, 30))}</option></select></label>
+    <label>Guardar en<select id="imDest">${l && !l.cerrado ? `<option value="actual">El lote abierto: ${esc(l.nombre)}</option>` : ""}<option value="nuevo">Lotes nuevos (uno por proveedor): ${esc(imp.nombre.replace(/\.[^.]+$/, "").slice(0, 30))}</option></select></label>
     <label class="peCheck"><input type="checkbox" id="imRecibir"${prefs.importarRecibe === false ? "" : " checked"}> Ya están en bodega <small>(quedan como recibidos; el control es la asignación a cada repartidor)</small></label>
     <div class="kpis"><div class="kpi ok"><b>${r.validas}</b><span>guías a importar</span></div><div class="kpi${r.rep ? " warn" : ""}"><b>${r.rep}</b><span>repetidas en el archivo</span></div><div class="kpi${r.sinGuia ? " warn" : ""}"><b>${r.sinGuia}</b><span>filas sin guía válida</span></div><div class="kpi"><b>${imp.map.dir !== undefined ? r.conDir : "—"}</b><span>con dirección (zona)</span></div></div>
     ${r.yaEst ? `<p class="hint">${r.yaEst} guía(s) ya estaban en el listado de otro lote: se dejan donde están.</p>` : ""}
     <p class="hint">En el histórico solo queda la guía y la calle/carrera (para la zona). Dirección, teléfono, nombre, barrio y apto van aparte, solo para el repartidor al que se le asigne cada paquete, y se borran solos a los 30 días (Ley 1581).</p>`;
-  box.querySelectorAll("select[data-campo]").forEach(s => s.onchange = () => { imp.map[s.dataset.campo] = s.value === "" ? undefined : +s.value; pintarPaso2(); });
+  box.querySelectorAll("select[data-campo]").forEach(s => s.onchange = () => { imp.map[s.dataset.campo] = s.value === "" ? undefined : +s.value; imp.manual.add(s.dataset.campo); pintarPaso2(); });
   $("imOk").disabled = !r.validas;
 }
 function importarAhora(){
@@ -313,12 +315,18 @@ function importarAhora(){
   // v2.40: por defecto, importar = los paquetes ya llegaron (quedan «en bodega»). Sin marcar: solo esperados.
   const recibir = !$("imRecibir") || $("imRecibir").checked;
   prefs.importarRecibe = recibir; savePrefs();
-  let l = loteActual();
-  if($("imDest").value === "nuevo" || !l || l.cerrado){
-    const lid = uuid(); registrar("LOTE", null, {lid, nombre: imp.nombre.replace(/\.[^.]+$/, "").slice(0, 40), emp: empFija, esperado: 0});
-    prefs.lote = lid; savePrefs(); l = LOTES.get(lid);
-  }
-  if(imp.filaEnc >= 0){ const m = store.get(MAPAS_KEY) || {}; m[firmaEnc(imp.tabla[imp.filaEnc])] = Object.fromEntries(Object.keys(CAMPOS).map(k => [k, imp.map[k] ?? null])); store.set(MAPAS_KEY, m); }
+  // v2.44: un lote (cargue) por proveedor. La empresa de cada fila sale del código (16 dígitos = Xcargo, 13 = iMile),
+  // si no de la columna «Empresa», si no de la elegida para todo el listado. El acumulado general suma todos.
+  const actual = loteActual(), usarActual = $("imDest").value !== "nuevo" && actual && !actual.cerrado;
+  const base = imp.nombre.replace(/\.[^.]+$/, "").slice(0, 30), lotesEmp = new Map();
+  const loteDe = emp => {
+    if(lotesEmp.has(emp)) return lotesEmp.get(emp);
+    let l = usarActual && actual.emp === emp ? actual : null;
+    if(!l){ const lid = uuid(); registrar("LOTE", null, {lid, nombre: `${base} · ${emp}`.slice(0, 40), emp, esperado: 0}); l = LOTES.get(lid); }
+    lotesEmp.set(emp, l); return l;
+  };
+  const empFila = (f, g) => empresaPorGuia(g) || (imp.map.emp !== undefined && EMPRESAS.find(e => sinTilde(f[imp.map.emp]).includes(sinTilde(e)))) || empFija;
+  if(imp.filaEnc >= 0 && imp.manual.size){ const m = store.get(MAPAS_KEY) || {}; m[firmaEnc(imp.tabla[imp.filaEnc])] = Object.fromEntries([...imp.manual].map(k => [k, imp.map[k] ?? null])); store.set(MAPAS_KEY, m); }
   const vistos = new Set(); let nuevas = 0, zonas = 0, otras = 0, recibidas = 0;
   const datos = [];   // v2.41: datos de entrega para la Ruta del repartidor (van a otra tabla, no al histórico)
   const celda = (f, k) => imp.map[k] !== undefined ? String(f[imp.map[k]] ?? "").replace(/\s+/g, " ").trim() : "";
@@ -326,6 +334,7 @@ function importarAhora(){
     const g = normGuia(f[imp.map.guia]); if(!g || vistos.has(g)) continue; vistos.add(g);
     const dat = {guia: g, direccion: direccionLegible(celda(f, "dir")).slice(0, 200), telefono: celda(f, "tel").replace(/[^\d+ ]/g, "").slice(0, 40), nombre: celda(f, "nom").slice(0, 80), barrio: celda(f, "bar").slice(0, 80), unidad: celda(f, "uni").slice(0, 120)};
     if(dat.direccion || dat.telefono || dat.nombre) datos.push(dat);
+    const emp = empFila(f, g), l = loteDe(emp);
     const p = paq(g);
     if(p && p.espLote && p.espLote !== l.lid){
       otras++;
@@ -333,15 +342,18 @@ function importarAhora(){
       if(recibir && p.estado === "ESPERADO"){ registrar("RECIBIDO", g, {lid: p.espLote, emp: p.emp || empFija, al_importar: true}); recibidas++; }
       continue;
     }
-    const emp = (imp.map.emp !== undefined && EMPRESAS.find(e => sinTilde(f[imp.map.emp]).includes(sinTilde(e)))) || empFija;
     if(!p || !p.espLote){ registrar("ESPERADO", g, {lid: l.lid, emp}); nuevas++; }
     const q = paq(g);
     if(recibir && q && q.estado === "ESPERADO"){ registrar("RECIBIDO", g, {lid: q.espLote || l.lid, emp: q.emp || emp, al_importar: true}); recibidas++; }
     const cc = imp.map.dir !== undefined ? calleCarrera(f[imp.map.dir]) : null;
     if(cc && !tieneUbic(paq(g))){ registrar("UBICACION", g, cc); zonas++; }
   }
+  const lotes = [...lotesEmp.values()];
+  // Queda seleccionado el lote abierto si se usó; si no, el que más paquetes recibió de este archivo.
+  if(lotes.length){ prefs.lote = (usarActual && lotes.includes(actual) ? actual : lotes.slice().sort((a, b) => statsLote(b.lid).esp - statsLote(a.lid).esp)[0]).lid; savePrefs(); }
   $("dlgLista").close(); mostrarVista("vRecibir"); pintarTodo();
   if(datos.length) guardarDatosEntrega(datos);
-  toast(`Importadas ${nuevas} guía(s) en «${l.nombre}»` + (recibidas ? ` · ${recibidas} en bodega` : "") + (zonas ? ` · ${zonas} con zona` : "") + (otras ? ` · ${otras} ya estaban en otro lote` : "") + ".");
+  const porLote = [...lotesEmp].map(([emp, l]) => `${emp}: ${statsLote(l.lid).esp} en «${l.nombre}»`).join(" · ");
+  toast(`Importadas ${nuevas} guía(s)` + (porLote ? ` (${porLote})` : "") + (recibidas ? ` · ${recibidas} en bodega` : "") + (zonas ? ` · ${zonas} con zona` : "") + (otras ? ` · ${otras} ya estaban en otro lote` : "") + ".");
 }
 $("recManifiesto").onclick = abrirImportar;

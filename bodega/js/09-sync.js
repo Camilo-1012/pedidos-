@@ -68,7 +68,7 @@ async function doSync(manual){
     if(typeof subirDatosEntrega === "function") await subirDatosEntrega().catch(e => console.warn("datos de entrega", e));
     // Primera vez en este celular: todo el catálogo (repartidores y lotes) y los últimos 30 días de paquetes.
     if(!sync.catalogo){
-      const cat = await sb(`bodega_eventos?select=${COLS}&tipo=in.(REP,REP_ZONAS,ZONA,LOTE,LOTE_CERRADO)&order=seq.asc`) || [];
+      const cat = await sb(`bodega_eventos?select=${COLS}&tipo=in.(REP,REP_ZONAS,ZONA,LOTE,LOTE_CERRADO,PAGO,TARIFA)&order=seq.asc`) || [];
       llegaron += aplicarRemotos(cat);
       const desde = new Date(Date.now() - DIAS_INICIALES * 864e5).toISOString();
       let seq = 0;
