@@ -362,6 +362,21 @@ function numerar(){
     vistos.add(s.num);
   }
 }
+/* v2.48: los pedidos de la misma dirección van seguidos en la lista (siguen siendo paradas aparte, cada una con su guía).
+   El cálculo con la cuadrícula (calle + carrera) da costo 0 a meter una parada en cualquier punto «de paso», así que
+   un pedido repetido podía quedar lejos de su gemelo (p. ej. 17 arriba y 25, 26 abajo). Se juntan en el lugar del
+   primero de la dirección; como es el mismo punto, el recorrido no se alarga. Los «No estaba» no se mezclan con las
+   pendientes (cada grupo se junta dentro de su tramo). */
+function juntarMismaDireccion(lista){
+  if(typeof stopKey !== "function" || lista.length < 2) return lista;
+  const clave = s=>(s.status === "fail" ? "F|" : "P|") + stopKey(s);
+  const grupos = new Map();
+  for(const s of lista){ const k = clave(s); if(!grupos.has(k)) grupos.set(k, []); grupos.get(k).push(s); }
+  if(grupos.size === lista.length) return lista;
+  const out = [], hechos = new Set();
+  for(const s of lista){ const k = clave(s); if(hechos.has(k)) continue; hechos.add(k); out.push(...grupos.get(k)); }
+  return out;
+}
 // Aplica un orden calculado sobre el estado actual (por si el repartidor marcó entregas mientras se calculaba).
 function applyOrder(orderIds){
   const byId = new Map(state.stops.map(s=>[s.id,s]));
@@ -448,7 +463,7 @@ function quickOrder(){
   const geo = state.stops.filter(s=>s.status!=="done" && s.x!==null);
   if(MATRIX) return;   // no interferir si justo se está usando la matriz real
   if(modoDirecciones()){
-    const ord = ordenDirecciones(geo, optEstable);
+    const ord = juntarMismaDireccion(ordenDirecciones(geo, optEstable));
     applyOrder(ord.map(s=>s.id));
     state.suggestedIds = ord.map(s=>s.id);
     state.mejoraRuta = null; LASTM = null; ROUTE_GEOM = null;
@@ -458,6 +473,7 @@ function quickOrder(){
   }
   let quick = orderStops(origin, geo, back);
   if(optEstable) quick = estabilizar(origin, quick, back); else state.mejoraRuta = null;
+  quick = juntarMismaDireccion(quick);
   applyOrder(quick.map(s=>s.id));
   state.suggestedIds = quick.map(s=>s.id);
   LASTM = null;
