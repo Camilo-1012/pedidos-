@@ -118,8 +118,9 @@ test("zonas: crear con aviso de cruce, ubicar al recibir, despachar con aviso de
 
   const [dl2] = await Promise.all([page.waitForEvent("download"), A.menu(page, "btnExcel")]);
   const x2 = A.leerXlsx(await dl2.path());
-  expect(x2["Por zona"].map(f => f[0])).toEqual(["Zona", "Z1 Tibabuyes", "Z2 Lisboa", "Z3 Rincón", "Sin zona"]);
-  expect(x2["Paquetes del día"][0].slice(4, 7)).toEqual(["Zona", "Calle", "Carrera"]);
+  const tabla = (f, primera) => f.slice(f.findIndex(x => x[0] === primera));
+  expect(tabla(x2["Por zona"], "Zona").map(f => f[0])).toEqual(["Zona", "Z1 Tibabuyes", "Z2 Lisboa", "Z3 Rincón", "Sin zona", "TOTAL"]);
+  expect(tabla(x2["Paquetes del día"], "Guía")[0].slice(4, 9)).toEqual(["Zona", "Calle", "Carrera", "Lote", "Proveedor"]);
   expect(errs).toEqual([]);
 });
 

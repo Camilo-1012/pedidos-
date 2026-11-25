@@ -8,7 +8,7 @@ function pintarDevolver(){
   $("devInfo").hidden = !r; if(!r) return;
   const x = delRepartidor(r.rid);
   const noEstaba = x.enRuta.filter(p => p.noEstaba).length;
-  kpis($("devKpis"), [[x.enRuta.length, "por liquidar", "zone"], [noEstaba, "«no estaba»: deben volver", noEstaba ? "warn" : ""], [x.devueltosDia.length, "devueltos hoy"], [x.entregadosDia.length, "entregados hoy" + (VINC.has(r.rid) ? " (en vivo)" : ""), "ok"]]);
+  kpis($("devKpis"), [[x.enRuta.length, "por liquidar", "zone"], [noEstaba, "no entregados (no estaba / devolución): deben volver", noEstaba ? "warn" : ""], [x.devueltosDia.length, "devueltos hoy"], [x.entregadosDia.length, "entregados hoy" + (VINC.has(r.rid) ? " (en vivo)" : ""), "ok"]]);
   $("devCerrar").disabled = !x.enRuta.length;
   $("devNota").textContent = VINC.has(r.rid)
     ? `${r.nombre} usa la app: sus «Entregado» y «No estaba» llegan solos. Escanea lo que devuelve; al cerrar, lo que no reportó sigue con él, salvo lo que marques.`
@@ -19,7 +19,9 @@ function pintarDevolver(){
 }
 async function devolverGuia(g){
   const r = repActual(); if(!r) return {tipo:"mal", txt:"Elige primero el repartidor."};
-  const p = paq(g), motivo = $("devMotivo").value;
+  const p = paq(g);
+  // v2.50: si el repartidor la marcó como «Devolución» desde su Ruta y aquí se deja el motivo por defecto, se usa el suyo.
+  const motivo = $("devMotivo").value === "No estaba" && p && p.noEstaba && p.motivo && p.motivo.startsWith("Devolución: ") ? p.motivo.slice(12) : $("devMotivo").value;
   if(!p || p.estado === "ESPERADO") return {tipo:"mal", txt:"No figura despachada. Si llegó a la bodega, recíbela en «Recibir»."};
   if(p.estado === "BODEGA") return {tipo:"rep", txt:"Ya está en bodega" + (p.motivo ? " (devuelta: " + p.motivo + ")" : "")};
   if(p.estado === "RUTA" && p.rid !== r.rid){
@@ -53,7 +55,7 @@ $("devCerrar").onclick = () => {
       : `<p class="hint">Estos paquetes no se devolvieron. Por defecto quedan como <b>entregados</b>. Cambia los que no aparecen (faltante) o los que el repartidor sigue llevando.</p>`) + `
      <div class="row"><button type="button" class="small" id="lqTodos">Todos entregados</button></div>
      <ul class="lista">${x.enRuta.map(p => `<li class="paq"><div><b>${esc(p.guia)}</b> ${p.emp ? `<span class="chip">${esc(p.emp)}</span>` : ""}<div class="hint">Salió ${esc(fechaHora(p.asignado))}</div></div>
-       <select data-guia="${esc(p.guia)}" aria-label="Resultado de ${esc(p.guia)}"><option value="ENTREGADO">Entregado</option><option value="FALTANTE">Faltante</option><option value="SIGUE"${VINC.has(r.rid) ? " selected" : ""}>Sigue con él</option></select>${p.noEstaba ? `<div class="hint">No estaba ${esc(horaDe(p.noEstaba))}: debe devolverlo</div>` : ""}</li>`).join("")}</ul>
+       <select data-guia="${esc(p.guia)}" aria-label="Resultado de ${esc(p.guia)}"><option value="ENTREGADO">Entregado</option><option value="FALTANTE">Faltante</option><option value="SIGUE"${VINC.has(r.rid) ? " selected" : ""}>Sigue con él</option></select>${p.noEstaba ? `<div class="hint">${esc(reporteNo(p))} ${esc(horaDe(p.noEstaba))}: debe devolverlo</div>` : ""}</li>`).join("")}</ul>
      <p class="hint" id="lqRes" role="status"></p>`,
     [["Cancelar", () => $("dlgLista").close()], ["Confirmar liquidación", () => confirmarLiquidacion(r), "primary"]]);
   const res = () => {

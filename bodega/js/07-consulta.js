@@ -2,7 +2,7 @@
    con novedad; resumen del día por repartidor. */
 "use strict";
 const TXT_EV = {ESPERADO:"En listado esperado", RECIBIDO:"Recibida en bodega", NOVEDAD:"Novedad", UBICACION:"Ubicación", ASIGNADO:"Despachada", DEVUELTO:"Devuelta",
-  ENTREGADO:"Entregada", NO_ENTREGADO:"No estaba (reporte del repartidor)", FALTANTE:"Marcada faltante", ANULAR:"Lectura deshecha"};
+  ENTREGADO:"Entregada", NO_ENTREGADO:"No entregado (reporte del repartidor)", FALTANTE:"Marcada faltante", ANULAR:"Lectura deshecha"};
 function detalleEv(e){
   const d = e.d || {};
   switch(e.tipo){

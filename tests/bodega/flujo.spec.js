@@ -173,9 +173,18 @@ test("despacho, reasignación, devolución con motivo, liquidación y Excel", as
   const [dl2] = await Promise.all([page.waitForEvent("download"), A.menu(page, "btnExcel")]);
   const x2 = A.leerXlsx(await dl2.path());
   const nombres = Object.keys(x2);
-  expect(nombres[0]).toMatch(/^Resumen /);
-  expect(x2[nombres[0]][1]).toEqual(["Jairo", 3, 1, 1, 0, 0]);
-  expect(x2["Paquetes del día"].length).toBe(5);
+  // v2.50: cada hoja trae título y datos arriba; la tabla empieza en la fila de encabezados.
+  const tabla = (f, primera) => f.slice(f.findIndex(x => x[0] === primera));
+  expect(nombres).toEqual(["Resumen", "Paquetes del día", "Por zona", "En bodega", "Movimientos"]);
+  expect(x2.Resumen[0][0]).toBe("Reporte diario de bodega");
+  const res = tabla(x2.Resumen, "Repartidor");
+  expect(res[0]).toEqual(["Repartidor", "Despachados hoy", "Entregados hoy", "Devueltos hoy", "Faltantes hoy", "En ruta ahora", "Efectividad"]);
+  expect(res[1]).toEqual(["Jairo", 3, 1, 1, 0, 0, 0.5]);
+  const cuerpo = res.slice(1, -1), suma = k => cuerpo.reduce((a, f) => a + f[k], 0);
+  expect(res[res.length - 1].slice(0, 6)).toEqual(["TOTAL", suma(1), suma(2), suma(3), suma(4), suma(5)]);
+  const ph = tabla(x2["Paquetes del día"], "Guía");
+  expect(ph.length).toBe(6);                          // encabezado + 4 paquetes + total
+  expect(ph[5].slice(0, 2)).toEqual(["TOTAL", "4 paquete(s)"]);
   expect(errs).toEqual([]);
 });
 

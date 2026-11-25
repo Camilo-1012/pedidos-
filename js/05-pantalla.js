@@ -89,7 +89,34 @@ function wazeUrl(s){
 function openExternal(url){ const a = document.createElement("a"); a.href = url; a.target = "_blank"; a.rel = "noopener"; document.body.appendChild(a); a.click(); a.remove(); }
 // Los paquetes de la bodega que aún no tienen dirección no cuentan como «siguiente» (no hay a dónde ir).
 const sinDirBod = q=>typeof sinDireccion === "function" && sinDireccion(q);
-function nextStop(){ return state.stops.find(q=>q.status==="pend" && q.x!==null) || state.stops.find(q=>q.status==="pend" && !sinDirBod(q)) || state.stops.find(q=>q.status==="fail" && !sinDirBod(q)); }
+function nextStop(){ return state.stops.find(q=>q.status==="pend" && q.x!==null) || state.stops.find(q=>q.status==="pend" && !sinDirBod(q)) || state.stops.find(q=>q.status==="fail" && !esDevol(q) && !sinDirBod(q)); }
+/* v2.50: «Devolución» = el pedido no se entrega y vuelve a la bodega (rechazado, dirección errada, dañado, reprogramado…).
+   Se guarda como intento fallido («fail») con s.devol = {m: motivo, at}; a diferencia de «No estaba», no se reintenta:
+   sale de los pendientes y del modo conducción, no se paga y a la bodega le llega con su motivo. */
+const esDevol = s => s.status === "fail" && !!s.devol;
+const MOTIVOS_DEVOL = ["Rechazado por el cliente", "Dirección errada o no existe", "Cliente pidió otra fecha", "Paquete dañado", "Otro"];
+function marcarDevolucion(s, motivo){
+  const i = state.stops.indexOf(s); if(i<0) return;
+  const antes = s.status;
+  s.status = "fail"; s.devol = {m: motivo, at: Date.now()};
+  if(antes !== "fail"){ s.failAt = Date.now(); s.failCount = (s.failCount||0)+1; }
+  state.stops.splice(i,1);
+  const firstDone = state.stops.findIndex(q=>q.status==="done");
+  state.stops.splice(firstDone<0?state.stops.length:firstDone,0,s);
+  recordDay();
+  if(typeof bodegaReportar === "function") bodegaReportar(s, antes);
+  toast("Devolución: " + motivo + ". Llévalo de vuelta a la bodega.");
+  save(); render();
+}
+// Pide el motivo y marca la devolución.
+let dvlStop = null, dvlCb = null;
+function pedirDevolucion(s, cb){
+  dvlStop = s; dvlCb = cb || null;
+  $("dvlMsg").textContent = `${s.label||s.addr}${guias(s).length ? " · guía " + guias(s).join(", ") : ""}. No se vuelve a intentar y no se paga.`;
+  $("dvlOps").innerHTML = MOTIVOS_DEVOL.map((m,k)=>`<label><input type="radio" name="dvlM" value="${esc(m)}"${k===0?" checked":""}>${esc(m)}</label>`).join("");
+  $("dvlOtro").hidden = true; $("dvlOtro").value = "";
+  $("dlgDevol").showModal();
+}
 function mapsUrl(s){ return "https://www.google.com/maps/dir/?api=1&destination=" + encodeURIComponent(navQuery(s)) + "&travelmode=" + (esPie() ? "walking" : "driving"); }
 function mapsMultiUrl(stops){
   return "https://www.google.com/maps/dir/" + stops.map(s=>encodeURIComponent(navQuery(s))).join("/") ;
@@ -106,7 +133,8 @@ function esc(s){ return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&
    Cada botón hace lo mismo que su botón original (data-go = id del original). */
 function renderPaso(){
   const box = $("pasoCard"), reales = state.stops.filter(s=>!s.example);
-  const pend = reales.filter(s=>s.status!=="done"), fall = pend.filter(s=>s.status==="fail"), hechos = reales.filter(s=>s.status==="done");
+  const pend = reales.filter(s=>s.status!=="done" && !esDevol(s)), fall = pend.filter(s=>s.status==="fail"), hechos = reales.filter(s=>s.status==="done");
+  const devs = reales.filter(esDevol);
   if(!reales.length){ box.hidden = true; return; }
   const q = l=>l.reduce((a,s)=>a+(s.qty||1),0);
   // Zonas que la bodega le asignó hoy a este repartidor (v2.36).
@@ -130,7 +158,7 @@ function renderPaso(){
     btns = [["Repasar en el modo conducción", "primary ancho", "btnDriveTop"], ["Reporte del día", "", "btnReport"], ["Jornada nueva", "", "btnNew"]];
   } else {
     txt = `¡Ruta terminada! ${q(hechos)} pedido(s) entregado(s) · ${cop(q(hechos)*tarifa())}`;
-    sub = "Revisa el reporte, descarga el Excel y guarda el respaldo. Mañana empieza con «Jornada nueva».";
+    sub = (devs.length ? `${q(devs)} devolución(es): llévalas a la bodega. ` : "") + "Revisa el reporte, descarga el Excel y guarda el respaldo. Mañana empieza con «Jornada nueva».";
     btns = [["Reporte del día", "primary", "btnReport"], ["Excel", "", "histCsvPed"], ["Guardar respaldo", "", "btnBackup"], ["Jornada nueva", "dark", "btnNew"]];
   }
   box.hidden = false;
@@ -256,6 +284,7 @@ function render(){
           ${s.barrio?`<span class="chip">${esc(s.barrio)}</span>`:""}
           ${s.bodega?`<span class="chip bod">Bodega${s.bodega.emp ? " · " + esc(s.bodega.emp) : ""}</span>`:""}
           ${s.bodega && s.bodega.zona?`<span class="chip zona">Zona ${esc(s.bodega.zona)}</span>`:""}
+          ${esDevol(s)?`<span class="chip devol">Devolución · ${esc(s.devol.m)} · vuelve a la bodega</span>`:""}
           ${s.bodegaFuera && !isDone?'<span class="chip warn">La bodega ya no te lo tiene asignado</span>':""}
           ${unk && !sinDir?'<span class="chip warn">Revisar dirección</span>':""}
           ${s.geo==="barrio"?`<span class="chip warn">Ubicada por barrio (aprox.)</span>`:""}
@@ -284,7 +313,8 @@ function render(){
         <button class="small" data-act="down" aria-label="Bajar" ${idx===state.stops.length-1?"disabled":""}>▼</button>
         ${s.phone && cleanPhone(s.phone).startsWith("3") ? `<a class="btn small" href="${waUrl(cleanPhone(s.phone), s)}" target="_blank" rel="noopener">WhatsApp</a>` : ""}
         ${!isDone && !s.example && guias(s).length < (s.qty||1) ? `<button class="small" data-act="guia">+ Guía</button>` : ""}
-        <button class="small" data-act="fail">${isFail?"Quitar fallido":"No estaba"}</button>
+        <button class="small" data-act="fail">${esDevol(s)?"Quitar devolución":isFail?"Quitar fallido":"No estaba"}</button>
+        ${!isDone && !isFail && !s.example ? `<button class="small" data-act="devol">Devolución</button>` : ""}
         <button class="small" data-act="edit">Editar</button>
         <button class="small danger" data-act="del">Borrar</button>
       </div>
@@ -329,6 +359,7 @@ function toggleFail(s){
   const i = state.stops.indexOf(s); if(i<0) return;
   const antes = s.status;
   s.status = s.status==="fail" ? "pend" : "fail";
+  if(s.status==="pend" && s.devol){ delete s.devol; toast("Se quitó la devolución: vuelve a los pendientes."); }
   if(s.status==="fail"){
     s.failAt = Date.now(); s.failCount = (s.failCount||0)+1;
     recordDay(); state.stops.splice(i,1);
@@ -347,6 +378,7 @@ function onListClick(e){
   switch(b.dataset.act){
     case "done": toggleDone(s); return;
     case "fail": toggleFail(s); return;
+    case "devol": pedirDevolucion(s); return;
     case "guia": startAssign([s.id]); return;
     case "up": if(i>0){ [state.stops[i-1],state.stops[i]]=[state.stops[i],state.stops[i-1]]; } break;
     case "down": if(i<state.stops.length-1){ [state.stops[i+1],state.stops[i]]=[state.stops[i],state.stops[i+1]]; } break;
@@ -606,3 +638,15 @@ $("cfNo").onclick = ()=>{ $("dlgConfirm").close(); const f = cfNoCb; cfNoCb = nu
 $("frmConfirm").addEventListener("submit", e=>{ e.preventDefault(); $("dlgConfirm").close(); cfNoCb = null; if(cfCb) cfCb(); cfCb=null; });
 
 let tt; function toast(m){ const t=$("toast"); t.textContent=m; t.classList.add("show"); clearTimeout(tt); tt=setTimeout(()=>t.classList.remove("show"),3200); }
+// Diálogo de motivo de devolución (v2.50).
+$("dvlOps").addEventListener("change", ()=>{ const otro = (document.querySelector('input[name="dvlM"]:checked')||{}).value === "Otro"; $("dvlOtro").hidden = !otro; if(otro) $("dvlOtro").focus(); });
+$("dvlNo").onclick = ()=>{ $("dlgDevol").close(); dvlStop = dvlCb = null; };
+$("frmDevol").addEventListener("submit", e=>{
+  e.preventDefault();
+  let m = (document.querySelector('input[name="dvlM"]:checked')||{}).value || MOTIVOS_DEVOL[0];
+  if(m === "Otro"){ const t = $("dvlOtro").value.trim(); if(!t){ $("dvlOtro").focus(); return; } m = t; }
+  const s = dvlStop, cb = dvlCb; dvlStop = dvlCb = null;
+  $("dlgDevol").close();
+  if(s){ marcarDevolucion(s, m); if(cb) cb(); }
+});
+

@@ -26,7 +26,7 @@ for (const [ancho, alto] of [[412, 360], [412, 300], [780, 360]]){
     expect(alturaCab).toBeLessThan(alto / 2);
     expect(await page.evaluate(() => getComputedStyle(document.querySelector("header.top")).position)).toBe("static");
     await page.click("#btnDrive");   // falla si algo lo tapa
-    for (const id of ["#dvWaze", "#dvCall", "#dvFail", "#dvDone", "#dvExit"]){
+    for (const id of ["#dvWaze", "#dvCall", "#dvFail", "#dvDevol", "#dvDone", "#dvExit"]){
       const r = await page.locator(id).boundingBox();
       expect(r.y + r.height).toBeLessThanOrEqual(alto + 1);
       expect(r.x + r.width).toBeLessThanOrEqual(ancho + 1);

@@ -80,6 +80,28 @@ function xlZip(archivos){
   fin.setUint32(12, tam, true); fin.setUint32(16, off, true);
   return new Blob([...partes, ...central, new Uint8Array(fin.buffer)], {type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
 }
+/* Ayudas para armar hojas «de empresa» (las usan la Ruta y la Bodega). */
+const xlC = {
+  tot: v => ({v, s: typeof v === "number" ? "totnum" : "tot"}),          // fila de total (amarillo)
+  totCop: v => ({v: Math.round(v || 0), s: "totcop"}),
+  totPct: v => ({v, s: "totpct"}),
+  cop: v => ({v: Math.round(v || 0), s: "cop"}),                         // pesos «$ 1.600»
+  pct: v => v === "" || v == null ? "" : {v, s: "pct"},                  // fracción → «86 %»
+  centro: v => v === "" || v == null ? "" : {v, s: "centro"},
+  sec: v => ({v, s: typeof v === "number" ? "secnum" : "sec"}),          // subtotal (gris claro)
+  secCop: v => ({v: Math.round(v || 0), s: "seccop"}),
+  secPct: v => ({v, s: "secpct"})
+};
+const xlEfect = (ok, no) => ok + no ? Math.round(100 * ok / (ok + no)) / 100 : "";
+// Hoja con título, líneas de contexto, tabla (cols + cuerpo) y fila de total opcional.
+function xlHojaPro(nombre, titulo, lineas, cols, cuerpo, total, anchos){
+  const sup = [[{v: titulo, s: "titulo"}], ...lineas.filter(Boolean).map(l => [{v: l, s: "sub"}]), []];
+  const unir = sup.slice(0, -1).map((_, i) => `A${i+1}:${xlCol(Math.max(0, cols.length - 1))}${i+1}`);
+  const cab = sup.length, filas = [...sup, cols.map(c => ({v: c, s: "cab"})), ...cuerpo];
+  const filtro = filas.length - 1;
+  if(total) filas.push(total);
+  return {nombre: String(nombre).replace(/[\\/?*[\]:]/g, "-").slice(0, 31), pro: true, cab, filtro, unir, filas, anchos};
+}
 // Estilos: 0 normal · 1 negrita (hojas viejas) · 2… presentación de empresa (ver XL_EST).
 // Colores de la app: gris carbón #263238 (encabezados) y amarillo #F5C518 (acento).
 const XL_ESTILOS = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>

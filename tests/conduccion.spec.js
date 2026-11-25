@@ -1,6 +1,6 @@
 // Modo conducción: parada actual en grande, entregar, no estaba, saltar y salir con Atrás.
 const { test, expect } = require("@playwright/test");
-const { entrar, cargar, vigilarErrores } = require("./ayuda");
+const { entrar, cargar, vigilarErrores, leerXlsx } = require("./ayuda");
 
 test("modo conducción de punta a punta", async ({ page }) => {
   const errs = vigilarErrores(page);
@@ -57,4 +57,61 @@ test("al terminar todas, muestra ¡Terminaste!", async ({ page }) => {
   await page.click("#btnDrive"); await page.click("#dvDone");
   await expect(page.locator("#dvAddr")).toHaveText("¡Terminaste!");
   await expect(page.locator("#dvDone")).toBeDisabled();
+});
+
+test("v2.50: botón Devolución con motivo: sale de los pendientes, no se paga y queda en el Excel", async ({ page }) => {
+  const errs = vigilarErrores(page);
+  await entrar(page);
+  await cargar(page, [
+    { addr: "Calle 145 # 103B-90", guia: "1111222233334444" },
+    { addr: "Carrera 110 # 152-30", guia: "5555666677778888" },
+    { addr: "Calle 139 # 112-15", guia: "9999000011112222" }
+  ]);
+  await page.click("#btnDrive");
+  await expect(page.locator("#dvDevol")).toBeVisible();
+  await page.click("#dvDone");                                            // entrega la primera
+  await expect(page.locator("#dvAddr")).toHaveText("Carrera 110 # 152-30");
+  // Devolución: pide el motivo; «Otro» exige escribirlo.
+  await page.click("#dvDevol");
+  await expect(page.locator("#dlgDevol")).toBeVisible();
+  await expect(page.locator("#dvlMsg")).toContainText("5555666677778888");
+  await page.locator("#dvlOps label", { hasText: "Otro" }).click();
+  await expect(page.locator("#dvlOtro")).toBeVisible();
+  await page.click("#dvlOk");
+  await expect(page.locator("#dlgDevol")).toBeVisible();                  // sin texto no deja seguir
+  await page.locator("#dvlOps label", { hasText: "Dirección errada" }).click();
+  await page.click("#dvlOk");
+  await expect(page.locator("#dlgDevol")).toBeHidden();
+  // Sale del modo conducción (no se reintenta) y la siguiente es la tercera.
+  await expect(page.locator("#dvAddr")).toHaveText("Calle 139 # 112-15");
+  await expect(page.locator("#dvPos")).toHaveText("Última entrega");
+  await expect(page.locator("#dvNext")).toHaveText("Es la última parada.");
+  await page.click("#dvDone");
+  await expect(page.locator("#dvAddr")).toHaveText("¡Terminaste!");
+  await page.click("#dvExit");
+  // En la lista: chip de devolución; el día queda terminado y avisa llevarla a la bodega.
+  const tarjeta = page.locator("#list li.stop", { hasText: "Carrera 110 # 152-30" });
+  await expect(tarjeta.locator(".chip.devol")).toHaveText("Devolución · Dirección errada o no existe · vuelve a la bodega");
+  await expect(page.locator("#pasoTxt")).toContainText("¡Ruta terminada! 2 pedido(s) entregado(s)");
+  await expect(page.locator("#pasoTxt")).toContainText("1 devolución(es): llévalas a la bodega");
+  // Historial: no se paga y lleva el motivo.
+  const ped = await page.evaluate(() => histLoad().slice(-1)[0].pedidos.find(p => p.g === "5555666677778888"));
+  expect([ped.e, ped.m]).toEqual(["No entregado", "Devolución: Dirección errada o no existe"]);
+  expect(await page.evaluate(() => histLoad().slice(-1)[0].paquetes)).toBe(2);
+  // Excel por pedido: Estado «Devolución» y su motivo en la hoja del día.
+  await page.evaluate(() => $("btnHist").click());
+  const [dl] = await Promise.all([page.waitForEvent("download"), page.click("#histCsvPed")]);
+  const libro = leerXlsx(await dl.path());
+  const dia = libro[Object.keys(libro).pop()];
+  const t = dia.slice(dia.findIndex(f => f[0] === "#"));
+  const c = n => t[0].indexOf(n), fila = t.find(f => f[c("Guía (número de pedido)")] === "5555666677778888");
+  expect([fila[c("Estado")], fila[c("Motivo")], fila[c("Valor ($)")]]).toEqual(["Devolución", "Devolución: Dirección errada o no existe", ""]);
+  expect(dia.some(f => String(f[0]).includes("(1 devolución(es))"))).toBe(true);
+  await page.evaluate(() => document.querySelectorAll("dialog[open]").forEach(d => d.close()));
+  // Quitar la devolución la devuelve a los pendientes.
+  await expect(tarjeta.locator("button[data-act=fail]")).toHaveText("Quitar devolución");
+  await tarjeta.locator("button[data-act=fail]").evaluate(b => b.click());
+  await expect(tarjeta.locator(".chip.devol")).toHaveCount(0);
+  expect(await page.evaluate(() => { const s = state.stops.find(x => x.guia === "5555666677778888"); return [s.status, !!s.devol]; })).toEqual(["pend", false]);
+  expect(errs).toEqual([]);
 });

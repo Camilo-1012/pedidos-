@@ -10,7 +10,7 @@ function liPaq(p, extra){
   const pv = provDe(p);
   const marcas = [ZONAS.size ? chipZona(z) : "", pv ? `<span class="chip prov">${esc(pv)}</span>` : "", p.emp ? `<span class="chip em-${esc(p.emp.toLowerCase())}">${esc(p.emp)}</span>` : "", p.nov.length ? `<span class="chip warn">Novedad</span>` : "",
     p.conflicto ? `<span class="chip bad">Conflicto</span>` : "",
-    p.estado === "RUTA" && p.noEstaba ? `<span class="chip warn">No estaba ${esc(horaDe(p.noEstaba))} · debe volver</span>` : "",
+    p.estado === "RUTA" && p.noEstaba ? `<span class="chip warn">${esc(reporteNo(p))} ${esc(horaDe(p.noEstaba))} · debe volver</span>` : "",
     p.estado === "ENTREGADO" && p.porRep ? `<span class="chip ok">Reportado por el repartidor</span>` : "", p.devs ? `<span class="chip">Devuelto ${p.devs}×</span>` : ""].join("");
   return `<li class="paq" data-guia="${esc(p.guia)}"><div><b>${esc(p.guia)}</b> ${chipEstado(p)}${marcas}</div>${extra ? `<div class="hint">${extra}</div>` : ""}</li>`;
 }

@@ -88,13 +88,15 @@ function pedidosDe(lista){
     .sort((a,b)=>(a.doneAt||a.failAt||9e15)-(b.doneAt||b.failAt||9e15));
   for(const s of rows){
     const est = s.status==="done" ? "Entregado" : s.status==="fail" ? "No entregado" : "Pendiente";
+    // v2.50: motivo del no entregado («No estaba» o «Devolución: …»).
+    const m = s.status==="fail" ? (s.devol ? "Devolución: " + s.devol.m : "No estaba") : "";
     const h = s.status==="done" ? s.doneAt : s.status==="fail" ? s.failAt : null;
     const gs = guias(s), q = s.qty||1;
     const d = s.label || s.addr || "", u = unitText(s, " ");
     // i = id de la parada: sirve para no perder pedidos de la jornada si la parada se borra de la lista (ver recordDay).
-    if(!gs.length){ out.push({i:s.id, g:"", d, u, e:est, h, q}); continue; }
+    if(!gs.length){ out.push({i:s.id, g:"", d, u, e:est, h, q, ...(m ? {m} : {})}); continue; }
     // Varias guías en la misma parada: una fila por guía (los paquetes de más quedan en la última).
-    gs.forEach((g,k)=>out.push({i:s.id, g, d, u, e:est, h, q: k===gs.length-1 ? Math.max(1, q-(gs.length-1)) : 1}));
+    gs.forEach((g,k)=>out.push({i:s.id, g, d, u, e:est, h, q: k===gs.length-1 ? Math.max(1, q-(gs.length-1)) : 1, ...(m ? {m} : {})}));
   }
   return out;
 }
@@ -314,21 +316,8 @@ function quincenaDe(f){                                               // f: "AAA
 const quincenaTxt = qz => `${qz.nombre} · se paga el ${dmy(qz.pago)}`;
 const repartidor = () => (window.RUTA_USER && window.RUTA_USER.name) || (typeof USER !== "undefined" && USER.name) || "";
 const generado = () => { const d = new Date(); return `${dmy(ymd(d))} ${hhmm(d.getTime())}`; };
-// Encabezado común: título, líneas de contexto y una fila en blanco. Devuelve las filas y cuántas son.
-function encabezado(titulo, lineas, ncol){
-  const filas = [[{v: titulo, s:"titulo"}], ...lineas.filter(Boolean).map(l=>[{v: l, s:"sub"}]), []];
-  const unir = filas.slice(0, -1).map((_, i)=>`A${i+1}:${xlCol(Math.max(0, ncol-1))}${i+1}`);
-  return {filas, unir};
-}
-// Arma una hoja con encabezado + tabla: cab (títulos de columna), cuerpo (filas) y opcionalmente total.
-function hojaPro(nombre, titulo, lineas, cols, cuerpo, total, anchos){
-  const e = encabezado(titulo, lineas, cols.length);
-  const cab = e.filas.length;
-  const filas = [...e.filas, cols.map(c=>({v: c, s:"cab"})), ...cuerpo];
-  const filtro = filas.length - 1;
-  if(total) filas.push(total);
-  return {nombre, pro: true, cab, filtro, unir: e.unir, filas, anchos};
-}
+// Hoja con encabezado + tabla (js/15-excel.js).
+const hojaPro = (...a) => xlHojaPro(...a);   // 15-excel.js carga después
 const efect = (e, n) => e + n ? Math.round(100 * e / (e + n)) / 100 : "";
 const tot = v => ({v, s: typeof v === "number" ? "totnum" : "tot"}), totCop = v => ({v: Math.round(v||0), s:"totcop"});
 const cop$ = v => ({v: Math.round(v||0), s:"cop"}), pct = v => v === "" ? "" : {v, s:"pct"}, centro = v => v === "" || v == null ? "" : {v, s:"centro"};
@@ -338,11 +327,11 @@ const diaSem = f => DIAS_SEM[fechaDe(f).getDay()];
 function datosJornada(x){
   const f = ymd(x.inicio), vp = valorDia(x.id);
   const peds = x.pedidos && x.pedidos.length ? x.pedidos : null;
-  let ent = 0, no = 0, pend = 0;
-  if(peds) for(const pd of peds){ const q = pd.q||1; if(pd.e === "Entregado") ent += q; else if(pd.e === "No entregado") no += q; else pend += q; }
+  let ent = 0, no = 0, pend = 0, dev = 0;
+  if(peds) for(const pd of peds){ const q = pd.q||1; if(pd.e === "Entregado") ent += q; else if(pd.e === "No entregado"){ no += q; if(estadoPed(pd) === "Devolución") dev += q; } else pend += q; }
   else ent = x.paquetes||0;
   const min = rutaMin(x)||0;
-  return {x, f, vp, peds, ent, no, pend, min, val: ent*vp, porHora: min > 0 ? Math.round(10*ent/(min/60))/10 : ""};
+  return {x, f, vp, peds, ent, no, dev, pend, min, val: ent*vp, porHora: min > 0 ? Math.round(10*ent/(min/60))/10 : ""};
 }
 
 // Hoja «Resumen» (y la de cada mes): una fila por jornada, con subtotal de cada quincena y total.
@@ -394,38 +383,40 @@ function hojaQuincenas(dias){                                           // dias:
 }
 
 // Hoja de una jornada: pedido por pedido en el orden en que se entregó, con acumulado y total del día.
-const PED_TIT = ["#","Hora","Guía (número de pedido)","Dirección","Inmueble","Estado","Paquetes","Acumulado entregados","Tiempo desde la salida (h:mm)","Valor ($)","Valor acumulado ($)"];
-const PED_ANCHOS = [5,9,22,30,18,13,9,11,12,12,13];
+const PED_TIT = ["#","Hora","Guía (número de pedido)","Dirección","Inmueble","Estado","Motivo","Paquetes","Acumulado entregados","Tiempo desde la salida (h:mm)","Valor ($)","Valor acumulado ($)"];
+const PED_ANCHOS = [5,9,22,30,18,13,26,9,11,12,12,13];
 function hojaJornada(d){
   const x = d.x, ini = x.salida || x.inicio, qz = quincenaDe(d.f);
   const cuerpo = []; let acum = 0;
   if(d.peds) d.peds.forEach((pd, i)=>{
     const q = pd.q||1, ok = pd.e === "Entregado"; if(ok) acum += q;
-    cuerpo.push([centro(i+1), centro(pd.h ? hhmm(pd.h) : ""), pd.g || "(sin guía)", pd.d||"", pd.u||"", centro(pd.e), q,
+    cuerpo.push([centro(i+1), centro(pd.h ? hhmm(pd.h) : ""), pd.g || "(sin guía)", pd.d||"", pd.u||"", centro(estadoPed(pd)), pd.m||"", q,
       ok ? acum : "", centro(pd.h ? hmm((pd.h - ini)/60000) : ""), ok ? cop$(q*d.vp) : "", ok ? cop$(acum*d.vp) : ""]);
   });
-  else cuerpo.push(["", "", "(jornada sin detalle por pedido)", "", "", "", d.ent, d.ent, "", cop$(d.val), cop$(d.val)]);
+  else cuerpo.push(["", "", "(jornada sin detalle por pedido)", "", "", "", "", d.ent, d.ent, "", cop$(d.val), cop$(d.val)]);
   const total = [tot(""), tot(""), tot("TOTAL DEL DÍA"), tot(`${d.ent} entregado(s) de ${d.ent + d.no + d.pend}${d.no ? ` · ${d.no} no entregado(s)` : ""}${d.pend ? ` · ${d.pend} pendiente(s)` : ""}`),
-    tot(""), tot(""), tot(d.ent + d.no + d.pend), tot(d.ent), tot(hmm(d.min)), totCop(d.val), totCop(d.val)];
+    tot(""), tot(""), tot(""), tot(d.ent + d.no + d.pend), tot(d.ent), tot(hmm(d.min)), totCop(d.val), totCop(d.val)];
   const fl = diaSem(d.f); 
   return hojaPro(hojaFecha(x.inicio), `Jornada del ${fl} ${dmy(d.f)}`, [repartidor() && "Repartidor: " + repartidor(),
     `Salida a ruta ${x.salida ? hhmm(x.salida) : "—"} · primera entrega ${hhmm(x.inicio)} · última entrega ${hhmm(x.fin)} · duración ${hmm(d.min) || "—"}`,
-    `Pedidos entregados ${d.ent} · no entregados ${d.no}${d.pend ? ` · pendientes ${d.pend}` : ""} · efectividad ${d.ent + d.no ? Math.round(100*d.ent/(d.ent+d.no)) + " %" : "—"} · valor del día ${cop(d.val)} (${cop(d.vp)} por pedido)`,
+    `Pedidos entregados ${d.ent} · no entregados ${d.no}${d.dev ? ` (${d.dev} devolución(es))` : ""}${d.pend ? ` · pendientes ${d.pend}` : ""} · efectividad ${d.ent + d.no ? Math.round(100*d.ent/(d.ent+d.no)) + " %" : "—"} · valor del día ${cop(d.val)} (${cop(d.vp)} por pedido)`,
     "Quincena " + quincenaTxt(qz)], PED_TIT, cuerpo, total, PED_ANCHOS);
 }
 // Hoja «Todos los pedidos»: una fila por pedido, con fecha y quincena para filtrar.
-const TODOS_TIT = ["Fecha","Quincena","Hora","Guía (número de pedido)","Dirección","Inmueble","Estado","Paquetes","Valor ($)"];
+const TODOS_TIT = ["Fecha","Quincena","Hora","Guía (número de pedido)","Dirección","Inmueble","Estado","Motivo","Paquetes","Valor ($)"];
+// «Devolución» se muestra aparte de «No entregado» (las dos cuentan como no entregadas y no se pagan).
+const estadoPed = pd => pd.e === "No entregado" && pd.m && pd.m.startsWith("Devolución") ? "Devolución" : pd.e;
 function hojaTodos(js){
   const cuerpo = []; let e = 0, n = 0, v = 0;
   for(const d of js){
     const qz = quincenaDe(d.f).nombre;
     if(d.peds) for(const pd of d.peds){ const q = pd.q||1, ok = pd.e === "Entregado"; if(ok){ e += q; v += q*d.vp; } else if(pd.e === "No entregado") n += q;
-      cuerpo.push([centro(dmy(d.f)), qz, centro(pd.h ? hhmm(pd.h) : ""), pd.g || "(sin guía)", pd.d||"", pd.u||"", centro(pd.e), q, ok ? cop$(q*d.vp) : ""]); }
-    else { e += d.ent; v += d.val; cuerpo.push([centro(dmy(d.f)), qz, "", "(jornada sin detalle por pedido)", "", "", centro("Entregado"), d.ent, cop$(d.val)]); }
+      cuerpo.push([centro(dmy(d.f)), qz, centro(pd.h ? hhmm(pd.h) : ""), pd.g || "(sin guía)", pd.d||"", pd.u||"", centro(estadoPed(pd)), pd.m||"", q, ok ? cop$(q*d.vp) : ""]); }
+    else { e += d.ent; v += d.val; cuerpo.push([centro(dmy(d.f)), qz, "", "(jornada sin detalle por pedido)", "", "", centro("Entregado"), "", d.ent, cop$(d.val)]); }
   }
-  const total = [tot("TOTAL"), tot(js.length + " jornada(s)"), tot(""), tot(`${e} entregado(s)${n ? ` · ${n} no entregado(s)` : ""}`), tot(""), tot(""), tot(""), tot(e + n), totCop(v)];
+  const total = [tot("TOTAL"), tot(js.length + " jornada(s)"), tot(""), tot(`${e} entregado(s)${n ? ` · ${n} no entregado(s)` : ""}`), tot(""), tot(""), tot(""), tot(""), tot(e + n), totCop(v)];
   return hojaPro("Todos los pedidos", "Todos los pedidos", [repartidor() && "Repartidor: " + repartidor(),
-    "Use los filtros del encabezado para ver una fecha, una quincena o un estado.", "Generado: " + generado()], TODOS_TIT, cuerpo, total, [12,20,9,22,30,18,13,9,12]);
+    "Use los filtros del encabezado para ver una fecha, una quincena o un estado.", "Generado: " + generado()], TODOS_TIT, cuerpo, total, [12,20,9,22,30,18,13,26,9,12]);
 }
 // Hoja «Datos de la ruta»: las cifras técnicas de cada jornada (antes estaban mezcladas con el resumen).
 const TEC_COLS = [["entregas","Direcciones entregadas"],["noEntregadas","Direcciones no entregadas"],["minutos","Minutos (1.ª a última entrega)"],["promEntreEntregas","Min. entre entregas"],

@@ -122,13 +122,17 @@ function uuidRuta(){
 }
 // Se llama desde toggleDone / toggleFail (js/05-pantalla.js) con el estado anterior de la parada.
 function bodegaReportar(s, antes){
-  if(!esDeBodega(s) || !bod.rid || s.status === antes) return;
+  // v2.50: «No estaba» o «Devolución: <motivo>». Cambiar de uno a otro (sin cambiar de estado) también se reporta.
+  const motivoNo = s.status==="fail" ? (s.devol ? "Devolución: " + s.devol.m : "No estaba") : "";
+  if(!esDeBodega(s) || !bod.rid) return;
+  if(s.status === antes && !(s.status==="fail" && guias(s).some(g0=>{ const r = (s.bev||{})[gNorm(g0)]; return r && r.NO && !r.NOanul && (r.NOm || "No estaba") !== motivoNo; }))) return;
   s.bev = s.bev || {};
   for(const g0 of guias(s)){
     const g = gNorm(g0), r = s.bev[g] || (s.bev[g] = {});
     if(s.status==="done" && antes!=="done"){ const e = nuevoEvento("ENTREGADO", g, {rid: bod.rid, por_rep: true}); r.ENT = e.id; delete r.ENTanul; r.ENTasig = (s.bodega && s.bodega.at) || ""; bod.cola.push(e); }
     if(antes==="done" && s.status!=="done" && r.ENT && !r.ENTanul){ bod.cola.push(nuevoEvento("ANULAR", g, {ref: r.ENT})); r.ENTanul = true; }
-    if(s.status==="fail" && antes!=="fail"){ const e = nuevoEvento("NO_ENTREGADO", g, {rid: bod.rid, motivo: "No estaba"}); r.NO = e.id; delete r.NOanul; bod.cola.push(e); }
+    if(s.status==="fail" && antes==="fail" && r.NO && !r.NOanul && (r.NOm || "No estaba") !== motivoNo){ bod.cola.push(nuevoEvento("ANULAR", g, {ref: r.NO})); r.NOanul = true; }
+    if(s.status==="fail" && (antes!=="fail" || r.NOanul)){ const e = nuevoEvento("NO_ENTREGADO", g, {rid: bod.rid, motivo: motivoNo}); r.NO = e.id; r.NOm = motivoNo; delete r.NOanul; bod.cola.push(e); }
     if(antes==="fail" && s.status!=="fail" && r.NO && !r.NOanul){ bod.cola.push(nuevoEvento("ANULAR", g, {ref: r.NO})); r.NOanul = true; }
   }
   guardarBod();

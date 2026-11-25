@@ -227,7 +227,13 @@ details summary{cursor:pointer;font-weight:600}
 .dvBtns{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .dvBtns > *{min-height:72px;font:700 22px var(--display);border-radius:14px}
 .dvBtns .dvWaze{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
-.dvBtns .dvDone{background:var(--ok);color:#fff;border-color:var(--ok)}
+.dvBtns .dvDone{background:var(--ok);color:#fff;border-color:var(--ok);grid-column:1 / -1}
+.dvBtns .dvDevol{border-color:var(--warn,#c77700);color:var(--warn,#c77700)}
+.dvlOps{display:flex;flex-direction:column;gap:6px;margin:10px 0}
+.dvlOps label{display:flex;flex-direction:row;align-items:center;justify-content:flex-start;gap:12px;padding:12px 14px;margin:0;border:1px solid var(--line);border-radius:10px;font-weight:600;font-size:16px;color:var(--ink);text-align:left}
+.dvlOps label:has(input:checked){border-color:var(--accent);background:color-mix(in srgb,var(--accent) 14%,transparent)}
+.dvlOps input{width:22px;height:22px;min-height:0;margin:0;flex:none;accent-color:var(--accent)}
+.chip.devol{background:#fff1dd;color:#8a4b00;border-color:#f0c27a}
 .dvBtns a[aria-disabled="true"]{opacity:.35;pointer-events:none}
 .dvSkip{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13px;opacity:.85;text-align:center}
 .dvSkip button{background:transparent;color:var(--bg);border-color:rgba(255,255,255,.3)}
@@ -290,8 +296,9 @@ details summary{cursor:pointer;font-weight:600}
   .dvUnit{font-size:15px}
   .dvGuia .orden{font-size:40px}
   .dvWho,.dvNext{font-size:13px}
-  .dvBtns{grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
-  .dvBtns > *{min-height:46px;font-size:16px;border-radius:10px;padding:4px}
+  .dvBtns{grid-template-columns:repeat(5,minmax(0,1fr));gap:6px}
+  .dvBtns > *{min-height:46px;font-size:14px;border-radius:10px;padding:4px}
+  .dvBtns .dvDone{grid-column:auto}
   .dvSkip{font-size:11px}
   .dvSkip button{min-height:30px;padding:2px 8px}
   /* Bloqueo con PIN: teclado más bajo */

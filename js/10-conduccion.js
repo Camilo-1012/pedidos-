@@ -1,8 +1,9 @@
-/* Modo conducción: la parada actual en letra grande y botones enormes (Waze, Llamar, No estaba, Entregado).
+/* Modo conducción: la parada actual en letra grande y botones enormes (Waze, Llamar, No estaba, Devolución, Entregado).
    La pantalla no se apaga mientras está abierto (Wake Lock) y el botón Atrás de Android lo cierra. */
 "use strict";
 let dvIdx = 0, wakeLock = null;
-const drivePend = ()=>state.stops.filter(s=>s.status!=="done" && !s.example);
+// Las devoluciones (v2.50) no se reintentan: salen del modo conducción.
+const drivePend = ()=>state.stops.filter(s=>s.status!=="done" && !s.example && !esDevol(s));
 async function keepAwake(on){
   try{
     if(on && "wakeLock" in navigator && !wakeLock){ wakeLock = await navigator.wakeLock.request("screen"); wakeLock.addEventListener("release", ()=>{ wakeLock = null; }); }
@@ -32,7 +33,7 @@ function renderDrive(){
   if(dvIdx >= list.length) dvIdx = Math.max(0, list.length-1);
   const s = list[dvIdx];
   const off = !s;
-  for(const id of ["dvFail","dvDone","dvPrev","dvNextBtn"]) $(id).disabled = off;
+  for(const id of ["dvFail","dvDevol","dvDone","dvPrev","dvNextBtn"]) $(id).disabled = off;
   if(off){
     $("dvPos").textContent = "Sin pendientes";
     $("dvQty").textContent = ""; $("dvAddr").textContent = "¡Terminaste!"; $("dvUnit").textContent = "No quedan entregas pendientes.";
@@ -58,7 +59,7 @@ function renderDrive(){
     $("dvPark").innerHTML = `<span>P · ${esc(textoParqueo(gr))}</span><small>Después, a pie: ${resto.map(m=>esc((m.label||m.addr) + (m.unit ? " · " + m.unit : ""))).join(" — ")}</small>`;
   }
   // El número grande es el del paquete (fijo en ruta); arriba, cuántas entregas faltan.
-  const faltan = state.stops.filter(x=>x.status!=="done").length;
+  const faltan = list.length;
   $("dvPos").textContent = faltan === 1 ? "Última entrega" : `Faltan ${faltan} entregas`;
   // Varios pedidos (paradas aparte) para la misma dirección: se avisa con sus números para entregarlos juntos.
   const otros = mismaDireccion(s).map(x=>stopNum(x)).sort((a,b)=>a-b);
@@ -101,6 +102,7 @@ $("btnDriveTop").onclick = openDrive;
 $("dvExit").onclick = ()=>closeDrive(false);
 $("dvDone").onclick = ()=>{ const s = driveStop(); if(!s) return; if(navigator.vibrate) navigator.vibrate(60); toggleDone(s); renderDrive(); };
 $("dvFail").onclick = ()=>{ const s = driveStop(); if(!s) return; confirmBox("No estaba", `¿Marcar ${s.label||s.addr} como no entregada? Pasa al final de los pendientes.`, ()=>{ toggleFail(s); renderDrive(); }); };
+$("dvDevol").onclick = ()=>{ const s = driveStop(); if(!s) return; pedirDevolucion(s, renderDrive); };
 $("dvPrev").onclick = ()=>{ if(dvIdx>0){ dvIdx--; renderDrive(); } };
 $("dvNextBtn").onclick = ()=>{ if(dvIdx < drivePend().length-1){ dvIdx++; renderDrive(); } };
 addEventListener("popstate", ()=>{ if(!$("drive").hidden) closeDrive(true); });

@@ -389,6 +389,7 @@
     <a class="btn dvWaze" id="dvWaze" target="_blank" rel="noopener">Waze</a>
     <button type="button" id="dvCall">Llamar</button>
     <button type="button" id="dvFail">No estaba</button>
+    <button type="button" class="dvDevol" id="dvDevol">Devolución</button>
     <button type="button" class="dvDone" id="dvDone">Entregado</button>
   </div>
   <div class="dvApps">
@@ -573,6 +574,19 @@
       <button type="button" id="histCsv">Excel resumen</button>
       <button type="button" class="danger" id="histClear">Borrar historial</button>
       <button type="submit" class="primary">Cerrar</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="dlgDevol" aria-labelledby="dvlTitle">
+  <form id="frmDevol">
+    <h2 id="dvlTitle">Devolución</h2>
+    <p class="hint" id="dvlMsg" style="margin:0"></p>
+    <div class="dvlOps" id="dvlOps" role="radiogroup" aria-label="Motivo de la devolución"></div>
+    <input id="dvlOtro" type="text" maxlength="60" autocomplete="off" placeholder="Escribe el motivo" hidden>
+    <div class="row">
+      <button type="button" id="dvlNo">Cancelar</button>
+      <button type="submit" class="primary" id="dvlOk">Marcar devolución</button>
     </div>
   </form>
 </dialog>

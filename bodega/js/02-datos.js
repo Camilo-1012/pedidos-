@@ -202,6 +202,8 @@ function proveedores(){
   for(const l of LOTES.values()) if(l.prov) s.add(l.prov);
   return [...s].sort((a, b) => a.localeCompare(b, "es"));
 }
+// v2.50: lo que reportó el repartidor desde su Ruta («No estaba» o «Devolución: <motivo>»).
+const reporteNo = p => p.motivo && p.motivo.startsWith("Devolución") ? p.motivo : "No estaba";
 const provDe = p => { const l = LOTES.get(p.espLote) || LOTES.get(p.recLote); return (l && l.prov) || ""; };
 function conteoProv(lista){
   const m = new Map(); lista.forEach(p => { const k = provDe(p); m.set(k, (m.get(k) || 0) + 1); });

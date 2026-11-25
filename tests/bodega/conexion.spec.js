@@ -93,6 +93,11 @@ test("el despachador asigna, al repartidor le aparece, completa la dirección y 
   expect(await A.kpi(bo.page, "devKpis", 0)).toBe("2");   // por liquidar: 2 y 3
   expect(await A.kpi(bo.page, "devKpis", 1)).toBe("1");   // «no estaba»: debe volver
   await expect(bo.page.locator("#devLista li").first()).toContainText("No estaba");
+  // v2.50: Andrea cambia CON0000002 de «No estaba» a «Devolución» (rechazado): la bodega ve el motivo nuevo.
+  await ru.page.evaluate(() => marcarDevolucion(state.stops.find(s => s.guia === "CON0000002"), "Rechazado por el cliente"));
+  await syncRuta(ru.page); await syncBodega(bo.page);
+  expect(await bo.page.evaluate(() => [paq("CON0000002").estado, paq("CON0000002").motivo, reporteNo(paq("CON0000002"))]))
+    .toEqual(["RUTA", "Devolución: Rechazado por el cliente", "Devolución: Rechazado por el cliente"]);
   // Liquidación con app: lo no reportado sigue con ella por defecto (no se da por entregado).
   await bo.page.click("#devCerrar");
   await expect(bo.page.locator('#ltBody select[data-guia="CON0000003"]')).toHaveValue("SIGUE");
@@ -118,6 +123,7 @@ test("el despachador asigna, al repartidor le aparece, completa la dirección y 
   await bo.page.locator("#devReps button", { hasText: "Andrea" }).click();
   await bo.page.click("#devScan");
   expect((await A.leer(bo.page, "CON0000002")).tipo).toBe("ok");
+  expect(await bo.page.evaluate(() => paq("CON0000002").motivo)).toBe("Rechazado por el cliente");   // toma el motivo del repartidor
   await bo.page.click("#scClose");
   await syncBodega(bo.page);
   await ru.page.evaluate(() => { bod.ult = 0; }); await syncRuta(ru.page);
