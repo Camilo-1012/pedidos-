@@ -57,11 +57,14 @@ test("pagos por quincena: entregados × $1.600, devueltos no se pagan, marcar pa
   expect(errs).toEqual([]);
 });
 
-test("quincenas: 1–15 y 16–fin de mes", async ({ page }) => {
+test("quincenas: del 2 al 16 y del 17 al 1 del mes siguiente (v2.49)", async ({ page }) => {
   await A.entrar(page);
-  expect(await page.evaluate(() => [quincenaDe("2026-11-15T15:00:00"), quincenaDe("2026-11-16T09:00:00"), nombreQuincena("2026-11-2"), nombreQuincena("2026-02-2"), nombreQuincena("2026-12-1")]))
-    .toEqual(["2026-11-1", "2026-11-2", "16–30 nov 2026", "16–28 feb 2026", "1–15 dic 2026"]);
-  // Pagos el 17 (quincena 1–15) y el 2 (quincena 16–fin del mes anterior).
+  expect(await page.evaluate(() => [quincenaDe("2026-11-01T15:00:00"), quincenaDe("2026-11-02T08:00:00"), quincenaDe("2026-11-16T20:00:00"), quincenaDe("2026-11-17T09:00:00"),
+    quincenaDe("2027-01-01T10:00:00"), nombreQuincena("2026-11-2"), nombreQuincena("2026-02-2"), nombreQuincena("2026-12-1"), nombreQuincena("2026-12-2")]))
+    .toEqual(["2026-10-2", "2026-11-1", "2026-11-1", "2026-11-2", "2026-12-2", "17 nov – 1 dic 2026", "17 feb – 1 mar 2026", "2–16 dic 2026", "17 dic 2026 – 1 ene 2027"]);
+  // Rango [inicio, fin): 2 al 16 y 17 al 1.
+  expect(await page.evaluate(() => rangoQuincena("2026-11-2").map(d => d.toDateString()))).toEqual([new Date(2026, 10, 17).toDateString(), new Date(2026, 11, 2).toDateString()]);
+  // Pagos el 17 (quincena 2–16) y el 2 (quincena 17–1).
   expect(await page.evaluate(() => [textoFecha(fechaPago("2026-11-1")), textoFecha(fechaPago("2026-11-2")), textoFecha(fechaPago("2026-12-2")),
     quincenaAPagar(new Date(2026, 11, 2)), quincenaAPagar(new Date(2026, 11, 3)), quincenaAPagar(new Date(2026, 10, 17)), quincenaAPagar(new Date(2026, 10, 18))]))
     .toEqual(["17 nov", "2 dic", "2 ene", "2026-11-2", "2026-12-1", "2026-11-1", "2026-11-2"]);

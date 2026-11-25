@@ -1,7 +1,7 @@
 /* ============ Pagos a repartidores por QUINCENA (v2.44) ============
    Se paga cada paquete ENTREGADO a la tarifa (por defecto $1.600). Devoluciones, faltantes y lo que sigue en ruta
    no se cuentan ni se pagan. La fecha que cuenta es la de la entrega (reportada por el repartidor desde su Ruta o
-   liquidada en Devolver). Quincenas: del 1 al 15 y del 16 al último día del mes.
+   liquidada en Devolver). Quincenas: del 2 al 16 y del 17 al 1 del mes siguiente (v2.49).
    - TARIFA {valor}: la cambia el administrador; cada pago guarda la tarifa con la que se liquidó.
    - PAGO {rid, q, n, valor, tarifa}: «Marcar pagado» de un repartidor en una quincena. Si después llegan más
      entregados de esa quincena, aparece la diferencia pendiente. Deshacer = PAGO con n y valor negativos.
@@ -12,21 +12,28 @@ const tarifaActual = () => (TARIFA.v != null && TARIFA.v >= 0 ? TARIFA.v : TARIF
 const pesos = n => "$" + Math.round(n || 0).toLocaleString("es-CO");
 const MESES = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
 
-// «2026-11-2» = 16 al 30 de noviembre de 2026.
-function quincenaDe(iso){ const d = new Date(iso); return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${d.getDate() <= 15 ? 1 : 2}`; }
+// Quincenas (decisión de Camilo, v2.49): del 2 al 16 (se paga el 17) y del 17 al 1 del mes siguiente (se paga el 2).
+// «2026-11-1» = 2 al 16 de noviembre; «2026-11-2» = 17 de noviembre al 1 de diciembre. El día 1 es de la quincena anterior.
+function quincenaDe(iso){
+  const d = new Date(iso), dia = d.getDate();
+  const b = dia === 1 ? new Date(d.getFullYear(), d.getMonth() - 1, 1) : d;
+  return `${b.getFullYear()}-${pad2(b.getMonth()+1)}-${dia >= 2 && dia <= 16 ? 1 : 2}`;
+}
+// [inicio, fin) de la quincena.
 function rangoQuincena(q){
   const [y, m, h] = q.split("-").map(Number);
-  const ini = new Date(y, m - 1, h === 1 ? 1 : 16), fin = h === 1 ? new Date(y, m - 1, 16) : new Date(y, m, 1);
-  return [ini, fin];
+  return h === 1 ? [new Date(y, m - 1, 2), new Date(y, m - 1, 17)] : [new Date(y, m - 1, 17), new Date(y, m, 2)];
 }
 function nombreQuincena(q){
-  const [y, m, h] = q.split("-").map(Number), ult = new Date(y, m, 0).getDate();
-  return `${h === 1 ? "1" : "16"}–${h === 1 ? "15" : ult} ${MESES[m - 1]} ${y}`;
+  const [y, m, h] = q.split("-").map(Number);
+  if(h === 1) return `2–16 ${MESES[m - 1]} ${y}`;
+  const sig = new Date(y, m, 1);
+  return sig.getFullYear() !== y ? `17 ${MESES[m - 1]} ${y} – 1 ${MESES[sig.getMonth()]} ${sig.getFullYear()}` : `17 ${MESES[m - 1]} – 1 ${MESES[sig.getMonth()]} ${y}`;
 }
-// Días de pago (decisión de Camilo): la quincena del 1 al 15 se paga el 17; la del 16 al fin de mes, el 2 del mes siguiente.
+// Días de pago: la quincena del 2 al 16 se paga el 17; la del 17 al 1, el 2.
 function fechaPago(q){ const [y, m, h] = q.split("-").map(Number); return h === 1 ? new Date(y, m - 1, 17) : new Date(y, m, 2); }
 const textoFecha = d => `${d.getDate()} ${MESES[d.getMonth()]}`;
-// La quincena que toca pagar ahora: del 3 al 17 → la del 1–15; del 18 al 2 → la del 16–fin.
+// La quincena que toca pagar ahora: del 3 al 17 → la del 2–16; del 18 al 2 → la del 17–1.
 function quincenaAPagar(hoyD){
   const d = hoyD || new Date(), dia = d.getDate();
   if(dia <= 2){ const p = new Date(d.getFullYear(), d.getMonth(), 0); return `${p.getFullYear()}-${pad2(p.getMonth()+1)}-2`; }

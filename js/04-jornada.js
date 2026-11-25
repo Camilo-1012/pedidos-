@@ -290,19 +290,26 @@ const rutaMin = x => x.duracionRutaMin != null ? x.duracionRutaMin : x.minutos; 
 // Nombre de hoja por jornada: la fecha (si hay dos jornadas el mismo día, la segunda queda «(2)»).
 const hojaFecha = t => fechaLarga(t).replace(/\//g, "-");
 /* ---- Excel de jornadas (v2.49: presentación de empresa y división por quincena) ----
-   Quincenas de pago: del 1 al 15 se paga el 17 del mismo mes; del 16 al fin de mes se paga el 2 del mes siguiente.
+   Quincenas de pago: del 2 al 16 se paga el 17; del 17 al 1 del mes siguiente se paga el 2.
    Todo en pesos con formato «$ 1.600»; cada día conserva el valor por pedido que tenía. */
 const DIAS_SEM = ["domingo","lunes","martes","miércoles","jueves","viernes","sábado"];
 const MES_CORTO = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
 const fechaDe = f => new Date(f + "T12:00:00");                          // "AAAA-MM-DD" → fecha (mediodía, sin líos de zona)
 const dmy = f => f.slice(8,10) + "/" + f.slice(5,7) + "/" + f.slice(0,4);
+// Quincenas (decisión de Camilo): del 2 al 16 (se paga el 17) y del 17 al 1 del mes siguiente (se paga el 2).
+// Clave «AAAA-MM-1» = 2 al 16 de ese mes; «AAAA-MM-2» = 17 de ese mes al 1 del siguiente. El día 1 es del mes anterior.
 function quincenaDe(f){                                               // f: "AAAA-MM-DD"
-  const y = +f.slice(0,4), m = +f.slice(5,7), d = +f.slice(8,10), q = d <= 15 ? 1 : 2;
-  const ultimo = new Date(y, m, 0).getDate();
-  const ini = f.slice(0,8) + (q === 1 ? "01" : "16"), fin = f.slice(0,8) + (q === 1 ? "15" : String(ultimo));
-  const pago = q === 1 ? new Date(y, m-1, 17) : new Date(y, m, 2);
-  return {k: f.slice(0,7) + "-" + q, q, ini, fin, pago: ymd(pago),
-    nombre: `${q === 1 ? "1" : "16"}–${q === 1 ? 15 : ultimo} ${MES_CORTO[m-1]} ${y}`};
+  let y = +f.slice(0,4), m = +f.slice(5,7);
+  const d = +f.slice(8,10);
+  if(d === 1){ m--; if(m === 0){ m = 12; y--; } }
+  const q = d >= 2 && d <= 16 ? 1 : 2, mm = String(m).padStart(2,"0");
+  const sig = new Date(y, m, 1);                                       // primer día del mes siguiente
+  const ini = `${y}-${mm}-${q === 1 ? "02" : "17"}`, fin = q === 1 ? `${y}-${mm}-16` : ymd(sig);
+  const pago = q === 1 ? `${y}-${mm}-17` : ymd(new Date(y, m, 2));
+  const cruza = sig.getFullYear() !== y;
+  const nombre = q === 1 ? `2–16 ${MES_CORTO[m-1]} ${y}`
+    : cruza ? `17 ${MES_CORTO[m-1]} ${y} – 1 ${MES_CORTO[sig.getMonth()]} ${sig.getFullYear()}` : `17 ${MES_CORTO[m-1]} – 1 ${MES_CORTO[sig.getMonth()]} ${y}`;
+  return {k: `${y}-${mm}-${q}`, q, ini, fin, pago, nombre};
 }
 const quincenaTxt = qz => `${qz.nombre} · se paga el ${dmy(qz.pago)}`;
 const repartidor = () => (window.RUTA_USER && window.RUTA_USER.name) || (typeof USER !== "undefined" && USER.name) || "";
@@ -363,7 +370,7 @@ function hojaResumen(nombre, titulo, js, extra){
   const r = filasResumen(js);
   const desde = js.length ? dmy(js[0].f) : "", hasta = js.length ? dmy(js[js.length-1].f) : "";
   return hojaPro(nombre, titulo, [repartidor() && "Repartidor: " + repartidor(), `Periodo: ${desde} a ${hasta} · ${js.length} jornada(s)`,
-    "Valor = pedidos entregados × valor por pedido del día. Los no entregados no se pagan. Quincenas: 1–15 se paga el 17; 16–fin de mes se paga el 2.",
+    "Valor = pedidos entregados × valor por pedido del día. Los no entregados no se pagan. Quincenas: del 2 al 16 se paga el 17; del 17 al 1 se paga el 2.",
     extra, "Generado: " + generado()], RES_TIT, r.cuerpo, r.total, RES_ANCHOS);
 }
 
@@ -381,7 +388,7 @@ function hojaQuincenas(dias){                                           // dias:
     {v: efect(s("ent"), s("no")), s:"totpct"}, totCop(s("val"))];
   const actual = quincenaDe(hoy);
   return hojaPro("Quincenas", "Pedidos por quincena de pago", [repartidor() && "Repartidor: " + repartidor(),
-    "Del 1 al 15 se paga el 17 del mismo mes · del 16 al fin de mes se paga el 2 del mes siguiente.",
+    "Del 2 al 16 se paga el 17 · del 17 al 1 del mes siguiente se paga el 2.",
     `Quincena actual: ${quincenaTxt(actual)}.`, "«Estado»: en curso (aún se trabaja), por pagar (cerrada, falta la fecha de pago) o cumplida (ya pasó la fecha de pago).",
     "Generado: " + generado()], QZ_TIT, cuerpo, total, QZ_ANCHOS);
 }
@@ -469,7 +476,7 @@ function acumPeriodos(){
   const now = new Date(), hoy = ymd(now);
   const lunes = new Date(now); lunes.setHours(0,0,0,0); lunes.setDate(lunes.getDate() - ((lunes.getDay()+6)%7));
   const semana = ymd(lunes), mes = hoy.slice(0,7), mesAnt = ymd(new Date(now.getFullYear(), now.getMonth()-1, 1)).slice(0,7);
-  // v2.49: quincenas de pago (1–15 se paga el 17; 16–fin se paga el 2).
+  // v2.49: quincenas de pago (2–16 se paga el 17; 17–1 se paga el 2).
   const qa = quincenaDe(hoy), qp = quincenaDe(ymd(fechaDe(qa.ini).getTime() - 864e5));
   return [["Hoy", acumSum(d=>d.f===hoy)], ["Esta semana", acumSum(d=>d.f>=semana)],
           ["Esta quincena", acumSum(d=>d.f>=qa.ini && d.f<=qa.fin), `${qa.nombre} · pago ${dmy(qa.pago)}`],
@@ -524,17 +531,17 @@ document.getElementById("pyCsv").onclick = ()=>{
     [tot("TOTAL"), tot(t.dias), tot(t.p), tot(t.n), totCop(t.v)], [22,12,13,13,15]);
   const hojas = meses.map(([m])=>{
     const dias = a.filter(d=>d.f.startsWith(m)), cuerpo = [];
-    for(const q of [1, 2]){
-      const dq = dias.filter(d=>quincenaDe(d.f).q === q); if(!dq.length) continue;
-      const qz = quincenaDe(dq[0].f);
+    for(const k of [...new Set(dias.map(d=>quincenaDe(d.f).k))]){
+      const dq = dias.filter(d=>quincenaDe(d.f).k === k);
+      const qz = quincenaDe(dq[0].f), parcial = !(qz.ini.startsWith(m) && qz.fin.startsWith(m)) ? " (días de este mes)" : "";
       for(const d of dq) cuerpo.push([centro(dmy(d.f)), diaSem(d.f), d.p, d.n||0, cop$(d.t ?? tarifa()), cop$(vd(d))]);
-      cuerpo.push([subTxt("Subtotal quincena " + qz.nombre), subTxt("Pago " + dmy(qz.pago)), subNum(dq.reduce((x,d)=>x+d.p,0)), subNum(dq.reduce((x,d)=>x+(d.n||0),0)), subTxt(""), subCop(dq.reduce((x,d)=>x+vd(d),0))]);
+      cuerpo.push([subTxt("Subtotal quincena " + qz.nombre + parcial), subTxt("Pago " + dmy(qz.pago)), subNum(dq.reduce((x,d)=>x+d.p,0)), subNum(dq.reduce((x,d)=>x+(d.n||0),0)), subTxt(""), subCop(dq.reduce((x,d)=>x+vd(d),0))]);
     }
     const s = acumSum(d=>d.f.startsWith(m));
     return hojaPro(nombreMes(m), "Pagos de " + nombreMes(m), [repartidor() && "Repartidor: " + repartidor(),
-      "Del 1 al 15 se paga el 17 · del 16 al fin de mes se paga el 2 del mes siguiente."],
+      "Del 2 al 16 se paga el 17 · del 17 al 1 del mes siguiente se paga el 2. El día 1 cuenta en la quincena del mes anterior."],
       ["Fecha","Día","Pedidos entregados","Pedidos no entregados","Valor por pedido","Valor"], cuerpo,
-      [tot("TOTAL DEL MES"), tot(s.dias + " día(s)"), tot(s.p), tot(s.n), tot(""), totCop(s.v)], [26,14,13,13,14,15]);
+      [tot("TOTAL DEL MES"), tot(s.dias + " día(s)"), tot(s.p), tot(s.n), tot(""), totCop(s.v)], [44,15,13,13,14,15]);
   });
   descargarXlsx([quin, porMes, ...hojas], "pagos-quincenas-" + ymd(Date.now()) + ".xlsx");
   toast("Excel de pagos descargado: Quincenas, Por mes y una hoja por cada mes.");
