@@ -289,84 +289,161 @@ const hmm = min => min==null || isNaN(min) ? "" : `${Math.floor(min/60)}:${Strin
 const rutaMin = x => x.duracionRutaMin != null ? x.duracionRutaMin : x.minutos;   // jornadas viejas: primera → última entrega
 // Nombre de hoja por jornada: la fecha (si hay dos jornadas el mismo día, la segunda queda «(2)»).
 const hojaFecha = t => fechaLarga(t).replace(/\//g, "-");
-const PED_COLS = ["Fecha","Salida a ruta","Primera entrega","Última entrega","Duración de la ruta (h:mm)","Guía (número de pedido)","Dirección","Inmueble","Estado","Hora","Paquetes","Acumulado entregados","Tiempo desde la salida (h:mm)","Valor ($)","Valor acumulado ($)"];
-const PED_ANCHOS = [12,10,10,10,12,22,30,22,13,8,9,11,12,10,12];
-// Filas de una jornada (pedido por pedido, con acumulado) y su total.
-function filasJornada(x){
-  const ini = x.salida || x.inicio, vp = valorDia(x.id);
-  const base = [fechaLarga(x.inicio), x.salida ? hhmm(x.salida) : "", hhmm(x.inicio), hhmm(x.fin), hmm(rutaMin(x))];
+/* ---- Excel de jornadas (v2.49: presentación de empresa y división por quincena) ----
+   Quincenas de pago: del 1 al 15 se paga el 17 del mismo mes; del 16 al fin de mes se paga el 2 del mes siguiente.
+   Todo en pesos con formato «$ 1.600»; cada día conserva el valor por pedido que tenía. */
+const DIAS_SEM = ["domingo","lunes","martes","miércoles","jueves","viernes","sábado"];
+const MES_CORTO = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
+const fechaDe = f => new Date(f + "T12:00:00");                          // "AAAA-MM-DD" → fecha (mediodía, sin líos de zona)
+const dmy = f => f.slice(8,10) + "/" + f.slice(5,7) + "/" + f.slice(0,4);
+function quincenaDe(f){                                               // f: "AAAA-MM-DD"
+  const y = +f.slice(0,4), m = +f.slice(5,7), d = +f.slice(8,10), q = d <= 15 ? 1 : 2;
+  const ultimo = new Date(y, m, 0).getDate();
+  const ini = f.slice(0,8) + (q === 1 ? "01" : "16"), fin = f.slice(0,8) + (q === 1 ? "15" : String(ultimo));
+  const pago = q === 1 ? new Date(y, m-1, 17) : new Date(y, m, 2);
+  return {k: f.slice(0,7) + "-" + q, q, ini, fin, pago: ymd(pago),
+    nombre: `${q === 1 ? "1" : "16"}–${q === 1 ? 15 : ultimo} ${MES_CORTO[m-1]} ${y}`};
+}
+const quincenaTxt = qz => `${qz.nombre} · se paga el ${dmy(qz.pago)}`;
+const repartidor = () => (window.RUTA_USER && window.RUTA_USER.name) || (typeof USER !== "undefined" && USER.name) || "";
+const generado = () => { const d = new Date(); return `${dmy(ymd(d))} ${hhmm(d.getTime())}`; };
+// Encabezado común: título, líneas de contexto y una fila en blanco. Devuelve las filas y cuántas son.
+function encabezado(titulo, lineas, ncol){
+  const filas = [[{v: titulo, s:"titulo"}], ...lineas.filter(Boolean).map(l=>[{v: l, s:"sub"}]), []];
+  const unir = filas.slice(0, -1).map((_, i)=>`A${i+1}:${xlCol(Math.max(0, ncol-1))}${i+1}`);
+  return {filas, unir};
+}
+// Arma una hoja con encabezado + tabla: cab (títulos de columna), cuerpo (filas) y opcionalmente total.
+function hojaPro(nombre, titulo, lineas, cols, cuerpo, total, anchos){
+  const e = encabezado(titulo, lineas, cols.length);
+  const cab = e.filas.length;
+  const filas = [...e.filas, cols.map(c=>({v: c, s:"cab"})), ...cuerpo];
+  const filtro = filas.length - 1;
+  if(total) filas.push(total);
+  return {nombre, pro: true, cab, filtro, unir: e.unir, filas, anchos};
+}
+const efect = (e, n) => e + n ? Math.round(100 * e / (e + n)) / 100 : "";
+const tot = v => ({v, s: typeof v === "number" ? "totnum" : "tot"}), totCop = v => ({v: Math.round(v||0), s:"totcop"});
+const cop$ = v => ({v: Math.round(v||0), s:"cop"}), pct = v => v === "" ? "" : {v, s:"pct"}, centro = v => v === "" || v == null ? "" : {v, s:"centro"};
+const subTxt = v => ({v, s:"sec"}), subNum = v => ({v, s:"secnum"}), subCop = v => ({v: Math.round(v||0), s:"seccop"});
+const diaSem = f => DIAS_SEM[fechaDe(f).getDay()];
+// Datos de una jornada para las tablas.
+function datosJornada(x){
+  const f = ymd(x.inicio), vp = valorDia(x.id);
   const peds = x.pedidos && x.pedidos.length ? x.pedidos : null;
-  if(!peds){
-    const q = x.paquetes||0;
-    return {filas: [base.concat(["(jornada sin detalle por pedido)","","","","",q,"","",q*vp,q*vp])], ent: q, no: 0, ped: q, min: rutaMin(x)||0, val: q*vp};
-  }
-  // Acumulado: se suma cada paquete entregado en orden de hora, para ver cómo avanzó la ruta.
-  let acum = 0, ent = 0, no = 0, pend = 0;
-  const filas = [];
-  for(const pd of peds){
-    const q = pd.q||1;
-    if(pd.e==="Entregado"){ acum += q; ent += q; } else if(pd.e==="No entregado") no += q; else pend += q;
-    filas.push(base.concat([pd.g || "(sin guía)", pd.d||"", pd.u||"", pd.e, pd.h ? hhmm(pd.h) : "", q,
-      pd.e==="Entregado" ? acum : "", pd.h ? hmm((pd.h - ini)/60000) : "", pd.e==="Entregado" ? q*vp : "", pd.e==="Entregado" ? acum*vp : ""]));
-  }
-  // Total del día: pedidos entregados, no entregados, pendientes y cuánto se demoró la ruta.
-  filas.push([fechaLarga(x.inicio), x.salida ? hhmm(x.salida) : "", hhmm(x.inicio), hhmm(x.fin), hmm(rutaMin(x)),
-    {v:"TOTAL DEL DÍA", b:true}, {v:`${ent} pedido(s) entregado(s) de ${ent+no+pend}${no?` · ${no} no entregado(s)`:""}${pend?` · ${pend} pendiente(s)`:""}`, b:true}, "", "", "",
-    {v:ent+no+pend, b:true}, {v:ent, b:true}, hmm(rutaMin(x)), {v:ent*vp, b:true}, {v:ent*vp, b:true}]);
-  return {filas, ent, no, ped: ent+no+pend, min: rutaMin(x)||0, val: ent*vp};
+  let ent = 0, no = 0, pend = 0;
+  if(peds) for(const pd of peds){ const q = pd.q||1; if(pd.e === "Entregado") ent += q; else if(pd.e === "No entregado") no += q; else pend += q; }
+  else ent = x.paquetes||0;
+  const min = rutaMin(x)||0;
+  return {x, f, vp, peds, ent, no, pend, min, val: ent*vp, porHora: min > 0 ? Math.round(10*ent/(min/60))/10 : ""};
 }
-// Resumen por día: una fila por jornada.
-const RES_COLS = [["fecha","Fecha"],["paquetes","Pedidos entregados"],["paqNoEntregados","Pedidos no entregados"],["entregas","Direcciones entregadas"],["noEntregadas","Direcciones no entregadas"],
-  ["pendientes","Pendientes"],["salida","Salida a ruta"],["inicio","Primera entrega"],["fin","Última entrega"],["duracion","Duración de la ruta (h:mm)"],["minutos","Minutos (1.ª a última entrega)"],["promEntreEntregas","Min. entre entregas"],
-  ["kmEstimados","Km estimados"],["manejoEstMin","Manejo estimado (min)"],["realMin","Tiempo real (min)"],["minPorParada","Min. extra por parada"],
-  ["ahorroKm","Ahorro km"],["ahorroMin","Ahorro min"],["callesReales","Calles reales"],["valorPaq","Valor por pedido ($)"],["valor","Valor del día ($)"]];
-function filaResumen(x){
-  return RES_COLS.map(([k])=>{
-    if(k==="fecha") return fechaLarga(x.inicio);
-    if(k==="duracion") return hmm(rutaMin(x));
-    if(k==="valorPaq") return valorDia(x.id);
-    if(k==="valor") return (x.paquetes||0)*valorDia(x.id);
-    const v = x[k];
-    if(v==null) return "";
-    if(k==="inicio"||k==="fin"||k==="salida") return hhmm(v);
-    if(typeof v==="boolean") return v ? "Sí" : "No";
-    return typeof v==="number" ? Math.round(v*100)/100 : String(v);
+
+// Hoja «Resumen» (y la de cada mes): una fila por jornada, con subtotal de cada quincena y total.
+const RES_TIT = ["Fecha","Día","Salida a ruta","Primera entrega","Última entrega","Duración (h:mm)","Pedidos entregados","No entregados","Pendientes","Efectividad","Pedidos por hora","Valor por pedido","Valor del día"];
+const RES_ANCHOS = [12,11,11,11,11,11,11,11,10,11,10,12,14];
+function filasResumen(js){
+  const cuerpo = []; let grupo = null, acc = null;
+  const cerrar = ()=>{ if(!grupo) return;
+    cuerpo.push([subTxt("Subtotal quincena " + quincenaTxt(grupo)), subTxt(""), subTxt(""), subTxt(""), subTxt(""), subTxt(acc.dias + " día(s)"),
+      subNum(acc.ent), subNum(acc.no), subNum(acc.pend), {v: efect(acc.ent, acc.no), s:"secpct"}, subTxt(""), subTxt(""), subCop(acc.val)]); };
+  for(const d of js){
+    const qz = quincenaDe(d.f);
+    if(!grupo || grupo.k !== qz.k){ cerrar(); grupo = qz; acc = {dias:0, ent:0, no:0, pend:0, val:0}; }
+    acc.dias++; acc.ent += d.ent; acc.no += d.no; acc.pend += d.pend; acc.val += d.val;
+    cuerpo.push([centro(dmy(d.f)), diaSem(d.f), centro(d.x.salida ? hhmm(d.x.salida) : ""), centro(hhmm(d.x.inicio)), centro(hhmm(d.x.fin)), centro(hmm(d.min)),
+      d.ent, d.no, d.pend, pct(efect(d.ent, d.no)), d.porHora, cop$(d.vp), cop$(d.val)]);
+  }
+  cerrar();
+  const s = k => js.reduce((a, d)=>a + d[k], 0), e = s("ent"), n = s("no");
+  const total = [tot("TOTAL"), tot(js.length + " jornada(s)"), tot(""), tot(""), tot(""), tot(hmm(s("min"))), tot(e), tot(n), tot(s("pend")),
+    {v: efect(e, n), s:"totpct"}, tot(""), tot(""), totCop(s("val"))];
+  return {cuerpo, total};
+}
+function hojaResumen(nombre, titulo, js, extra){
+  const r = filasResumen(js);
+  const desde = js.length ? dmy(js[0].f) : "", hasta = js.length ? dmy(js[js.length-1].f) : "";
+  return hojaPro(nombre, titulo, [repartidor() && "Repartidor: " + repartidor(), `Periodo: ${desde} a ${hasta} · ${js.length} jornada(s)`,
+    "Valor = pedidos entregados × valor por pedido del día. Los no entregados no se pagan. Quincenas: 1–15 se paga el 17; 16–fin de mes se paga el 2.",
+    extra, "Generado: " + generado()], RES_TIT, r.cuerpo, r.total, RES_ANCHOS);
+}
+
+// Hoja «Quincenas»: lo que se lleva en cada quincena de pago. Sirve con el historial (js) o con el acumulado (dias).
+const QZ_TIT = ["Quincena","Desde","Hasta","Fecha de pago","Estado","Días trabajados","Pedidos entregados","No entregados","Efectividad","Valor a pagar"];
+const QZ_ANCHOS = [26,11,11,13,12,11,12,11,11,15];
+function hojaQuincenas(dias){                                           // dias: [{f, ent, no, val}]
+  const hoy = ymd(Date.now()), g = new Map();
+  for(const d of dias){ const qz = quincenaDe(d.f); if(!g.has(qz.k)) g.set(qz.k, {qz, dias:0, ent:0, no:0, val:0}); const a = g.get(qz.k); if(d.ent > 0 || d.no > 0) a.dias++; a.ent += d.ent; a.no += d.no; a.val += d.val; }
+  const lista = [...g.values()].sort((a, b)=>a.qz.k < b.qz.k ? 1 : -1);   // la más reciente primero
+  const estado = qz => hoy <= qz.fin ? "En curso" : hoy < qz.pago ? "Por pagar" : "Cumplida";
+  const cuerpo = lista.map(a=>[a.qz.nombre, centro(dmy(a.qz.ini)), centro(dmy(a.qz.fin)), centro(dmy(a.qz.pago)), centro(estado(a.qz)), a.dias, a.ent, a.no, pct(efect(a.ent, a.no)), cop$(a.val)]);
+  const s = k => lista.reduce((x, a)=>x + a[k], 0);
+  const total = [tot("TOTAL"), tot(""), tot(""), tot(""), tot(lista.length + " quincena(s)"), tot(s("dias")), tot(s("ent")), tot(s("no")),
+    {v: efect(s("ent"), s("no")), s:"totpct"}, totCop(s("val"))];
+  const actual = quincenaDe(hoy);
+  return hojaPro("Quincenas", "Pedidos por quincena de pago", [repartidor() && "Repartidor: " + repartidor(),
+    "Del 1 al 15 se paga el 17 del mismo mes · del 16 al fin de mes se paga el 2 del mes siguiente.",
+    `Quincena actual: ${quincenaTxt(actual)}.`, "«Estado»: en curso (aún se trabaja), por pagar (cerrada, falta la fecha de pago) o cumplida (ya pasó la fecha de pago).",
+    "Generado: " + generado()], QZ_TIT, cuerpo, total, QZ_ANCHOS);
+}
+
+// Hoja de una jornada: pedido por pedido en el orden en que se entregó, con acumulado y total del día.
+const PED_TIT = ["#","Hora","Guía (número de pedido)","Dirección","Inmueble","Estado","Paquetes","Acumulado entregados","Tiempo desde la salida (h:mm)","Valor ($)","Valor acumulado ($)"];
+const PED_ANCHOS = [5,9,22,30,18,13,9,11,12,12,13];
+function hojaJornada(d){
+  const x = d.x, ini = x.salida || x.inicio, qz = quincenaDe(d.f);
+  const cuerpo = []; let acum = 0;
+  if(d.peds) d.peds.forEach((pd, i)=>{
+    const q = pd.q||1, ok = pd.e === "Entregado"; if(ok) acum += q;
+    cuerpo.push([centro(i+1), centro(pd.h ? hhmm(pd.h) : ""), pd.g || "(sin guía)", pd.d||"", pd.u||"", centro(pd.e), q,
+      ok ? acum : "", centro(pd.h ? hmm((pd.h - ini)/60000) : ""), ok ? cop$(q*d.vp) : "", ok ? cop$(acum*d.vp) : ""]);
   });
+  else cuerpo.push(["", "", "(jornada sin detalle por pedido)", "", "", "", d.ent, d.ent, "", cop$(d.val), cop$(d.val)]);
+  const total = [tot(""), tot(""), tot("TOTAL DEL DÍA"), tot(`${d.ent} entregado(s) de ${d.ent + d.no + d.pend}${d.no ? ` · ${d.no} no entregado(s)` : ""}${d.pend ? ` · ${d.pend} pendiente(s)` : ""}`),
+    tot(""), tot(""), tot(d.ent + d.no + d.pend), tot(d.ent), tot(hmm(d.min)), totCop(d.val), totCop(d.val)];
+  const fl = diaSem(d.f); 
+  return hojaPro(hojaFecha(x.inicio), `Jornada del ${fl} ${dmy(d.f)}`, [repartidor() && "Repartidor: " + repartidor(),
+    `Salida a ruta ${x.salida ? hhmm(x.salida) : "—"} · primera entrega ${hhmm(x.inicio)} · última entrega ${hhmm(x.fin)} · duración ${hmm(d.min) || "—"}`,
+    `Pedidos entregados ${d.ent} · no entregados ${d.no}${d.pend ? ` · pendientes ${d.pend}` : ""} · efectividad ${d.ent + d.no ? Math.round(100*d.ent/(d.ent+d.no)) + " %" : "—"} · valor del día ${cop(d.val)} (${cop(d.vp)} por pedido)`,
+    "Quincena " + quincenaTxt(qz)], PED_TIT, cuerpo, total, PED_ANCHOS);
 }
-function totalResumen(h){
-  const sum = k => h.reduce((a,x)=>a+(+x[k]||0),0);
-  return RES_COLS.map(([k])=>k==="fecha" ? {v:"TOTAL", b:true} : ["entregas","paquetes","noEntregadas","paqNoEntregados"].includes(k) ? {v:sum(k), b:true}
-    : k==="duracion" ? {v:hmm(h.reduce((a,x)=>a+(rutaMin(x)||0),0)), b:true} : k==="valor" ? {v:h.reduce((a,x)=>a+(x.paquetes||0)*valorDia(x.id),0), b:true} : "");
-}
-const RES_ANCHOS = RES_COLS.map((c,i)=>i===0 ? 12 : 13);
-// Excel por pedido: hoja «Global» (todas las jornadas), hoja «Resumen» y una hoja por cada jornada.
-function excelPedidos(){
-  const h = histLoad();
-  const global = [PED_COLS.slice()], porDia = [];
-  let totEnt = 0, totNo = 0, totPed = 0, totMin = 0, totVal = 0;
-  for(const x of h){
-    const j = filasJornada(x);
-    global.push(...j.filas, []);
-    porDia.push({nombre: hojaFecha(x.inicio), filas: [PED_COLS.slice(), ...j.filas], anchos: PED_ANCHOS});
-    totEnt += j.ent; totNo += j.no; totPed += j.ped; totMin += j.min; totVal += j.val;
+// Hoja «Todos los pedidos»: una fila por pedido, con fecha y quincena para filtrar.
+const TODOS_TIT = ["Fecha","Quincena","Hora","Guía (número de pedido)","Dirección","Inmueble","Estado","Paquetes","Valor ($)"];
+function hojaTodos(js){
+  const cuerpo = []; let e = 0, n = 0, v = 0;
+  for(const d of js){
+    const qz = quincenaDe(d.f).nombre;
+    if(d.peds) for(const pd of d.peds){ const q = pd.q||1, ok = pd.e === "Entregado"; if(ok){ e += q; v += q*d.vp; } else if(pd.e === "No entregado") n += q;
+      cuerpo.push([centro(dmy(d.f)), qz, centro(pd.h ? hhmm(pd.h) : ""), pd.g || "(sin guía)", pd.d||"", pd.u||"", centro(pd.e), q, ok ? cop$(q*d.vp) : ""]); }
+    else { e += d.ent; v += d.val; cuerpo.push([centro(dmy(d.f)), qz, "", "(jornada sin detalle por pedido)", "", "", centro("Entregado"), d.ent, cop$(d.val)]); }
   }
-  global.push([{v:"TOTAL GENERAL", b:true}, "", "", "", {v:hmm(totMin), b:true}, {v:`${h.length} jornada(s)`, b:true},
-    {v:`${totEnt} pedido(s) entregado(s)${totNo?` · ${totNo} no entregado(s)`:""}`, b:true}, "", "", "", {v:totPed||totEnt, b:true}, {v:totEnt, b:true}, {v:hmm(totMin), b:true}, {v:totVal, b:true}, {v:totVal, b:true}]);
-  const resumen = [RES_COLS.map(c=>c[1]), ...h.map(filaResumen)];
-  if(h.length > 1) resumen.push(totalResumen(h));
-  descargarXlsx([{nombre:"Global", filas: global, anchos: PED_ANCHOS}, {nombre:"Resumen", filas: resumen, anchos: RES_ANCHOS}, ...porDia],
-    "pedidos-por-jornada-" + ymd(Date.now()) + ".xlsx");
-  toast(`Excel descargado: hoja Global, Resumen y ${porDia.length} hoja(s), una por día.`);
+  const total = [tot("TOTAL"), tot(js.length + " jornada(s)"), tot(""), tot(`${e} entregado(s)${n ? ` · ${n} no entregado(s)` : ""}`), tot(""), tot(""), tot(""), tot(e + n), totCop(v)];
+  return hojaPro("Todos los pedidos", "Todos los pedidos", [repartidor() && "Repartidor: " + repartidor(),
+    "Use los filtros del encabezado para ver una fecha, una quincena o un estado.", "Generado: " + generado()], TODOS_TIT, cuerpo, total, [12,20,9,22,30,18,13,9,12]);
 }
-// Excel resumen: hoja «Resumen» (todas las jornadas) y una hoja por mes.
+// Hoja «Datos de la ruta»: las cifras técnicas de cada jornada (antes estaban mezcladas con el resumen).
+const TEC_COLS = [["entregas","Direcciones entregadas"],["noEntregadas","Direcciones no entregadas"],["minutos","Minutos (1.ª a última entrega)"],["promEntreEntregas","Min. entre entregas"],
+  ["kmEstimados","Km estimados"],["manejoEstMin","Manejo estimado (min)"],["realMin","Tiempo real (min)"],["minPorParada","Min. extra por parada"],["ahorroKm","Ahorro km"],["ahorroMin","Ahorro min"],["callesReales","Calles reales"]];
+function hojaTecnica(js){
+  const cuerpo = js.map(d=>[centro(dmy(d.f)), ...TEC_COLS.map(([k])=>{ const v = d.x[k]; if(v == null) return ""; if(typeof v === "boolean") return centro(v ? "Sí" : "No"); return typeof v === "number" ? Math.round(v*100)/100 : String(v); })]);
+  return hojaPro("Datos de la ruta", "Datos de la ruta por jornada", ["Cifras de apoyo del cálculo de la ruta (distancias y tiempos estimados). No afectan el pago.", "Generado: " + generado()],
+    ["Fecha", ...TEC_COLS.map(c=>c[1])], cuerpo, null, [12, ...TEC_COLS.map(()=>12)]);
+}
+const jornadasDatos = () => histLoad().slice().sort((a, b)=>a.inicio - b.inicio).map(datosJornada);
+// Excel por pedido: Resumen (con quincenas), Quincenas, Todos los pedidos y una hoja por jornada.
+function excelPedidos(){
+  const js = jornadasDatos();
+  descargarXlsx([hojaResumen("Resumen", "Resumen de jornadas", js), hojaQuincenas(js.map(d=>({f: d.f, ent: d.ent, no: d.no, val: d.val}))), hojaTodos(js), ...js.map(hojaJornada)],
+    "pedidos-por-jornada-" + ymd(Date.now()) + ".xlsx");
+  toast(`Excel descargado: Resumen, Quincenas, Todos los pedidos y ${js.length} hoja(s), una por día.`);
+}
+// Excel resumen: Resumen (con quincenas), Quincenas, una hoja por mes y Datos de la ruta.
 function excelResumen(){
-  const h = histLoad();
-  const resumen = [RES_COLS.map(c=>c[1]), ...h.map(filaResumen)];
-  if(h.length > 1) resumen.push(totalResumen(h));
-  const meses = [...new Set(h.map(x=>ymd(x.inicio).slice(0,7)))].sort();
-  const hojasMes = meses.map(m=>{ const dm = h.filter(x=>ymd(x.inicio).startsWith(m)); return {nombre: nombreMes(m), filas: [RES_COLS.map(c=>c[1]), ...dm.map(filaResumen), totalResumen(dm)], anchos: RES_ANCHOS}; });
-  descargarXlsx([{nombre:"Resumen", filas: resumen, anchos: RES_ANCHOS}, ...hojasMes], "resumen-jornadas-" + ymd(Date.now()) + ".xlsx");
-  toast(`Excel resumen descargado: hoja Resumen y ${hojasMes.length} hoja(s), una por mes.`);
+  const js = jornadasDatos();
+  const meses = [...new Set(js.map(d=>d.f.slice(0,7)))].sort();
+  const hojasMes = meses.map(m=>hojaResumen(nombreMes(m), "Jornadas de " + nombreMes(m), js.filter(d=>d.f.startsWith(m))));
+  descargarXlsx([hojaResumen("Resumen", "Resumen de jornadas", js), hojaQuincenas(js.map(d=>({f: d.f, ent: d.ent, no: d.no, val: d.val}))), ...hojasMes, hojaTecnica(js)],
+    "resumen-jornadas-" + ymd(Date.now()) + ".xlsx");
+  toast(`Excel resumen descargado: Resumen, Quincenas, ${hojasMes.length} hoja(s) por mes y Datos de la ruta.`);
 }
 
 /* ---- Acumulado general y pagos ----
@@ -392,7 +469,12 @@ function acumPeriodos(){
   const now = new Date(), hoy = ymd(now);
   const lunes = new Date(now); lunes.setHours(0,0,0,0); lunes.setDate(lunes.getDate() - ((lunes.getDay()+6)%7));
   const semana = ymd(lunes), mes = hoy.slice(0,7), mesAnt = ymd(new Date(now.getFullYear(), now.getMonth()-1, 1)).slice(0,7);
-  return [["Hoy", acumSum(d=>d.f===hoy)], ["Esta semana", acumSum(d=>d.f>=semana)], ["Este mes", acumSum(d=>d.f.startsWith(mes))],
+  // v2.49: quincenas de pago (1–15 se paga el 17; 16–fin se paga el 2).
+  const qa = quincenaDe(hoy), qp = quincenaDe(ymd(fechaDe(qa.ini).getTime() - 864e5));
+  return [["Hoy", acumSum(d=>d.f===hoy)], ["Esta semana", acumSum(d=>d.f>=semana)],
+          ["Esta quincena", acumSum(d=>d.f>=qa.ini && d.f<=qa.fin), `${qa.nombre} · pago ${dmy(qa.pago)}`],
+          ["Quincena anterior", acumSum(d=>d.f>=qp.ini && d.f<=qp.fin), `${qp.nombre} · pago ${dmy(qp.pago)}`],
+          ["Este mes", acumSum(d=>d.f.startsWith(mes))],
           ["Mes anterior", acumSum(d=>d.f.startsWith(mesAnt))], ["Total general", acumSum(()=>true)]];
 }
 const MESES = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
@@ -401,13 +483,20 @@ function acumMeses(){
   const ms = [...new Set(Object.values(acumLoad()).map(d=>d.f.slice(0,7)))].sort().reverse();
   return ms.map(m=>[m, acumSum(d=>d.f.startsWith(m))]);
 }
+// Quincenas con entregas (la más reciente primero): [quincena, suma].
+function acumQuincenas(){
+  const ks = new Map(); for(const d of Object.values(acumLoad())){ const qz = quincenaDe(d.f); ks.set(qz.k, qz); }
+  return [...ks.values()].sort((a, b)=>a.k < b.k ? 1 : -1).map(qz=>[qz, acumSum(d=>d.f>=qz.ini && d.f<=qz.fin)]);
+}
 function renderPay(){
   if(document.activeElement !== $("pyRate")) $("pyRate").value = tarifa();
   $("pyFormula").textContent = `Valor = pedidos entregados × ${cop(tarifa())}. Cada pedido cuenta por separado, aunque vayan varios a la misma dirección. Los no entregados no suman. Cada día guarda el valor por pedido que tenía ese día.`;
   const head = `<div class="pr" role="row"><span>Periodo</span><span>Entregados</span><span>No entreg.</span><span>Valor</span></div>`;
-  const row = (lbl, s, tot) => `<div class="pr${tot ? " tot" : ""}" role="row"><span>${esc(lbl)}</span><span>${s.p}</span><span>${s.n}</span><span><b>${cop(s.v)}</b></span></div>`;
+  const row = (lbl, s, tot, sub) => `<div class="pr${tot ? " tot" : ""}" role="row"><span>${esc(lbl)}${sub ? `<small>${esc(sub)}</small>` : ""}</span><span>${s.p}</span><span>${s.n}</span><span><b>${cop(s.v)}</b></span></div>`;
   const per = acumPeriodos();
-  $("pyTable").innerHTML = head + per.map(([l,s],i)=>row(l, s, i===per.length-1)).join("");
+  $("pyTable").innerHTML = head + per.map(([l,s,sub],i)=>row(l, s, i===per.length-1, sub)).join("");
+  const qs = acumQuincenas().slice(0, 8);
+  $("pyQuin").innerHTML = qs.length ? head.replace("Periodo","Quincena") + qs.map(([qz,s])=>row(qz.nombre, s, false, `pago ${dmy(qz.pago)} · ${s.dias} día(s)`)).join("") : `<div class="pr"><span>Aún no hay entregas.</span></div>`;
   const ms = acumMeses();
   $("pyMonths").innerHTML = ms.length ? head.replace("Periodo","Mes") + ms.map(([m,s])=>row(nombreMes(m) + ` · ${s.dias} día(s)`, s)).join("") : `<div class="pr"><span>Aún no hay entregas.</span></div>`;
   const dias = Object.values(acumLoad()).map(d=>d.f).sort();
@@ -421,23 +510,34 @@ document.getElementById("pyRate").addEventListener("change", e=>{
   const a = acumLoad(), hoy = ymd(Date.now()); for(const k in a) if(a[k].f === hoy) a[k].t = v; store.set(ACUM_KEY, a);
   renderPay(); renderPace(); toast(`Valor por paquete: ${cop(v)}. Aplica desde hoy.`);
 });
-// Excel de pagos: hoja «Por mes» (todos los meses) y una hoja por mes con sus días.
+// Excel de pagos (v2.49): hoja «Quincenas» (lo que se paga el 17 y el 2), «Por mes» y una hoja por mes con sus días
+// separados por quincena. Sale del acumulado, que no se borra con el historial de 90 días.
 document.getElementById("pyCsv").onclick = ()=>{
-  const cab = ["Mes","Días trabajados","Pedidos entregados","Pedidos no entregados","Valor ($)"];
-  const filas = [cab];
-  for(const [m,s] of acumMeses().reverse()) filas.push([nombreMes(m), s.dias, s.p, s.n, Math.round(s.v)]);
-  const t = acumSum(()=>true); filas.push([{v:"TOTAL",b:true}, {v:t.dias,b:true}, {v:t.p,b:true}, {v:t.n,b:true}, {v:Math.round(t.v),b:true}]);
-  const a = acumLoad();
-  const hojas = acumMeses().reverse().map(([m])=>{
-    const dias = Object.values(a).filter(d=>d.f.startsWith(m)).sort((x,y)=>x.f<y.f?-1:1);
+  const a = Object.values(acumLoad()).sort((x, y)=>x.f < y.f ? -1 : 1);
+  const vd = d => d.p * (d.t ?? tarifa());
+  const quin = hojaQuincenas(a.map(d=>({f: d.f, ent: d.p, no: d.n||0, val: vd(d)})));
+  const meses = acumMeses().reverse();
+  const t = acumSum(()=>true);
+  const porMes = hojaPro("Por mes", "Pedidos y pagos por mes", [repartidor() && "Repartidor: " + repartidor(), "Generado: " + generado()],
+    ["Mes","Días trabajados","Pedidos entregados","Pedidos no entregados","Valor ($)"],
+    meses.map(([m,s])=>[nombreMes(m), s.dias, s.p, s.n, cop$(s.v)]),
+    [tot("TOTAL"), tot(t.dias), tot(t.p), tot(t.n), totCop(t.v)], [22,12,13,13,15]);
+  const hojas = meses.map(([m])=>{
+    const dias = a.filter(d=>d.f.startsWith(m)), cuerpo = [];
+    for(const q of [1, 2]){
+      const dq = dias.filter(d=>quincenaDe(d.f).q === q); if(!dq.length) continue;
+      const qz = quincenaDe(dq[0].f);
+      for(const d of dq) cuerpo.push([centro(dmy(d.f)), diaSem(d.f), d.p, d.n||0, cop$(d.t ?? tarifa()), cop$(vd(d))]);
+      cuerpo.push([subTxt("Subtotal quincena " + qz.nombre), subTxt("Pago " + dmy(qz.pago)), subNum(dq.reduce((x,d)=>x+d.p,0)), subNum(dq.reduce((x,d)=>x+(d.n||0),0)), subTxt(""), subCop(dq.reduce((x,d)=>x+vd(d),0))]);
+    }
     const s = acumSum(d=>d.f.startsWith(m));
-    return {nombre: nombreMes(m), anchos: [12,10,10,12,12],
-      filas: [["Día","Pedidos entregados","Pedidos no entregados","Valor por pedido ($)","Valor ($)"],
-        ...dias.map(d=>[fechaLarga(new Date(d.f+"T12:00:00").getTime()), d.p, d.n||0, d.t ?? tarifa(), Math.round(d.p*(d.t ?? tarifa()))]),
-        [{v:"TOTAL",b:true}, {v:s.p,b:true}, {v:s.n,b:true}, "", {v:Math.round(s.v),b:true}]]};
+    return hojaPro(nombreMes(m), "Pagos de " + nombreMes(m), [repartidor() && "Repartidor: " + repartidor(),
+      "Del 1 al 15 se paga el 17 · del 16 al fin de mes se paga el 2 del mes siguiente."],
+      ["Fecha","Día","Pedidos entregados","Pedidos no entregados","Valor por pedido","Valor"], cuerpo,
+      [tot("TOTAL DEL MES"), tot(s.dias + " día(s)"), tot(s.p), tot(s.n), tot(""), totCop(s.v)], [26,14,13,13,14,15]);
   });
-  descargarXlsx([{nombre:"Por mes", filas, anchos:[18,10,12,12,12]}, ...hojas], "acumulado-por-mes-" + ymd(Date.now()) + ".xlsx");
-  toast("Excel de pagos descargado: hoja Por mes y una hoja por cada mes.");
+  descargarXlsx([quin, porMes, ...hojas], "pagos-quincenas-" + ymd(Date.now()) + ".xlsx");
+  toast("Excel de pagos descargado: Quincenas, Por mes y una hoja por cada mes.");
 };
 const openPay = ()=>{ renderPay(); $("dlgPay").showModal(); };
 document.getElementById("btnPay").onclick = openPay;
