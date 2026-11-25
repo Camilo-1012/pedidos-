@@ -407,10 +407,10 @@
 <dialog id="dlgApps" aria-labelledby="apTitle">
   <form method="dialog" style="display:flex;flex-direction:column;gap:12px">
     <div class="dlgHead"><h2 id="apTitle">Apps de entrega</h2><button type="submit" class="small">Listo</button></div>
-    <p class="hint" style="margin:0">Ya vienen las de Play Store para conductores de X-cargo e iMile. Si al tocar el botón se abre Play Store en vez de tu app, es otra versión: abre <b>Play Store</b>, busca tu app, toca <b>⋮ → Compartir → Copiar</b> y pega el enlace aquí.</p>
-    <label for="apXcargo">Xcargo<input id="apXcargo" autocomplete="off" placeholder="Pega el enlace de Play Store"></label>
+    <p class="hint" style="margin:0">Ya vienen configuradas X-cargo (Play Store) y la app de iMile para repartidores (Rider Delivery, instalada por APK). Si el botón no abre tu app, es otra versión: si está en <b>Play Store</b>, búscala, toca <b>⋮ → Compartir → Copiar</b> y pega el enlace aquí; si la instalaste por <b>APK</b>, escribe el nombre del paquete (com.empresa.app; lo muestra una app como «Package Name Viewer»).</p>
+    <label for="apXcargo">Xcargo<input id="apXcargo" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Enlace de Play Store o paquete"></label>
     <p class="hint" id="apXcargoOk" style="margin:-6px 0 0"></p>
-    <label for="apImile">iMile<input id="apImile" autocomplete="off" placeholder="Pega el enlace de Play Store"></label>
+    <label for="apImile">iMile<input id="apImile" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Enlace de Play Store o paquete"></label>
     <p class="hint" id="apImileOk" style="margin:-6px 0 0"></p>
     <p class="hint" style="margin:0">Al abrir una app desde el modo conducción se copia la guía de la parada actual: en Xcargo o iMile solo la pegas en el buscador. Funciona en Android.</p>
   </form>
