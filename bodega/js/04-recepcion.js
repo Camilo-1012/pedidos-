@@ -190,6 +190,8 @@ function guardarManifiesto(lid){
   $("dlgLista").close(); pintarTodo();
   toast(`${nuevas} guía(s) agregadas al listado` + (otras ? ` · ${otras} ya estaban en el listado de otro lote` : "") + ".");
 }
+// v2.51: exportar lo recibido en el lote elegido (abierto o cerrado).
+$("recExcel").onclick = () => { const l = loteActual(); if(l) excelLote(l.lid); };
 $("recFaltan").onclick = () => {
   const l = loteActual(); if(!l) return;
   const falt = paquetes(p => p.espLote === l.lid && p.estado === "ESPERADO").sort((a, b) => a.guia.localeCompare(b.guia));

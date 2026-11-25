@@ -3,6 +3,8 @@
 /* ============ Reportes de la bodega ============ */
 const filaPaq = p => [p.guia, p.emp, ESTADOS[p.estado] || "", p.rid ? repNombre(p.rid) : p.ultRid ? repNombre(p.ultRid) : "",
   (zonaDe(p) || {}).nombre || "", p.cl == null ? "" : txtVia(p.cl), p.kr == null ? "" : txtViaKr(p.kr), (LOTES.get(p.recLote || p.espLote) || {}).nombre || "", provDe(p), fechaHora(p.recibido), fechaHora(p.asignado), fechaHora(p.cerrado), p.devs || 0, p.motivo, p.nov.map(n => n.nota).join("; "), p.conflicto];
+// Nombre de archivo sin tildes ni símbolos (v2.51): con tildes, algunos navegadores lo cambian por «download».
+const nombreArchivo = (t, def) => String(t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^\w-]+/g, "_").replace(/^_+|_+$/g, "") || def || "archivo";
 const CAB_PAQ = ["Guía","Empresa","Estado","Repartidor","Zona","Calle","Carrera","Lote","Proveedor","Recibido","Asignado","Cerrado","Devoluciones","Último motivo","Novedades","Conflicto"];
 const ANCHOS_PAQ = [22,10,20,18,18,9,9,22,12,13,13,13,12,20,30,30];
 const DIAS_SEM_B = ["domingo","lunes","martes","miércoles","jueves","viernes","sábado"];
@@ -55,16 +57,38 @@ function excelPlanilla(rid){
   descargarXlsx([{nombre:"Planilla " + n, anchos:[6,22,18,9,9,12,30,13], filas:[["#","Guía","Zona","Calle","Carrera","Empresa","Novedad","Asignado"],
     ...ordenPlanilla(x.enRuta).map((p, i) => [i + 1, p.guia, nomZona(p), txtVia(p.cl), txtViaKr(p.kr), p.emp, p.nov.map(v => v.nota).join("; "), fechaHora(p.asignado)]),
     [], [{v:"Total", b:true}, {v:x.enRuta.length, b:true}], ["Repartidor", n], ["Zonas", zonasDeRep(rid).map(z => z.nombre).join(", ")], ["Despachó", USER.name], ["Fecha", fechaHora(new Date().toISOString())]]}],
-    `planilla-${n.replace(/[^\wáéíóúñÁÉÍÓÚÑ-]+/g, "_")}-${hoy()}.xlsx`);
+    `planilla-${nombreArchivo(n, "repartidor")}-${hoy()}.xlsx`);
 }
+/* Excel de la recepción de un lote (v2.51): lo que llegó a la bodega en ese cargue, con formato de empresa.
+   Hojas: Resumen (conteos por empresa y zona), Recibidos (en el orden en que se leyeron), Faltan y Fuera del listado. */
 function excelLote(lid){
-  const l = LOTES.get(lid) || {nombre:"lote"}, s = statsLote(lid);
-  const delLote = paquetes(p => p.espLote === lid || p.recLote === lid).sort((a, b) => a.guia.localeCompare(b.guia));
-  descargarXlsx([
-    {nombre:"Resumen", anchos:[24,14], filas:[["Lote", l.nombre], ["Empresa", l.emp || ""], ["Esperados", s.esperado], ["Recibidos", s.rec], ["Faltan", s.faltan], ["Fuera del listado", s.sobr]]},
-    {nombre:"Faltan", anchos:ANCHOS_PAQ, filas:[CAB_PAQ, ...delLote.filter(p => p.espLote === lid && p.estado === "ESPERADO").map(filaPaq)]},
-    {nombre:"Recibidos", anchos:ANCHOS_PAQ, filas:[CAB_PAQ, ...delLote.filter(p => p.recLote === lid).map(filaPaq)]}
-  ], `lote-${String(l.nombre).replace(/[^\w-]+/g, "_")}.xlsx`);
+  const l = LOTES.get(lid) || {nombre:"lote"}, s = statsLote(lid), C = xlC;
+  const delLote = paquetes(p => p.espLote === lid || p.recLote === lid);
+  const evRec = p => p.evs.filter(e => e.tipo === "RECIBIDO" && (e.d || {}).lid === lid).pop() || {};
+  const rec = delLote.filter(p => p.recLote === lid).sort((a, b) => String(a.recibido).localeCompare(String(b.recibido)) || a.guia.localeCompare(b.guia));
+  const falt = delLote.filter(p => p.espLote === lid && p.estado === "ESPERADO").sort((a, b) => a.guia.localeCompare(b.guia));
+  const sobr = s.esp ? rec.filter(p => !p.espLote) : [];
+  const gen = `Generado: ${fechaHora(new Date().toISOString())} por ${USER.name}`;
+  const datos = [l.prov && "Proveedor: " + l.prov, l.emp && "Empresa del lote: " + l.emp, l.at && "Creado: " + fechaHora(l.at),
+    l.cerrado ? "Estado: cerrado " + fechaHora(l.cerrado) : "Estado: abierto (aún recibe paquetes)", gen];
+  const cuenta = f => { const m = new Map(); rec.forEach(p => { const k = f(p) || "Sin dato"; m.set(k, (m.get(k) || 0) + 1); }); return [...m].sort((a, b) => b[1] - a[1]); };
+  const cuerpoRes = [
+    ["Esperados (listado o cantidad escrita)", s.esperado], ["Recibidos en bodega", s.rec], ["Faltan por llegar", s.faltan], ["Recibidos fuera del listado", s.sobr],
+    [C.sec("Recibidos por empresa"), C.sec("")], ...cuenta(p => p.emp),
+    [C.sec("Recibidos por zona"), C.sec("")], ...cuenta(p => (zonaDe(p) || {}).nombre || "Sin zona"),
+    [C.sec("Estado actual de lo recibido"), C.sec("")], ...cuenta(p => ESTADOS[p.estado])];
+  const resumen = xlHojaPro("Resumen", "Recepción · " + l.nombre, datos, ["Concepto", "Cantidad"], cuerpoRes, null, [40, 14]);
+  const cabRec = ["#","Recibido","Guía","Empresa","Zona","Calle","Carrera","Proveedor","Recibió","Estado actual","Repartidor","Novedades"];
+  const recibidos = xlHojaPro("Recibidos", "Paquetes recibidos · " + l.nombre, [`${rec.length} paquete(s), en el orden en que se recibieron.`, gen], cabRec,
+    rec.map((p, i) => [C.centro(i + 1), C.centro(fechaHora(p.recibido)), p.guia, p.emp, (zonaDe(p) || {}).nombre || "", p.cl == null ? "" : txtVia(p.cl), p.kr == null ? "" : txtViaKr(p.kr),
+      provDe(p), evRec(p).por || "", ESTADOS[p.estado] || "", p.rid ? repNombre(p.rid) : p.ultRid ? repNombre(p.ultRid) : "", p.nov.map(n => n.nota).join("; ")]),
+    [C.tot("TOTAL"), C.tot(""), C.tot(rec.length + " paquete(s)"), ...cabRec.slice(3).map(() => C.tot(""))], [5,12,22,10,18,9,9,12,14,18,16,30]);
+  const hojaLista = (nombre, titulo, lista, nota) => xlHojaPro(nombre, titulo + " · " + l.nombre, [nota, gen], CAB_PAQ, lista.map(filaPaqPro),
+    [C.tot("TOTAL"), C.tot(lista.length + " paquete(s)"), ...CAB_PAQ.slice(2).map(() => C.tot(""))], ANCHOS_PAQ);
+  const hojas = [resumen, recibidos, hojaLista("Faltan", "Faltan por llegar", falt, s.esp ? "Están en el listado del lote y no se han recibido." : "El lote no tiene listado de guías: solo se conoce la cantidad que falta.")];
+  if(s.esp) hojas.push(hojaLista("Fuera del listado", "Recibidos fuera del listado", sobr, "Se recibieron en este lote pero no venían en su listado."));
+  descargarXlsx(hojas, `recepcion-${nombreArchivo(l.nombre, "lote")}-${hoy()}.xlsx`);
+  toast(`Excel de la recepción descargado: ${rec.length} recibido(s), ${falt.length} faltante(s).`);
 }
 /* Histórico por fechas (desde la nube): auditoría de recepción, despachos, devoluciones y liquidaciones. */
 function excelHistorico(evs, de, a, rid){
@@ -90,5 +114,5 @@ function excelHistorico(evs, de, a, rid){
       ...lista.map(e => [fechaHora(e.at), e.guia, TXT_EV[e.tipo] || e.tipo, detalleEv(e), (e.d || {}).rid ? repNombre(e.d.rid) : "", e.por || "", e.dev || "", e.srv_at ? fechaHora(new Date(e.srv_at).toISOString()) : ""])]},
     {nombre:"Recepción por lote", anchos:[28,10,16,11], filas:[["Lote","Empresa","Creado","Recibidos"],
       ...[...porLote].map(([lid, s]) => { const l = LOTES.get(lid) || {}; return [l.nombre || (lid ? "Lote " + lid.slice(0, 6) : "Sin lote"), l.emp || "", fechaHora(l.at), s.size]; })]}
-  ], `historico-${de}_a_${a}${rid ? "-" + nom.replace(/[^\wáéíóúñÁÉÍÓÚÑ-]+/g, "_") : ""}.xlsx`);
+  ], `historico-${de}_a_${a}${rid ? "-" + nombreArchivo(nom) : ""}.xlsx`);
 }

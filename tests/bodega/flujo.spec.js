@@ -96,6 +96,19 @@ test("recepción con listado: recibidos, repetidos, fuera del listado, deshacer 
   await expect(page.locator("#ltBody")).not.toContainText("GUIA100001");
   await page.locator("#dlgLista .dlgHead button").click();
   await expect(page.locator("#stBodega")).toHaveText("2");
+  // v2.51: exportar lo recibido en el lote (botón visible en Recibir).
+  const [dl] = await Promise.all([page.waitForEvent("download"), page.click("#recExcel")]);
+  expect(dl.suggestedFilename()).toMatch(/^recepcion-Camion_manana-\d{4}-\d\d-\d\d\.xlsx$/);
+  const x = A.leerXlsx(await dl.path());
+  expect(Object.keys(x)).toEqual(["Resumen", "Recibidos", "Faltan", "Fuera del listado"]);
+  const tabla = (f, primera) => f.slice(f.findIndex(r => r[0] === primera));
+  expect(x.Resumen[0][0]).toMatch(/^Recepción · /);
+  expect(tabla(x.Resumen, "Concepto").slice(1, 5)).toEqual([["Esperados (listado o cantidad escrita)", 4], ["Recibidos en bodega", 2], ["Faltan por llegar", 2], ["Recibidos fuera del listado", 0]]);
+  const rec = tabla(x.Recibidos, "#");
+  expect(rec[0].slice(0, 4)).toEqual(["#", "Recibido", "Guía", "Empresa"]);
+  expect(rec.slice(1, -1).map(f => f[2]).sort()).toEqual(["GUIA100001", "GUIA100002"]);
+  expect(rec[rec.length - 1].slice(0, 3)).toEqual(["TOTAL", "", "2 paquete(s)"]);
+  expect(tabla(x.Faltan, "Guía").slice(1, -1).map(f => f[0])).toEqual(["GUIA100003", "GUIA100004"]);
   expect(errs).toEqual([]);
 });
 
