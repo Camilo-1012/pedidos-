@@ -398,10 +398,19 @@ $("listDone").addEventListener("click", onListClick);
 $("doneCard").addEventListener("toggle", e=>{ if(!!state.doneOpen !== e.target.open){ state.doneOpen = e.target.open; save(); } });
 
 /* ============ Diálogos ============ */
-let editing = null;
-function openEdit(s, isNew){
-  editing = {s, isNew};
-  $("dlgTitle").textContent = isNew ? "Revisa y guarda" : "Editar paquete";
+let editing = null, serieUlt = "";   // serieUlt: último aviso de la serie, para no perderlo al terminar
+// serie (v2.53, solo «Escribir»): número de pedidos ya guardados en esta tanda. Al guardar, el formulario se limpia
+// y queda listo para el siguiente; «Terminar» (o atrás) lo cierra. Sin serie, Guardar cierra como siempre.
+function openEdit(s, isNew, serie){
+  editing = {s, isNew, serie: isNew && Number.isInteger(serie) ? serie : null};
+  const enSerie = editing.serie !== null;
+  $("dlgTitle").textContent = enSerie ? (serie ? `Escribir pedidos · ${serie} agregado${serie===1?"":"s"}` : "Escribir pedidos")
+    : isNew ? "Revisa y guarda" : "Editar paquete";
+  $("dlgCancel").textContent = enSerie && serie ? "Terminar" : "Cancelar";
+  $("fSerie").hidden = !enSerie;
+  if(!enSerie || !serie) serieUlt = "";
+  if(!enSerie) $("fSerie").textContent = "";
+  else if(!serie) $("fSerie").textContent = "Al guardar, el formulario queda listo para el siguiente pedido. Toca «Cancelar» o «Terminar» para salir.";
   $("fAddr").value = s.addr||""; $("fZone").value = s.zone||""; $("fPhone").value = s.phone||"";
   setType(s.type||"casa"); $("fUnit").value = s.unit||"";   // por defecto Casa; se cambia si es otro tipo
   setTimeout(updPhone, 0);
@@ -409,6 +418,7 @@ function openEdit(s, isNew){
   $("fRaw").textContent = s.raw||""; $("rawWrap").hidden = !s.raw;
   updParsed();
   $("dlgEdit").showModal();
+  $("dlgEdit").scrollTop = 0; $("frmEdit").scrollTop = 0;   // en serie: vuelve arriba, a la dirección
   if(isNew && !s.addr) setTimeout(()=>$("pN1").focus(), 60);   // «Escribir»: se empieza por el número de la vía
 }
 // Dirección por partes ⇄ dirección completa. Al escribir en las partes se arma la completa; al pegar, dictar,
@@ -570,6 +580,14 @@ function addOrMerge(d){
   return {merged:false, stop:ns, mismos: otros.length, cuadra: vecinos.length ? cuadraTxt(ck) : "", enCuadra: vecinos.length};
 }
 $("dlgCancel").onclick = ()=>{ fromScan = false; $("dlgEdit").close(); };
+// Al salir de la serie (Terminar, Cancelar o atrás) se resume cuántos quedaron. Al pasar al siguiente pedido el
+// diálogo se reabre de inmediato, así que el evento llega con el diálogo abierto y no hace nada.
+$("dlgEdit").addEventListener("close", ()=>{
+  if($("dlgEdit").open || !editing || !editing.serie) return;
+  const n = editing.serie, ult = serieUlt; editing.serie = null; serieUlt = "";
+  const simple = !ult || ult === "Paquete agregado en su lugar de la ruta.";   // las advertencias del último sí se repiten
+  toast(`${n} pedido${n===1?"":"s"} agregado${n===1?"":"s"} a la ruta.` + (simple ? "" : " Último: " + ult));
+});
 $("frmEdit").addEventListener("submit", e=>{
   e.preventDefault();
   const d = {addr:$("fAddr").value.trim(), zone:$("fZone").value.trim(), phone:$("fPhone").value.replace(/\D/g,"").slice(-10),
@@ -579,7 +597,15 @@ $("frmEdit").addEventListener("submit", e=>{
   if(!d.addr) return;
   const p = parseAddress(d.addr);
   if(editing.isNew){
-    if(d.guia){ const dup = guias(d).find(hasGuia); if(dup){ $("dlgEdit").close(); dupAlert(dup); return; } }
+    if(d.guia){ const dup = guias(d).find(hasGuia); if(dup){
+      if(editing.serie !== null){   // en serie no se sale: se avisa en el formulario para corregir la guía
+        if(navigator.vibrate) navigator.vibrate([250,100,250]);
+        const st = findGuia(dup);
+        toast(`La guía ${dup} ya está cargada${st ? " en " + placeName(st) : ""}: no se agregó. Corrígela o bórrala.`);
+        $("fGuia").focus(); return;
+      }
+      $("dlgEdit").close(); dupAlert(dup); return;
+    } }
     state.stops = state.stops.filter(s=>!s.example);
     const r = addOrMerge(d);
     if(typeof bodegaAvisoNuevo === "function") bodegaAvisoNuevo(r.stop);
@@ -597,9 +623,11 @@ $("frmEdit").addEventListener("submit", e=>{
     if(changed && state.suggestedIds) state.suggestedIds = state.suggestedIds.filter(id=>id!==editing.s.id);
     editing.s.zoneCheck = null;
   }
+  const sigSerie = editing.isNew && editing.serie !== null ? editing.serie + 1 : null;
   $("dlgEdit").close();
   save(); render();   // se ve de inmediato aunque haya un cálculo de ruta en curso
   optimize(true, {estable: true});
+  if(sigSerie !== null){ fromScan = false; openEdit({addr:""}, true, sigSerie); return; }   // listo para el siguiente
   if(fromScan && state.scanLoop && editing.isNew) setTimeout(()=>startScan("label"), 600);
   fromScan = false;
 });
@@ -656,7 +684,11 @@ function confirmBox(title,msg,cb,noCb){ $("cfTitle").textContent=title; $("cfMsg
 $("cfNo").onclick = ()=>{ $("dlgConfirm").close(); const f = cfNoCb; cfNoCb = null; if(f) f(); };
 $("frmConfirm").addEventListener("submit", e=>{ e.preventDefault(); $("dlgConfirm").close(); cfNoCb = null; if(cfCb) cfCb(); cfCb=null; });
 
-let tt; function toast(m){ const t=$("toast"); t.textContent=m; t.classList.add("show"); clearTimeout(tt); tt=setTimeout(()=>t.classList.remove("show"),3200); }
+let tt; function toast(m){
+  const t=$("toast"); t.textContent=m; t.classList.add("show"); clearTimeout(tt); tt=setTimeout(()=>t.classList.remove("show"),3200);
+  // El aviso flotante queda detrás de un diálogo abierto: en «Escribir» en serie se repite dentro del formulario.
+  try{ if(editing && editing.serie !== null && $("dlgEdit").open){ $("fSerie").textContent = m; serieUlt = m; } }catch(e){}
+}
 // Diálogo de motivo de devolución (v2.50).
 $("dvlOps").addEventListener("change", ()=>{ const otro = (document.querySelector('input[name="dvlM"]:checked')||{}).value === "Otro"; $("dvlOtro").hidden = !otro; if(otro) $("dvlOtro").focus(); });
 $("dvlNo").onclick = ()=>{ $("dlgDevol").close(); dvlStop = dvlCb = null; };

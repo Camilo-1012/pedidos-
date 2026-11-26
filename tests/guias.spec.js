@@ -31,6 +31,15 @@ test("guía repetida no se agrega otra vez", async ({ page }) => {
   await entrar(page); await cargar(page, PARADAS);
   await page.click("#btnManual"); await page.fill("#fAddr", "Calle 150 # 100-10"); await page.fill("#fGuia", "9999000011112222");
   await page.click("#frmEdit button[type=submit]");
+  // v2.53: en «Escribir» no se sale; se avisa en el formulario para corregir la guía.
+  await expect(page.locator("#dlgEdit")).toBeVisible();
+  await expect(page.locator("#fSerie")).toContainText("La guía 9999000011112222 ya está cargada");
+  await expect(page.locator("#fGuia")).toBeFocused();
+  expect(await page.evaluate(() => state.stops.length)).toBe(4);
+  // Fuera de la serie (p. ej. lo escaneado o pegado) sigue saliendo el aviso de paquete repetido.
+  await page.click("#dlgCancel");
+  await page.evaluate(() => openEdit({ addr: "Calle 150 # 100-10", guia: "9999000011112222" }, true));
+  await page.click("#frmEdit button[type=submit]");
   await expect(page.locator("#fdTitle")).toHaveText("Paquete repetido");
   expect(await page.evaluate(() => state.stops.length)).toBe(4);
 });

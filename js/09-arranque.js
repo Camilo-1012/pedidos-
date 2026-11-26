@@ -41,7 +41,7 @@ $("optCompletas").addEventListener("change", e=>{ state.tarjetasCompletas = e.ta
 $("btnPaste").onclick = ()=>openText("one");
 $("btnBulk").onclick = ()=>openText("bulk");
 $("btnBulk2").onclick = ()=>openText("bulk");
-$("btnManual").onclick = ()=>openEdit({addr:""}, true);
+$("btnManual").onclick = ()=>openEdit({addr:""}, true, 0);   // v2.53: queda abierto para cargar uno tras otro
 $("btnVoice").onclick = ()=>{ openEdit({addr:""}, true); startDictation(); };
 // «Ordenar ruta»: reordena todo. Antes de la primera entrega los números siguen el nuevo orden (1, 2, 3…);
 // después, cada paquete conserva su número.
@@ -247,7 +247,7 @@ $("restoreFile").addEventListener("change", async e=>{
 /* ============ App instalable y sin conexión ============ */
 // Al bloquear: apaga la cámara y cierra ventanas abiertas para que no queden datos a la vista.
 window.RUTA_onLock = ()=>{ try{ stopScan(); }catch(e){} };
-const APP_VERSION = "2.52";
+const APP_VERSION = "2.53";
 $("ver").textContent = "Versión " + APP_VERSION + ". Funciona sin internet una vez abierta la primera vez.";
 if(navigator.storage && navigator.storage.estimate){
   navigator.storage.estimate().then(e=>{ if(e && e.usage) $("ver").textContent += ` Espacio usado en este celular: ${(e.usage/1048576).toFixed(1).replace(".",",")} MB (la mayor parte es el lector de etiquetas).`; }).catch(()=>{});

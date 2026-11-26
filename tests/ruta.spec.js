@@ -8,6 +8,9 @@ async function escribir(page, addr, guia, qty){
   if (guia) await page.fill("#fGuia", guia);
   if (qty) await page.fill("#fQty", String(qty));
   await page.click("#frmEdit button[type=submit]");
+  // v2.53: «Escribir» queda listo para el siguiente; «Terminar» lo cierra.
+  await expect(page.locator("#dlgCancel")).toHaveText("Terminar");
+  await page.click("#dlgCancel");
   await expect(page.locator("#dlgEdit")).not.toHaveAttribute("open", "");
 }
 
