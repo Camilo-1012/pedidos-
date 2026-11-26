@@ -267,6 +267,10 @@ function render(){
   // Pedidos pendientes agrupados por dirección, para avisar cuando hay varios en la misma.
   const mismas = new Map();
   for(const st of state.stops) if(!st.example && st.status!=="done"){ const k = stopKey(st); if(!mismas.has(k)) mismas.set(k, []); mismas.get(k).push(st); }
+  // v2.52: pendientes de la misma cuadra con direcciones distintas (para avisar «en esta cuadra»).
+  const cuadras = new Map(), ckDe = new Map();
+  for(const st of state.stops) if(!st.example && st.status!=="done" && !esDevol(st)){ const k = cuadraKey(st); if(!k) continue; ckDe.set(st, k); if(!cuadras.has(k)) cuadras.set(k, []); cuadras.get(k).push(st); }
+  for(const [k, l] of cuadras) if(new Set(l.map(stopKey)).size < 2) cuadras.delete(k);
   // Tarjetas compactas (por defecto): Waze, Llamar, Entregado y «⋯»; el resto aparece al tocar «⋯».
   const compactas = !state.tarjetasCompletas;
   const html = state.stops.map((s,idx)=>{
@@ -292,6 +296,7 @@ function render(){
           ${!isDone && zoneIssue(s)?`<span class="chip warn">Fuera de tu zona: ${esc(zoneIssue(s))}</span>`:""}
           ${s.zoneCheck && s.zoneCheck.bad?`<span class="chip warn">No coincide con ${esc(s.barrio)}: queda a ${s.zoneCheck.km.toFixed(1).replace(".",",")} km</span>`:""}
           ${isFail?'<span class="chip warn">Intento fallido</span>':""}
+          ${!isDone && cuadras.has(ckDe.get(s)) ? `<span class="chip cuadra">${cuadras.get(ckDe.get(s)).length} pedidos en esta cuadra · ${esc(cuadraTxt(ckDe.get(s)))} (n.º ${cuadras.get(ckDe.get(s)).map(x=>stopNum(x)).sort((a,b)=>a-b).join(", ")})</span>` : ""}
           ${!isDone && (mismas.get(stopKey(s))||[]).length > 1 ? `<span class="chip warn">${mismas.get(stopKey(s)).length} pedidos en esta dirección (n.º ${mismas.get(stopKey(s)).map(x=>stopNum(x)).sort((a,b)=>a-b).join(", ")})</span>` : ""}
           ${s.avisadoAt && !isDone ? `<span class="chip ok">Avisado ${hhmm(s.avisadoAt)}</span>` : ""}
           ${state.loadOn && !isDone ? (loadedOf(s) >= (s.qty||1) ? '<span class="chip ok">Cargado ✓</span>' : `<span class="chip warn">Sin verificar${(s.qty||1)>1?" "+((s.qty||1)-loadedOf(s))+" de "+s.qty:""}</span>`) : ""}
@@ -525,6 +530,15 @@ $("qtyPlus").onclick  = ()=>{ $("fQty").value = Math.min(99,(parseInt($("fQty").
 // Varios paquetes a la misma dirección van en una sola parada con su cantidad.
 function stopKey(x){ const p = parseAddress(x.label || x.addr); if(!p && !String(x.addr||"").trim()) return "#" + (x.id || Math.random()); return p ? p.label.toUpperCase() : norm(x.addr); }
 function guias(st){ return (st.guia||"").split(/[,\s]+/).filter(Boolean); }
+// v2.52: «cuadra» = misma calle y misma carrera (sin importar la placa ni cuál de las dos es la vía principal).
+// Devuelve p. ej. "CL 145|KR 103B" o null si la dirección no se entiende.
+function cuadraKey(x){
+  const p = parseAddress(x.label || x.addr); if(!p) return null;
+  const f = o=>o.n + (o.l1||"") + (o.bis?" BIS":"") + (o.l2?" "+o.l2:"");
+  const a = p.parts, cl = a.axis === "calle" ? f(a.p) : f(a.g), kr = a.axis === "calle" ? f(a.g) : f(a.p);
+  return `CL ${cl}${a.sur?" SUR":""}|KR ${kr}${a.este?" ESTE":""}`;
+}
+const cuadraTxt = k=>k.replace("CL ", "Calle ").replace("|KR ", " con Carrera ").replace(/ BIS/g, " Bis").replace(/ SUR/, " Sur").replace(/ ESTE/, " Este");
 function hasGuia(g){ return !!findGuia(g); }
 // Busca la parada que tiene esa guía (exacta). «except» deja por fuera la parada que se está editando.
 function findGuia(g, except){ g = String(g||"").trim(); if(!g) return null; return state.stops.find(st=>st!==except && guias(st).includes(g)) || null; }
@@ -547,9 +561,13 @@ function addOrMerge(d){
   const ns = mkStop(d); const firstDone = state.stops.findIndex(q=>q.status==="done");
   // Junto a los otros pedidos de la misma dirección (si los hay), para que queden seguidos en la lista.
   const otros = mismaDireccion(ns);
-  const despues = otros.length ? state.stops.lastIndexOf(otros[otros.length-1]) + 1 : -1;
+  // v2.52: si no hay otro en la misma dirección pero sí en la misma cuadra, queda justo después de ellos.
+  const ck = cuadraKey(ns);
+  const vecinos = otros.length || !ck ? [] : state.stops.filter(x=>x!==ns && !x.example && x.status==="pend" && cuadraKey(x)===ck);
+  const ref = otros.length ? otros : vecinos;
+  const despues = ref.length ? state.stops.lastIndexOf(ref[ref.length-1]) + 1 : -1;
   state.stops.splice(despues > 0 ? despues : firstDone<0?state.stops.length:firstDone, 0, ns);
-  return {merged:false, stop:ns, mismos: otros.length};
+  return {merged:false, stop:ns, mismos: otros.length, cuadra: vecinos.length ? cuadraTxt(ck) : "", enCuadra: vecinos.length};
 }
 $("dlgCancel").onclick = ()=>{ fromScan = false; $("dlgEdit").close(); };
 $("frmEdit").addEventListener("submit", e=>{
@@ -567,6 +585,7 @@ $("frmEdit").addEventListener("submit", e=>{
     if(typeof bodegaAvisoNuevo === "function") bodegaAvisoNuevo(r.stop);
     if(r.filled) toast(`Guía agregada a la parada que ya tenías: ${r.stop.label||r.stop.addr}.`);
     else if(r.mismos) toast(`Agregado aparte. Ojo: ahora hay ${r.mismos+1} pedidos para ${r.stop.label||r.stop.addr}.`);
+    else if(r.enCuadra) toast(`Agregado junto a ${r.enCuadra === 1 ? "otro pedido" : r.enCuadra + " pedidos"} de la misma cuadra (${r.cuadra}).`);
     else toast(p ? "Paquete agregado en su lugar de la ruta." : "Agregado, pero la dirección quedó para revisar.");
   } else {
     const dup = guias(d).find(g=>findGuia(g, editing.s));

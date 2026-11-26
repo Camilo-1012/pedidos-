@@ -233,6 +233,7 @@ details summary{cursor:pointer;font-weight:600}
 .dvlOps label{display:flex;flex-direction:row;align-items:center;justify-content:flex-start;gap:12px;padding:12px 14px;margin:0;border:1px solid var(--line);border-radius:10px;font-weight:600;font-size:16px;color:var(--ink);text-align:left}
 .dvlOps label:has(input:checked){border-color:var(--accent);background:color-mix(in srgb,var(--accent) 14%,transparent)}
 .dvlOps input{width:22px;height:22px;min-height:0;margin:0;flex:none;accent-color:var(--accent)}
+.chip.cuadra{background:#e6f2ff;color:#0b4a8b;border-color:#9cc3ef}
 .chip.devol{background:#fff1dd;color:#8a4b00;border-color:#f0c27a}
 .dvBtns a[aria-disabled="true"]{opacity:.35;pointer-events:none}
 .dvSkip{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13px;opacity:.85;text-align:center}

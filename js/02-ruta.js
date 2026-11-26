@@ -367,15 +367,23 @@ function numerar(){
    un pedido repetido podía quedar lejos de su gemelo (p. ej. 17 arriba y 25, 26 abajo). Se juntan en el lugar del
    primero de la dirección; como es el mismo punto, el recorrido no se alarga. Los «No estaba» no se mezclan con las
    pendientes (cada grupo se junta dentro de su tramo). */
-function juntarMismaDireccion(lista){
-  if(typeof stopKey !== "function" || lista.length < 2) return lista;
-  const clave = s=>(s.status === "fail" ? "F|" : "P|") + stopKey(s);
+// Agrupa por clave en el lugar del primero de cada grupo, sin cambiar el orden de lo demás.
+function juntarPor(lista, clave){
   const grupos = new Map();
   for(const s of lista){ const k = clave(s); if(!grupos.has(k)) grupos.set(k, []); grupos.get(k).push(s); }
   if(grupos.size === lista.length) return lista;
   const out = [], hechos = new Set();
   for(const s of lista){ const k = clave(s); if(hechos.has(k)) continue; hechos.add(k); out.push(...grupos.get(k)); }
   return out;
+}
+/* v2.52: además, los de la misma cuadra (misma calle y misma carrera, aunque cambie la placa: «Calle 145 # 103B-90» y
+   «Calle 145 # 103B-20») quedan seguidos. Primero se junta la cuadra y, dentro de ella, la misma dirección.
+   Pendientes y «No estaba» se juntan cada uno en su tramo. Sin calle/carrera entendible: solo la misma dirección. */
+function juntarMismaDireccion(lista){
+  if(typeof stopKey !== "function" || lista.length < 2) return lista;
+  const tramo = s=>(s.status === "fail" ? "F|" : "P|");
+  const porCuadra = juntarPor(lista, s=>tramo(s) + (cuadraKey(s) || stopKey(s)));
+  return juntarPor(porCuadra, s=>tramo(s) + stopKey(s));
 }
 // Aplica un orden calculado sobre el estado actual (por si el repartidor marcó entregas mientras se calculaba).
 function applyOrder(orderIds){
