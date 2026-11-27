@@ -53,6 +53,8 @@ async function abrirEscaner(cfg){
   }catch(e){ SC.stream = null; $("scMsg").textContent = "No se pudo abrir la cámara (revisa el permiso). Puedes escribir las guías."; return; }
   if(!$("dlgScan").open){ pararCamara(); return; }
   const v = $("scVideo"); v.srcObject = SC.stream; try{ await v.play(); }catch(e){}
+  // v2.55: la caja toma la proporción real del video (vertical u horizontal) para mostrar todo el campo de visión.
+  if(v.videoWidth && v.videoHeight) v.parentElement.style.aspectRatio = v.videoWidth + " / " + v.videoHeight;
   const track = SC.stream.getVideoTracks()[0], caps = track && track.getCapabilities ? track.getCapabilities() : {};
   $("scTorch").hidden = !caps.torch;
   if(caps.focusMode && caps.focusMode.includes("continuous")){ try{ await track.applyConstraints({advanced:[{focusMode:"continuous"}]}); }catch(e){} }

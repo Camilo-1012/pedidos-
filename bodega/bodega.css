@@ -39,9 +39,10 @@ nav.tabs button[aria-current="page"]{background:var(--accent);color:var(--accent
 .lista select{max-width:150px}
 /* Escáner continuo */
 .scTarget{margin:0;font-weight:600}
-.scVideo{position:relative;background:#000;border-radius:10px;overflow:hidden;aspect-ratio:4/3;max-height:38vh}
-.scVideo video{width:100%;height:100%;object-fit:cover;display:block}
-.scAim{position:absolute;left:8%;right:8%;top:38%;height:24%;border:3px solid var(--accent);border-radius:8px;box-shadow:0 0 0 999px rgba(0,0,0,.25)}
+/* v2.55: se ve todo lo que capta la cámara (sin recortar los lados): la caja toma la proporción del video. */
+.scVideo{position:relative;background:#000;border-radius:10px;overflow:hidden;aspect-ratio:4/3;max-height:52vh;max-width:100%;margin:0 auto}
+.scVideo video{width:100%;height:100%;object-fit:contain;display:block}
+.scAim{position:absolute;left:4%;right:4%;top:32%;height:36%;border:3px solid var(--accent);border-radius:8px;box-shadow:0 0 0 999px rgba(0,0,0,.25)}
 .scCount{display:flex;align-items:baseline;gap:8px}
 .scCount b{font:700 40px/1 var(--display);font-variant-numeric:tabular-nums}
 .scCount span{color:var(--muted)}
