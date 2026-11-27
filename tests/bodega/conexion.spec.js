@@ -206,6 +206,7 @@ test("la zona del paquete y las zonas del repartidor le llegan a su Ruta (v2.36)
     registrar("ZONA", null, {zid: "zb", nombre: "Bilbao", color: "#d0421b", cl: [140, 149], kr: [null, null], activa: true});
   });
   await A.nuevoLote(bo.page, "Otra", "L1");
+  await bo.page.check("#recUbic");   // v2.54: pedir calle y carrera es opcional
   await bo.page.click("#recScan");
   for (const [g, cl] of [["2696271051298372", "135"], ["6110586210761", "145"]]){
     const p = A.leer(bo.page, g); await expect(bo.page.locator("#scUbic")).toBeVisible(); await bo.page.fill("#ubCl", cl); await bo.page.fill("#ubKr", "100"); await bo.page.click("#ubOk"); await p;

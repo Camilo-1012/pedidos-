@@ -75,7 +75,7 @@ function pintarRecibir(){
   const l = loteActual();
   $("recInfo").hidden = !l;
   if(!l) return;
-  $("recUbicLbl").hidden = !zonasActivas().length; $("recUbic").checked = prefs.pedirUbic !== false;
+  $("recUbicLbl").hidden = !zonasActivas().length; $("recUbic").checked = prefs.pedirUbicSin === true;
   pintarZonasRecibir();
   const s = statsLote(l.lid);
   kpis($("recKpis"), [[s.esperado || "—", "esperados"], [s.rec, "recibidos", "ok"], [s.esperado ? s.faltan : "—", "faltan", s.faltan ? "warn" : ""], [s.sobr, "fuera del listado", s.sobr ? "warn" : ""]]);
@@ -129,7 +129,7 @@ function pintarRecibir(){
     };
   });
 }
-$("recUbic").onchange = e => { prefs.pedirUbic = e.target.checked; savePrefs(); };
+$("recUbic").onchange = e => { prefs.pedirUbicSin = e.target.checked; savePrefs(); };
 $("recLote").onchange = e => { prefs.lote = e.target.value || null; savePrefs(); pintarRecibir(); };
 $("recNuevo").onclick = async () => {
   const v = await pedir({title:"Nuevo lote de recepción", msg:"Un lote es cada llegada de paquetes (un camión, un corte del día). Sirve para cuadrar lo esperado contra lo recibido.",
@@ -160,9 +160,11 @@ async function recibirGuia(g){
   const e = registrar("RECIBIDO", g, {lid: l.lid, emp: l.emp}), evs = [e.id];
   const enListado = p && p.espLote === l.lid;
   let txt = enListado ? "Recibida · en el listado" : p && p.espLote ? "Recibida · estaba en el listado de otro lote" : s.esp ? "Recibida · NO está en el listado" : "Recibida";
-  // Zonificación: si hay zonas y el paquete no tiene ubicación, se pide calle y carrera (o la zona) en el mismo paso.
+  // Zonificación: el paquete sin datos (no vino en un listado con dirección) se recibe solo con la guía.
+  // v2.54: ya no se pregunta por defecto; la zona se le pone al despacharlo (la del repartidor). Si se marca
+  // «Pedir calle y carrera…», se pide en el mismo paso como antes.
   if(zonasActivas().length){
-    if(prefs.pedirUbic !== false && !tieneUbic(paq(g))){ const u = guardarUbicacion(g, await pedirUbicacion(g)); if(u) evs.push(u.id); }
+    if(prefs.pedirUbicSin === true && !tieneUbic(paq(g))){ const u = guardarUbicacion(g, await pedirUbicacion(g)); if(u) evs.push(u.id); }
     const z = zonaDe(paq(g)); txt += " → " + (z ? z.nombre : "sin zona");
   }
   return {tipo:"ok", txt, evs, cls: s.esp && !enListado ? "aviso" : ""};

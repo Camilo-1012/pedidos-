@@ -146,7 +146,7 @@ function listaZona(zid, filtro){
   mostrarListado((z ? z.nombre : "Sin zona") + ` (${items.length})`, (z ? `<p class="hint">${esc(rangoTxt(z))}${z.rid ? " · " + esc(repNombre(z.rid)) : ""}</p>` : `<p class="hint">Toca un paquete para ver su recorrido y ponerle ubicación.</p>`) +
     (items.length ? conteoEmp(items).map(([emp, n]) => `<h3 class="grpEmp em-${esc((emp || "x").toLowerCase())}">${esc(emp || "Sin empresa")} · ${n}</h3><ul class="lista">${items.filter(p => (p.emp || "") === emp).map(p => liPaq(p, ubicTxt(p))).join("")}</ul>`).join("") : "<ul class='lista'><li class='vacio'>Ninguno.</li></ul>"));
 }
-const ubicTxt = p => p.zidManual ? "Zona elegida a mano" : p.cl != null || p.kr != null ? `Calle ${txtVia(p.cl) || "?"} · Carrera ${txtViaKr(p.kr) || "?"}` : "Sin ubicación";
+const ubicTxt = p => p.zonaAuto ? "Sin datos · zona del repartidor al despachar" : p.zidManual ? "Zona elegida a mano" : p.cl != null || p.kr != null ? `Calle ${txtVia(p.cl) || "?"} · Carrera ${txtViaKr(p.kr) || "?"}` : "Sin ubicación";
 
 /* ---- Administrar zonas (solo administrador; el servidor también lo exige) ---- */
 function pintarZonasAdmin(){
@@ -211,11 +211,29 @@ function pintarZonasRep(r){
     <div class="zsel" role="group" aria-label="Zonas de ${esc(r.nombre)}">${zs.map(z => {
       const otros = repsDeZona(z.zid).filter(x => x.rid !== r.rid).map(x => x.nombre);
       return `<button type="button" style="--zc:${esc(z.color || "#455a64")}" data-zid="${esc(z.zid)}" aria-pressed="${mias.has(z.zid)}">${esc(z.nombre)}${otros.length ? `<small> · ${esc(otros.join(", "))}</small>` : ""}</button>`;
-    }).join("")}</div>`;
+    }).join("")}</div>` + (mias.size > 1 ? (() => { const zs2 = zonasDeRep(r.rid), sel = zonaSinDatosDe(r.rid);
+      return `<p class="hint" style="margin:8px 0 0">Paquetes sin datos (sin calle ni carrera) van a la zona:</p>
+    <div class="zsel" id="desZonaSin" role="group" aria-label="Zona de los paquetes sin datos">${zs2.map(z => `<button type="button" style="--zc:${esc(z.color || "#455a64")}" data-zsin="${esc(z.zid)}" aria-pressed="${sel && sel.zid === z.zid}">${esc(z.nombre)}</button>`).join("")}</div>`; })() : "");
   box.querySelectorAll("button[data-zid]").forEach(b => b.onclick = () => {
     const ids = new Set(zonasDeRep(r.rid).map(z => z.zid));
     ids.has(b.dataset.zid) ? ids.delete(b.dataset.zid) : ids.add(b.dataset.zid);
     registrar("REP_ZONAS", null, {rid: r.rid, zids: [...ids]});
     pintarTodo();
   });
+  box.querySelectorAll("button[data-zsin]").forEach(b => b.onclick = () => {
+    prefs.zonaSin = {...(prefs.zonaSin || {}), [r.rid]: b.dataset.zsin}; savePrefs(); pintarZonasRep(r);
+  });
+}
+/* v2.54: zona que toma un paquete sin datos al despacharlo: la del repartidor (si tiene varias, la elegida en
+   Despachar → «Paquetes sin datos van a la zona»; por defecto la primera). Es preferencia de este celular. */
+function zonaSinDatosDe(rid){
+  const mias = zonasDeRep(rid); if(!mias.length) return null;
+  const zid = (prefs.zonaSin || {})[rid];
+  return mias.find(z => z.zid === zid) || mias[0];
+}
+// Evento UBICACION {zid, auto} si el paquete no tiene calle/carrera ni zona propia (o la tenía puesta por otro despacho).
+function zonaAlDespachar(g, rid){
+  const p = paq(g); if(!p || !zonasActivas().length || (tieneUbic(p) && !p.zonaAuto)) return null;
+  const z = zonaSinDatosDe(rid); if(!z || (p.zonaAuto && p.zidManual === z.zid)) return null;
+  return registrar("UBICACION", g, {zid: z.zid, auto: true});
 }

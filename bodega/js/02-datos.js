@@ -83,6 +83,7 @@ function calcPaq(guia){
       case "UBICACION":
         if(d.zid){ p.zidManual = d.zid; p.cl = p.kr = null; }
         else { p.cl = Number.isFinite(d.cl) ? d.cl : null; p.kr = Number.isFinite(d.kr) ? d.kr : null; p.zidManual = ""; }
+        p.zonaAuto = !!(d.zid && d.auto);   // v2.54: zona del repartidor puesta al despachar un paquete sin datos
         break;
     }
   }

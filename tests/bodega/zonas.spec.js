@@ -60,6 +60,8 @@ test("zonas: crear con aviso de cruce, ubicar al recibir, despachar con aviso de
 
   await A.nuevoLote(page, "Xcargo", "L1");
   await expect(page.locator("#recUbicLbl")).toBeVisible();
+  await expect(page.locator("#recUbic")).not.toBeChecked();   // v2.54: por defecto no se pide (se marca para pedir)
+  await page.check("#recUbic");
   await page.click("#recScan");
   expect((await leerConUbic(page, "ZON0000001", "140", "110")).txt).toBe("Recibida → Z1 Tibabuyes");
   expect((await leerConUbic(page, "ZON0000002", "150", "140")).txt).toBe("Recibida → Z2 Lisboa");
@@ -142,6 +144,7 @@ test("Despachar: marcar las zonas de cada repartidor (una zona puede tener vario
     registrar("ZONA", null, {zid: "zc", nombre: "Lombardia", color: "#2f6fdf", cl: [150, 160], kr: [null, null], activa: true});
   });
   await A.nuevoLote(page, "Xcargo", "L1");
+  await page.check("#recUbic");   // v2.54: pedir calle y carrera es opcional
   await page.click("#recScan");
   for(const [g, cl] of [["ZR00000001", "135"], ["ZR00000002", "145"], ["ZR00000003", "155"]]){
     const p = A.leer(page, g); await expect(page.locator("#scUbic")).toBeVisible(); await page.fill("#ubCl", cl); await page.fill("#ubKr", "100"); await page.click("#ubOk"); await p;
@@ -152,7 +155,7 @@ test("Despachar: marcar las zonas de cada repartidor (una zona puede tener vario
   await expect(page.locator("#desZonasRep h3")).toHaveText("Zonas de Jairo");
   await page.locator('#desZonasRep button[data-zid="za"]').click();
   await page.locator('#desZonasRep button[data-zid="zb"]').click();
-  await expect(page.locator('#desZonasRep button[aria-pressed="true"]')).toHaveCount(2);
+  await expect(page.locator('#desZonasRep button[data-zid][aria-pressed="true"]')).toHaveCount(2);
   await expect(page.locator("#desReps button", { hasText: "Jairo" })).toContainText("Alcaparros, Bilbao");
   // John también lleva Bilbao (una zona, dos repartidores).
   await page.locator("#desReps button", { hasText: "John" }).click();
@@ -235,7 +238,8 @@ test("con zonas creadas, despachar exige marcarle zona al repartidor (sin zonas 
   await page.locator('#desZonasRep button[data-zid="za"]').click();
   await expect(page.locator("#desScan")).not.toHaveClass(/bloq/);
   await page.click("#desScan");
-  expect((await A.leer(page, "ZO00000001")).txt).toBe("Para Jairo");
+  // v2.54: recibido solo con la guía (sin datos): toma la zona del repartidor al despacharlo.
+  expect((await A.leer(page, "ZO00000001")).txt).toBe("Para Jairo · Alcaparros (sin datos: su zona)");
   await page.click("#scClose");
   expect(errs).toEqual([]);
 });
@@ -248,6 +252,7 @@ test("v2.45: Recibir separa por zona y por empresa (Xcargo/iMile): desglose en c
     registrar("ZONA", null, {zid: "zb", nombre: "Bilbao", color: "#d0421b", cl: [140, 149], kr: [null, null], activa: true});
   });
   await A.nuevoLote(page, "Xcargo", "L1");
+  await page.check("#recUbic");   // v2.54: pedir calle y carrera es opcional
   await page.click("#recScan");
   for(const [g, cl] of [["2600000000000001", "135"], ["2600000000000002", "145"], ["6100000000003", "145"], ["6100000000004", "146"], ["2600000000000005", null]])
     await leerConUbic(page, g, cl, "100");
