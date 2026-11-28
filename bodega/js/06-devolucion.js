@@ -16,6 +16,23 @@ function pintarDevolver(){
   // Primero los «No estaba» (son los que tienen que volver a la bodega).
   const orden = x.enRuta.slice().sort((a, b) => (b.noEstaba ? 1 : 0) - (a.noEstaba ? 1 : 0));
   pintarLista($("devLista"), orden.map(p => liPaq(p, "Salió " + fechaHora(p.asignado))), 40, "No tiene paquetes por liquidar.");
+  // v2.57: cuáles se devolvieron hoy (no solo cuántos): guía, hora, motivo y dónde está ahora; lo último primero.
+  const devs = devueltosHoy(r.rid);
+  $("devHoyN").textContent = devs.length;
+  pintarLista($("devHoy"), devs.map(({p, e}) => liPaq(p, `Devuelto ${horaDe(e.at)} · ${esc((e.d || {}).motivo || "sin motivo")}` + (e.por ? ` · recibió ${esc(e.por)}` : "") + (p.estado !== "BODEGA" ? ` · ahora: ${esc(ESTADOS[p.estado] || p.estado)}` + (p.estado === "RUTA" ? " con " + esc(repNombre(p.rid)) : "") : ""))), 40, "Hoy no ha devuelto paquetes.");
+  const kd = $("devKpis").children[2];
+  if(kd){ kd.classList.add("link"); kd.setAttribute("role", "button"); kd.tabIndex = 0; kd.title = "Ver cuáles";
+    kd.onclick = kd.onkeydown = ev => { if(ev.type === "keydown" && ev.key !== "Enter" && ev.key !== " ") return; $("hDevHoy").scrollIntoView({behavior: "smooth", block: "start"}); }; }
+}
+// Devoluciones del día de un repartidor: [{p, e}] con el último DEVUELTO de hoy de cada paquete (sin los anulados).
+function devueltosHoy(rid, dia){
+  dia = dia || hoy();
+  const out = [];
+  for(const p of delRepartidor(rid, dia).devueltosDia){
+    const e = p.evs.filter(v => v.tipo === "DEVUELTO" && diaDe(v.at) === dia && (v.d || {}).rid === rid).pop();
+    if(e) out.push({p, e});
+  }
+  return out.sort((a, b) => String(b.e.at).localeCompare(String(a.e.at)));
 }
 async function devolverGuia(g){
   const r = repActual(); if(!r) return {tipo:"mal", txt:"Elige primero el repartidor."};
