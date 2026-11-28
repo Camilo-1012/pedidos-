@@ -62,7 +62,7 @@ async function asignarGuia(g){
   // Paquete de una zona que no es de este repartidor: solo se avisa (puede ser un apoyo), no se bloquea.
   const mias = zonasDeRep(r.rid), otraZona = z && mias.length && !mias.some(m => m.zid === z.zid);
   const deQuien = otraZona ? repsDeZona(z.zid).map(x => x.nombre).join(", ") : "";
-  return {tipo:"ok", txt:(recibida ? "Recibida y para " : "Para ") + r.nombre + (VINC.has(r.rid) ? " · ya le sale en su app" : "") + (z ? " · " + z.nombre + (u ? " (sin datos: su zona)" : "") : "") + (otraZona ? " · ⚠ no es de sus zonas" + (deQuien ? " (es de " + deQuien + ")" : "") : "") + (q.nov.length ? " · tiene novedad: " + q.nov[q.nov.length - 1].nota : ""), evs, cls: q.nov.length || otraZona ? "aviso" : ""};
+  return {tipo:"ok", txt:(recibida ? "Recibida y para " : "Para ") + r.nombre + (VINC.has(r.rid) ? " · ya le sale en su app" : "") + (z ? " · " + z.nombre + (u ? " (sin datos: su zona)" : "") : zonasActivas().length ? " · Sin zona" : "") + (otraZona ? " · ⚠ no es de sus zonas" + (deQuien ? " (es de " + deQuien + ")" : "") : "") + (q.nov.length ? " · tiene novedad: " + q.nov[q.nov.length - 1].nota : ""), evs, cls: q.nov.length || otraZona ? "aviso" : ""};
 }
 /* ---- Corregir una asignación equivocada (v2.37) ----
    Desde Despachar → «Lleva» (tocar el paquete) o desde Consultar. Nada se borra: queda en el histórico que se asignó
@@ -137,7 +137,8 @@ function ordenPlanilla(lista){ return lista.slice().sort((a, b) => nomZona(a).lo
 function textoPlanilla(r, x){
   const porEmp = Object.fromEntries(conteoEmp(x.enRuta).map(([e, n]) => [e || "Sin empresa", n]));
   const zs = zonasDeRep(r.rid).map(z => z.nombre);
-  return `Planilla de salida · ${r.nombre}${zs.length ? " · Zonas: " + zs.join(", ") : ""} · ${fechaHora(new Date().toISOString())}\nTotal: ${x.enRuta.length} (${Object.entries(porEmp).map(([k, v]) => k + " " + v).join(", ")})${conteoProv(x.enRuta).some(([pv]) => pv) ? " · Proveedor: " + txtProv(x.enRuta) : ""}\n` +
+  const pz = ZONAS.size && x.enRuta.length ? "Por zona: " + resumenZonas(ordenPlanilla(x.enRuta)).map(o => `${o.z} ${o.n}`).join(" · ") + "\n" : "";
+  return `Planilla de salida · ${r.nombre}${zs.length ? " · Zonas: " + zs.join(", ") : ""} · ${fechaHora(new Date().toISOString())}\nTotal: ${x.enRuta.length} (${Object.entries(porEmp).map(([k, v]) => k + " " + v).join(", ")})${conteoProv(x.enRuta).some(([pv]) => pv) ? " · Proveedor: " + txtProv(x.enRuta) : ""}\n` + pz +
     ordenPlanilla(x.enRuta).map((p, i) => `${i + 1}. ${p.guia}${p.emp ? " · " + p.emp : ""}${nomZona(p) ? " · " + nomZona(p) : ""}`).join("\n");
 }
 /* v2.46: planilla con presentación de empresa (impresión / PDF) y para compartir por WhatsApp como imagen. */
@@ -146,7 +147,24 @@ function datosPlanilla(r){
   const ini = r.nombre.split(/\s+/).map(w => w[0] || "").join("").slice(0, 3).toUpperCase();
   return {r, ps, ahora, num: `PS-${String(ahora.getFullYear()).slice(2)}${pad2(ahora.getMonth()+1)}${pad2(ahora.getDate())}-${pad2(ahora.getHours())}${pad2(ahora.getMinutes())}-${ini}`,
     fecha: fechaHora(ahora.toISOString()), zonas: zonasDeRep(r.rid).map(z => z.nombre), emp: conteoEmp(ps), prov: conteoProv(ps).filter(([pv]) => pv),
-    porZona: (() => { const m = new Map(); ps.forEach(p => { const z = nomZona(p) || "—"; m.set(z, (m.get(z) || 0) + 1); }); return m; })()};
+    porZona: (() => { const m = new Map(); ps.forEach(p => { const z = nomZona(p) || "—"; m.set(z, (m.get(z) || 0) + 1); }); return m; })(),
+    resZonas: resumenZonas(ps)};
+}
+/* v2.56: subtotal por zona (en el orden de la planilla) con el desglose por empresa, para ver cuánto va a cada zona. */
+function resumenZonas(ps){
+  const m = new Map();
+  ps.forEach(p => { const z = nomZona(p) || "—", e = p.emp || "Sin empresa";
+    const o = m.get(z) || {z, n: 0, emp: {}}; o.n++; o.emp[e] = (o.emp[e] || 0) + 1; m.set(z, o); });
+  return [...m.values()];
+}
+const empsDe = ps => conteoEmp(ps).map(([e]) => e || "Sin empresa");
+function htmlResZonas(d){
+  if(!ZONAS.size || !d.ps.length) return "";
+  const emps = empsDe(d.ps), cab = emps.map(e => `<th class="c">${esc(e)}</th>`).join("");
+  const fila = (z, o, tot) => `<tr${tot ? ' class="plTot"' : ""}><td>${esc(z)}</td>${emps.map(e => `<td class="c">${o.emp[e] || 0}</td>`).join("")}<td class="c"><b>${o.n}</b></td></tr>`;
+  const total = {n: d.ps.length, emp: Object.fromEntries(emps.map(e => [e, d.ps.filter(p => (p.emp || "Sin empresa") === e).length]))};
+  return `<section class="plZonas"><h2>Paquetes por zona</h2><table class="plTbZ"><thead><tr><th>Zona</th>${cab}<th class="c">Total</th></tr></thead>
+    <tbody>${d.resZonas.map(o => fila(o.z, o)).join("")}${fila("Total", total, true)}</tbody></table></section>`;
 }
 const ubicCorta = p => p.cl != null || p.kr != null ? `Cl ${txtVia(p.cl) || "?"} · Kr ${txtViaKr(p.kr) || "?"}` : "";
 function htmlPlanilla(d){
@@ -167,6 +185,7 @@ function htmlPlanilla(d){
       <div><span>Fecha y hora</span><b>${esc(d.fecha)}</b></div>
     </section>
     <section class="plRes">${caja(d.ps.length, "paquetes en total", "tot")}${d.emp.map(([e, n]) => caja(n, e || "Sin empresa", "em-" + (e || "x").toLowerCase())).join("")}${d.prov.map(([pv, n]) => caja(n, "de " + pv)).join("")}</section>
+    ${htmlResZonas(d)}
     <table class="plTb"><thead><tr><th class="c">#</th><th>Guía</th><th>Empresa</th><th>Proveedor</th><th>Zona</th><th>Ubicación</th><th class="c">✓</th></tr></thead>
       <tbody>${filas || `<tr><td colspan="7" class="plVacio">Sin paquetes asignados en este momento.</td></tr>`}</tbody></table>
     <section class="plFirmas">
@@ -180,7 +199,8 @@ function htmlPlanilla(d){
 function imagenPlanilla(d){
   const W = 1080, P = 48, RH = 46, esc2 = 1;
   const filasZ = ZONAS.size ? d.porZona.size : 0;
-  const H = 362 + 120 + (d.ps.length + filasZ + 1) * RH + 260;
+  const altoRZ = ZONAS.size && d.ps.length ? 70 + (d.resZonas.length + 2) * RH : 0;   // v2.56: cuadro por zona
+  const H = 362 + 120 + altoRZ + (d.ps.length + filasZ + 1) * RH + 260;
   const c = document.createElement("canvas"); c.width = W; c.height = H;
   const g = c.getContext("2d"), F = (w, s) => `${w} ${s}px system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif`;
   const txt = (t, x, y, f, col, al) => { g.font = f; g.fillStyle = col || "#111"; g.textAlign = al || "left"; g.fillText(String(t), x, y); };
@@ -204,8 +224,27 @@ function imagenPlanilla(d){
     g.fillStyle = "#f4f6f6"; g.fillRect(x, y, cw, 90); g.fillStyle = col; g.fillRect(x, y, 8, 90);
     txt(n, x + 24, y + 50, F("800", 38), col); txt(corta(t, cw - 30, F("600", 18)), x + 24, y + 78, F("600", 18), "#444");
   });
-  // Tabla
-  y = 512; const cols = [[P, 50, "#"], [P + 52, 278, "GUÍA"], [P + 332, 122, "EMPRESA"], [P + 456, 132, "PROVEEDOR"], [P + 590, 150, "ZONA"], [P + 742, 242, "UBICACIÓN"]];
+  // v2.56: cuadro «Paquetes por zona» (zona · empresas · total)
+  y = 512;
+  if(altoRZ){
+    const emps = empsDe(d.ps), cw2 = 150, xs = emps.map((e, k) => W - P - (emps.length - k + 1) * cw2), xt = W - P - cw2;
+    txt("PAQUETES POR ZONA", P, y - 4, F("700", 20), "#1f2a2a"); y += 40;
+    g.fillStyle = "#1f2a2a"; g.fillRect(P - 10, y - 32, W - 2 * P + 20, RH);
+    txt("ZONA", P, y, F("700", 18), "#fff"); emps.forEach((e, k) => txt(corta(e.toUpperCase(), cw2 - 10, F("700", 18)), xs[k] + cw2 / 2, y, F("700", 18), "#fff", "center")); txt("TOTAL", xt + cw2 / 2, y, F("700", 18), "#fff", "center");
+    y += RH;
+    const total = {z: "Total", n: d.ps.length, emp: Object.fromEntries(emps.map(e => [e, d.ps.filter(p => (p.emp || "Sin empresa") === e).length]))};
+    [...d.resZonas, total].forEach((o, i) => {
+      const tot = o === total, f = F(tot ? "800" : "600", 22);
+      if(tot){ g.fillStyle = "#e9eeee"; g.fillRect(P - 10, y - 32, W - 2 * P + 20, RH); } else if(i % 2){ g.fillStyle = "#f8f9f9"; g.fillRect(P - 10, y - 32, W - 2 * P + 20, RH); }
+      txt(corta(o.z, xs[0] - P - 20, f), P, y, f);
+      emps.forEach((e, k) => txt(o.emp[e] || 0, xs[k] + cw2 / 2, y, f, e === "Xcargo" ? "#b77d00" : e === "iMile" ? "#0e7f99" : "#222", "center"));
+      txt(o.n, xt + cw2 / 2, y, F("800", 24), "#1f2a2a", "center");
+      g.strokeStyle = "#e3e7e7"; g.beginPath(); g.moveTo(P - 10, y + 14); g.lineTo(W - P + 10, y + 14); g.stroke();
+      y += RH;
+    });
+    y += 70 - RH + 40;
+  }
+  const cols = [[P, 50, "#"], [P + 52, 278, "GUÍA"], [P + 332, 122, "EMPRESA"], [P + 456, 132, "PROVEEDOR"], [P + 590, 150, "ZONA"], [P + 742, 242, "UBICACIÓN"]];
   g.fillStyle = "#1f2a2a"; g.fillRect(P - 10, y - 32, W - 2 * P + 20, RH);
   cols.forEach(([x, , t]) => txt(t, x, y, F("700", 18), "#fff"));
   y += RH; let zAnt = null, n = 0;
@@ -230,7 +269,7 @@ function imagenPlanilla(d){
 }
 async function compartirPlanilla(d){
   const nombre = `planilla-${d.r.nombre.replace(/\s+/g, "-").toLowerCase()}-${d.num}.png`;
-  const texto = `Planilla de salida ${d.num}\nRepartidor: ${d.r.nombre}\nPaquetes: ${d.ps.length}` + (d.emp.length ? ` (${d.emp.map(([e, n]) => (e || "Sin empresa") + " " + n).join(", ")})` : "") + (d.zonas.length ? `\nZonas: ${d.zonas.join(", ")}` : "");
+  const texto = `Planilla de salida ${d.num}\nRepartidor: ${d.r.nombre}\nPaquetes: ${d.ps.length}` + (d.emp.length ? ` (${d.emp.map(([e, n]) => (e || "Sin empresa") + " " + n).join(", ")})` : "") + (d.zonas.length ? `\nZonas: ${d.zonas.join(", ")}` : "") + (ZONAS.size && d.ps.length ? "\nPor zona: " + d.resZonas.map(o => `${o.z} ${o.n}`).join(" · ") : "");
   try{
     const blob = await imagenPlanilla(d), file = new File([blob], nombre, {type: "image/png"});
     if(navigator.canShare && navigator.canShare({files: [file]})){ await navigator.share({files: [file], title: "Planilla de salida", text: texto}); return; }

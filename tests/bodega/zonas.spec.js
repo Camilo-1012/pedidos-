@@ -90,16 +90,21 @@ test("zonas: crear con aviso de cruce, ubicar al recibir, despachar con aviso de
   expect((await A.leer(page, "ZON0000001")).txt).toBe("Para Jairo · Z1 Tibabuyes");
   const r2 = await A.leer(page, "ZON0000002");
   expect(r2.txt).toBe("Para Jairo · Z2 Lisboa · ⚠ no es de sus zonas (es de Pedro)"); expect(r2.cls).toBe("aviso");
-  expect((await A.leer(page, "ZON0000004")).txt).toBe("Para Jairo");
+  expect((await A.leer(page, "ZON0000004")).txt).toBe("Para Jairo · Sin zona");   // v2.56: se dice que va sin zona
   await page.click("#scClose");
   await page.click("#desPlanilla");
   const zonasPlanilla = await page.locator("#planilla tbody tr:not(.plZona) td:nth-child(5)").allTextContents();
   expect(zonasPlanilla).toEqual(["Sin zona", "Z1 Tibabuyes", "Z2 Lisboa"]);
   await expect(page.locator("#planilla .plZona")).toHaveText(["Sin zona · 1 paquete(s)", "Z1 Tibabuyes · 1 paquete(s)", "Z2 Lisboa · 1 paquete(s)"]);
+  // v2.56: cuadro «Paquetes por zona» con el subtotal de cada zona y el total.
+  await expect(page.locator("#planilla .plTbZ thead th")).toHaveText(["Zona", "Xcargo", "Total"]);
+  await expect(page.locator("#planilla .plTbZ tbody tr")).toHaveText(["Sin zona11", "Z1 Tibabuyes11", "Z2 Lisboa11", "Total33"]);
   const [dl] = await Promise.all([page.waitForEvent("download"), page.locator("#ltActs button", { hasText: "Excel" }).click()]);
   const pl = Object.values(A.leerXlsx(await dl.path()))[0];
   expect(pl[0].slice(0, 5)).toEqual(["#", "Guía", "Zona", "Calle", "Carrera"]);
   expect(pl[2].slice(1, 5)).toEqual(["ZON0000001", "Z1 Tibabuyes", "140", "110"]);
+  const iz = pl.findIndex(f => f[0] === "Paquetes por zona");
+  expect(pl.slice(iz, iz + 4).map(f => f.slice(0, 3))).toEqual([["Paquetes por zona", "Total", "Xcargo"], ["Sin zona", 1, 1], ["Z1 Tibabuyes", 1, 1], ["Z2 Lisboa", 1, 1]]);
   await page.locator("#dlgLista .dlgHead button").click();
 
   // Consulta: ubicar a mano un paquete sin zona y ver el resumen por zona.

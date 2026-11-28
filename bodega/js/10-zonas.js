@@ -212,7 +212,7 @@ function pintarZonasRep(r){
       const otros = repsDeZona(z.zid).filter(x => x.rid !== r.rid).map(x => x.nombre);
       return `<button type="button" style="--zc:${esc(z.color || "#455a64")}" data-zid="${esc(z.zid)}" aria-pressed="${mias.has(z.zid)}">${esc(z.nombre)}${otros.length ? `<small> · ${esc(otros.join(", "))}</small>` : ""}</button>`;
     }).join("")}</div>` + (mias.size > 1 ? (() => { const zs2 = zonasDeRep(r.rid), sel = zonaSinDatosDe(r.rid);
-      return `<p class="hint" style="margin:8px 0 0">Paquetes sin datos (sin calle ni carrera) van a la zona:</p>
+      return `<p class="hint" style="margin:8px 0 0">Paquetes sin datos (sin calle ni carrera) van a la zona: <small>(si no eliges, quedan «Sin zona»)</small></p>
     <div class="zsel" id="desZonaSin" role="group" aria-label="Zona de los paquetes sin datos">${zs2.map(z => `<button type="button" style="--zc:${esc(z.color || "#455a64")}" data-zsin="${esc(z.zid)}" aria-pressed="${sel && sel.zid === z.zid}">${esc(z.nombre)}</button>`).join("")}</div>`; })() : "");
   box.querySelectorAll("button[data-zid]").forEach(b => b.onclick = () => {
     const ids = new Set(zonasDeRep(r.rid).map(z => z.zid));
@@ -221,19 +221,24 @@ function pintarZonasRep(r){
     pintarTodo();
   });
   box.querySelectorAll("button[data-zsin]").forEach(b => b.onclick = () => {
-    prefs.zonaSin = {...(prefs.zonaSin || {}), [r.rid]: b.dataset.zsin}; savePrefs(); pintarZonasRep(r);
+    const ya = (prefs.zonaSin || {})[r.rid] === b.dataset.zsin;   // tocar la elegida la quita
+    prefs.zonaSin = {...(prefs.zonaSin || {}), [r.rid]: ya ? "" : b.dataset.zsin}; savePrefs(); pintarZonasRep(r);
   });
 }
 /* v2.54: zona que toma un paquete sin datos al despacharlo: la del repartidor (si tiene varias, la elegida en
    Despachar → «Paquetes sin datos van a la zona»; por defecto la primera). Es preferencia de este celular. */
 function zonaSinDatosDe(rid){
   const mias = zonasDeRep(rid); if(!mias.length) return null;
+  if(mias.length === 1) return mias[0];
+  // v2.56: con varias zonas ya no se adivina (antes caían todos en la primera e inflaban su subtotal): solo si se eligió.
   const zid = (prefs.zonaSin || {})[rid];
-  return mias.find(z => z.zid === zid) || mias[0];
+  return mias.find(z => z.zid === zid) || null;
 }
 // Evento UBICACION {zid, auto} si el paquete no tiene calle/carrera ni zona propia (o la tenía puesta por otro despacho).
 function zonaAlDespachar(g, rid){
   const p = paq(g); if(!p || !zonasActivas().length || (tieneUbic(p) && !p.zonaAuto)) return null;
-  const z = zonaSinDatosDe(rid); if(!z || (p.zonaAuto && p.zidManual === z.zid)) return null;
+  const z = zonaSinDatosDe(rid);
+  if(!z) return p.zonaAuto ? registrar("UBICACION", g, {cl: null, kr: null}) : null;   // traía la zona de otro repartidor: queda «Sin zona»
+  if(p.zonaAuto && p.zidManual === z.zid) return null;
   return registrar("UBICACION", g, {zid: z.zid, auto: true});
 }

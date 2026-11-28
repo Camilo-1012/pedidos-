@@ -186,6 +186,14 @@ li.lec.mal span{color:var(--bad)}
 .plTb .c{text-align:center;width:28px}
 .plTb .g{font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
 .plZona td{background:#e9eeee!important;font-weight:700;color:var(--pl-ink)}
+/* v2.56: cuadro «Paquetes por zona» */
+.plZonas{padding:0 18px 14px}
+.plZonas h2{margin:0 0 6px;font:700 13px/1.2 var(--display);letter-spacing:.06em;text-transform:uppercase;color:var(--pl-ink)}
+.plTbZ{width:100%;border-collapse:collapse;font-size:14px}
+.plTbZ th{background:var(--pl-ink);color:#fff;text-align:left;padding:6px 8px;font-size:12px;letter-spacing:.04em;text-transform:uppercase}
+.plTbZ td{padding:6px 8px;border-bottom:1px solid #e3e7e7}
+.plTbZ .c{text-align:center}
+.plTbZ tr.plTot td{background:#e9eeee;font-weight:800}
 .plChk{display:inline-block;width:14px;height:14px;border:1.5px solid #555;border-radius:3px}
 .plNov{color:#b45309;font-size:12px}
 .plVacio{text-align:center;color:#666;padding:18px!important}
