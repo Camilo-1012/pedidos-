@@ -212,3 +212,4 @@ li.lec.mal span{color:var(--bad)}
   .plTb thead{display:table-header-group}
   .plTb tr,.plFirmas,.plPie{break-inside:avoid}
 }
+button.bad{color:var(--bad);border-color:currentColor}
