@@ -19,7 +19,13 @@ function detalleEv(e){
   }
 }
 function verPaquete(g){
-  const p = paq(g); if(!p){ $("conRes").innerHTML = `<p class="hint">No hay registro de ${esc(g)} en este celular.</p>`; return; }
+  const p = paq(g);
+  if(!p){
+    const q = POR_GUIA.get(g) || [];
+    $("conRes").innerHTML = q.length ? `<div class="ficha"><b class="guiaG">${esc(g)}</b> <span class="chip">Quitado de la bodega</span><p class="hint">Se anularon sus lecturas (cargado por error). Si llega, recíbelo de nuevo.</p></div>`
+      : `<p class="hint">No hay registro de ${esc(g)} en este celular.</p>`;
+    return;
+  }
   const todos = (POR_GUIA.get(g) || []).slice().sort(ordenEv), anul = new Set(todos.filter(e => e.tipo === "ANULAR").map(e => e.d.ref));
   const motivoAnul = new Map(todos.filter(e => e.tipo === "ANULAR" && e.d.motivo).map(e => [e.d.ref, e.d.motivo.toLowerCase() + " · " + (e.por || "")]));
   $("conRes").innerHTML = `<div class="ficha"><div><b class="guiaG">${esc(p.guia)}</b> ${chipEstado(p)} ${p.emp ? `<span class="chip">${esc(p.emp)}</span>` : ""}</div>
@@ -27,9 +33,10 @@ function verPaquete(g){
     ${p.conflicto ? `<p class="alerta">${esc(p.conflicto)}</p><div class="row" id="conResolver"></div>` : ""}
     ${p.estado === "BODEGA" ? `<p class="hint">En bodega hace ${diasDesde(p.recibido)} día(s)${p.motivo ? " · última devolución: " + esc(p.motivo) : ""}.</p>` : ""}
     ${p.estado === "RUTA" ? `<div class="row" style="align-items:center"><span class="hint">La tiene ${esc(repNombre(p.rid))}.</span><button type="button" class="small" id="conCorregir">Corregir asignación</button></div>` : ""}
-    <button type="button" class="small" id="conNube">Historial completo (nube)</button>
+    <div class="row"><button type="button" class="small" id="conNube">Historial completo (nube)</button>${quitable(p) ? `<button type="button" class="small bad" id="conQuitar">Quitar de la bodega (cargado por error)</button>` : ""}</div>
     <ol class="linea">${todos.filter(e => e.tipo !== "ANULAR").map(e => `<li class="${anul.has(e.id) ? "anulado" : ""}"><time>${esc(fechaHora(e.at))}</time> <b>${esc(TXT_EV[e.tipo] || e.tipo)}</b> ${esc(detalleEv(e))}<span class="hint"> · ${esc(e.por || "")}${e.sub ? "" : " · sin subir"}${anul.has(e.id) ? (motivoAnul.has(e.id) ? " · corregida: " + esc(motivoAnul.get(e.id)) : " · deshecha") : ""}</span></li>`).join("")}</ol></div>`;
   $("conNube").onclick = () => historialNube(g);
+  if($("conQuitar")) $("conQuitar").onclick = () => quitarPaquete(g);
   if($("conCorregir")) $("conCorregir").onclick = () => corregirAsignacion(g, () => verPaquete(g));
   if($("conUbic")) $("conUbic").onclick = async () => { const u = guardarUbicacion(g, await pedirUbicacion(g)); if(u){ verPaquete(g); pintarTodo(); } };
   if(p.conflicto){
@@ -39,6 +46,21 @@ function verPaquete(g){
     cand.forEach(rid => { const b = document.createElement("button"); b.type = "button"; b.className = "small"; b.textContent = "La tiene " + repNombre(rid);
       b.onclick = () => { registrar("ASIGNADO", g, {rid, reasigna: true, resuelve: true}); verPaquete(g); pintarTodo(); toast("Conflicto resuelto: la tiene " + repNombre(rid) + "."); }; box.appendChild(b); });
   }
+}
+/* v2.58: quitar un paquete cargado por error (leído o importado sin ser de esta bodega). Solo si nunca salió de la
+   bodega (sin despachos, entregas, devoluciones ni faltantes vigentes). Nada se borra: se anulan sus lecturas
+   (listado, recepción, ubicación, novedades) con el motivo, quién y cuándo, y deja de contar en bodega, zonas y lotes. */
+const SALIDAS = ["ASIGNADO", "DEVUELTO", "ENTREGADO", "NO_ENTREGADO", "FALTANTE"];
+const quitable = p => !!p && (p.estado === "BODEGA" || p.estado === "ESPERADO") && !p.evs.some(e => SALIDAS.includes(e.tipo));
+async function quitarPaquete(g){
+  const p = paq(g);
+  if(!quitable(p)){ toast("No se puede quitar: ya salió de la bodega. Corrige su asignación o devolución."); return; }
+  const lote = (LOTES.get(p.recLote || p.espLote) || {}).nombre;
+  if(!await confirmar("Quitar " + g, `Se quita de la bodega${lote ? " y del cargue «" + lote + "»" : ""}: deja de contar en recibidos, zonas y planillas. Queda en el histórico quién lo quitó y cuándo. Si vuelve a llegar, se recibe de nuevo.`, "Quitar paquete", true)) return;
+  p.evs.forEach(e => registrar("ANULAR", g, {ref: e.id, motivo: "Cargado por error"}));
+  pintarTodo();
+  verPaquete(g);
+  toast(g + " quitado de la bodega.");
 }
 function buscar(txt){
   const res = buscarGuias(txt);

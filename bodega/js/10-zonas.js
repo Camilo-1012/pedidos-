@@ -143,7 +143,7 @@ function pintarZonasDespacho(rid){
 function listaZona(zid, filtro){
   const z = zid ? ZONAS.get(zid) : null;
   const items = paquetes(p => filtro(p) && ((zonaDe(p) || {}).zid || "") === zid).sort((a, b) => (a.cl ?? 0) - (b.cl ?? 0) || (a.kr ?? 0) - (b.kr ?? 0) || a.guia.localeCompare(b.guia));
-  mostrarListado((z ? z.nombre : "Sin zona") + ` (${items.length})`, (z ? `<p class="hint">${esc(rangoTxt(z))}${z.rid ? " · " + esc(repNombre(z.rid)) : ""}</p>` : `<p class="hint">Toca un paquete para ver su recorrido y ponerle ubicación.</p>`) +
+  mostrarListado((z ? z.nombre : "Sin zona") + ` (${items.length})`, (z ? `<p class="hint">${esc(rangoTxt(z))}${z.rid ? " · " + esc(repNombre(z.rid)) : ""}</p>` : `<p class="hint">Toca un paquete para ver su recorrido, ponerle ubicación o quitarlo si se cargó por error.</p>`) +
     (items.length ? conteoEmp(items).map(([emp, n]) => `<h3 class="grpEmp em-${esc((emp || "x").toLowerCase())}">${esc(emp || "Sin empresa")} · ${n}</h3><ul class="lista">${items.filter(p => (p.emp || "") === emp).map(p => liPaq(p, ubicTxt(p))).join("")}</ul>`).join("") : "<ul class='lista'><li class='vacio'>Ninguno.</li></ul>"));
 }
 const ubicTxt = p => p.zonaAuto ? "Sin datos · zona del repartidor al despachar" : p.zidManual ? "Zona elegida a mano" : p.cl != null || p.kr != null ? `Calle ${txtVia(p.cl) || "?"} · Carrera ${txtViaKr(p.kr) || "?"}` : "Sin ubicación";
